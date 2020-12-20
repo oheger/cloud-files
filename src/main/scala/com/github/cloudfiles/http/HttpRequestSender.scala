@@ -21,8 +21,10 @@ import akka.actor.typed.scaladsl.adapter._
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior, PostStop}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
+import akka.util.Timeout
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -56,9 +58,30 @@ object HttpRequestSender {
   final case object Stop extends HttpCommand
 
   /**
+   * A message class representing the result of a request that has been
+   * forwarded to another request actor.
+   *
+   * This message type is not handled by this actor class itself, but it is
+   * used by extension actors that add functionality to request actors. Such
+   * extensions may have to inspect the result of a request to trigger specific
+   * actions (e.g. retry a failed request under certain circumstances).
+   * Therefore, there must be a way to deal with incoming results.
+   *
+   * @param result the result
+   */
+  final case class ForwardedResult(result: Result) extends HttpCommand
+
+  /**
    * A trait describing the result of an HTTP request sent by this actor.
    */
-  sealed trait Result
+  sealed trait Result {
+    /**
+     * Returns the original request this result is for.
+     *
+     * @return the original request
+     */
+    def request: SendRequest
+  }
 
   /**
    * A message class representing a successful response of an HTTP request.
@@ -66,7 +89,7 @@ object HttpRequestSender {
    * @param request  the original request
    * @param response the response to this request
    */
-  final case class SuccessResult(request: SendRequest, response: HttpResponse) extends Result
+  final case class SuccessResult(override val request: SendRequest, response: HttpResponse) extends Result
 
   /**
    * A message class representing a failure response of an HTTP request. The
@@ -76,7 +99,7 @@ object HttpRequestSender {
    * @param request the original request
    * @param cause   the exception causing the request to fail
    */
-  final case class FailedResult(request: SendRequest, cause: Throwable) extends Result
+  final case class FailedResult(override val request: SendRequest, cause: Throwable) extends Result
 
   /**
    * An exception class indicating a response with a non-success status code.
@@ -101,6 +124,12 @@ object HttpRequestSender {
   final val DefaultQueueSize = 16
 
   /**
+   * A timeout for forwarding requests to another request actor. This timeout
+   * is rather high, as timeouts are handled by callers.
+   */
+  private val DefaultForwardTimeout: Timeout = Timeout(3.minutes)
+
+  /**
    * Creates a new actor instance for sending HTTP requests to the host
    * defined by the URI specified.
    *
@@ -110,6 +139,28 @@ object HttpRequestSender {
    */
   def apply(uri: Uri, queueSize: Int = DefaultQueueSize): Behavior[HttpCommand] =
     create(uri, system => new RequestQueue(uri, queueSize)(system))
+
+  /**
+   * Forwards a request to another request actor using the ''ask'' pattern. The
+   * response is then passed to the owner of the given context as a
+   * [[ForwardedResult]] message. This functionality is intended to be used by
+   * extension actors that intercept the normal request processing mechanism.
+   *
+   * @param context     the actor context
+   * @param receiver    the actor to send the message to
+   * @param request     the HTTP request to forward
+   * @param requestData the request data
+   * @param timeout     a timeout for the request
+   */
+  def forwardRequest(context: ActorContext[HttpCommand], receiver: ActorRef[HttpCommand], request: HttpRequest,
+                     requestData: Any, timeout: Timeout = DefaultForwardTimeout): Unit = {
+    implicit val forwardTimeout: Timeout = timeout
+    context.ask(receiver, ref => SendRequest(request, requestData, ref)) {
+      case Failure(exception) =>
+        ForwardedResult(FailedResult(SendRequest(request, requestData, null), exception))
+      case Success(response) => ForwardedResult(response)
+    }
+  }
 
   /**
    * Internal factory function for creating a new behavior. Simplifies testing.
@@ -125,7 +176,7 @@ object HttpRequestSender {
       val requestQueue = queueCreator(actorSystem)
 
       Behaviors.receive[HttpCommand] { (context, command) =>
-        command match {
+        (command: @unchecked) match {
           case request: SendRequest =>
             val futResponse = requestQueue.queueRequest(request.request)
             context.pipeToSelf(futResponse) { triedResponse =>

@@ -31,7 +31,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.duration._
 
-object HttpRequestSenderSpec {
+object HttpRequestSenderITSpec {
   /** A data object passed with the request. */
   private val RequestData = new Object
 
@@ -45,10 +45,10 @@ object HttpRequestSenderSpec {
 /**
  * Integration test class for ''HttpRequestSender''.
  */
-class HttpRequestSenderSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
+class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
   with AsyncTestHelper with WireMockSupport {
 
-  import HttpRequestSenderSpec._
+  import HttpRequestSenderITSpec._
 
   "HttpRequestSender" should "send a HTTP request" in {
     stubFor(get(urlPathEqualTo(Path))

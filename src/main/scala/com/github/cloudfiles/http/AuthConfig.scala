@@ -32,3 +32,21 @@ sealed trait AuthConfig
  * @param password the password
  */
 case class BasicAuthConfig(user: String, password: Secret) extends AuthConfig
+
+/**
+ * A data class collecting the properties required for an OAuth client
+ * application.
+ *
+ * An instance of this class stores the information required for obtaining an
+ * OAuth access token based on a refresh token from a specific OAuth2 identity
+ * provider.
+ *
+ * @param tokenEndpoint the URI of the token endpoint
+ * @param redirectUri   the redirect URI
+ * @param clientID      the client ID
+ * @param clientSecret  the secret to identify the client
+ */
+case class OAuthConfig(tokenEndpoint: String,
+                       redirectUri: String,
+                       clientID: String,
+                       clientSecret: Secret) extends AuthConfig

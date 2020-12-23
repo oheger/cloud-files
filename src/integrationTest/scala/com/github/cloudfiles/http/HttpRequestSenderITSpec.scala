@@ -19,8 +19,7 @@ package com.github.cloudfiles.http
 import akka.actor.DeadLetter
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
-import akka.stream.scaladsl.Sink
-import akka.util.{ByteString, Timeout}
+import akka.util.Timeout
 import com.github.cloudfiles.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.Fault
@@ -64,9 +63,8 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     result.request should be(request)
     result.response.status should be(StatusCodes.Accepted)
 
-    val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
-    val content = futureResult(result.response.entity.dataBytes.runWith(sink))
-    content.utf8String should be(FileTestHelper.TestDataSingleLine)
+    val content = futureResult(entityToString(result.response))
+    content should be(FileTestHelper.TestDataSingleLine)
   }
 
   it should "return a failed future for a non-success response" in {

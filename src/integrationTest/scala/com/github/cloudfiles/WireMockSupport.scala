@@ -16,13 +16,18 @@
 
 package com.github.cloudfiles
 
-import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.Authorization
+import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
+import akka.stream.Materializer
+import akka.stream.scaladsl.Sink
+import akka.util.ByteString
 import com.github.tomakehurst.wiremock.WireMockServer
-import com.github.tomakehurst.wiremock.client.{MappingBuilder, ResponseDefinitionBuilder}
 import com.github.tomakehurst.wiremock.client.WireMock._
+import com.github.tomakehurst.wiremock.client.{MappingBuilder, ResponseDefinitionBuilder}
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
 import org.scalatest.{BeforeAndAfterEach, Suite}
+
+import scala.concurrent.Future
 
 object WireMockSupport {
   /** Test user ID. */
@@ -162,5 +167,18 @@ trait WireMockSupport extends BeforeAndAfterEach {
     stubFor(authFunc(any(anyUrl()).atPriority(PriorityDefault))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
         .withBody("<status>OK</status>")))
+  }
+
+  /**
+   * Reads the entity of the given response and converts it to a string.
+   *
+   * @param response the response
+   * @param mat      the object to materialize streams
+   * @return a ''Future'' with the string from the entity
+   */
+  protected def entityToString(response: HttpResponse)(implicit mat: Materializer): Future[String] = {
+    import mat.executionContext
+    val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
+    response.entity.dataBytes.runWith(sink).map(_.utf8String)
   }
 }

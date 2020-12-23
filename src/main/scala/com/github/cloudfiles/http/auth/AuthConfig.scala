@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.http.auth
+
+import com.github.cloudfiles.http.Secret
 
 /**
  * A trait representing a configuration for an authentication mechanism.

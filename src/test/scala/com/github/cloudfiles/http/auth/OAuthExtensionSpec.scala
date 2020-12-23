@@ -27,7 +27,7 @@ import akka.http.scaladsl.model._
 import akka.stream.scaladsl.Sink
 import akka.util.ByteString
 import com.github.cloudfiles.http.HttpRequestSender.FailedResponseException
-import com.github.cloudfiles.http.{HttpRequestSender, OAuthConfig, Secret}
+import com.github.cloudfiles.http.{HttpRequestSender, Secret}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

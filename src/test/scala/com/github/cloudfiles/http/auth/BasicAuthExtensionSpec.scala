@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.http.auth
 
 import akka.actor.DeadLetter
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials, `Content-Type`}
 import akka.http.scaladsl.model.{ContentTypes, HttpMethods, HttpRequest, Uri}
+import com.github.cloudfiles.http.{HttpRequestSender, Secret, auth}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -65,7 +66,7 @@ class BasicAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
     val deadLetterProbe = testKit.createDeadLetterProbe()
     val resultProbe = testKit.createTestProbe[HttpRequestSender.Result]()
     val request = HttpRequestSender.SendRequest(HttpRequest(uri = Uri("https://test.org")), "test", resultProbe.ref)
-    val authActor = testKit.spawn(BasicAuthExtension(requestActorProbe.ref, TestAuthConfig))
+    val authActor = testKit.spawn(auth.BasicAuthExtension(requestActorProbe.ref, TestAuthConfig))
 
     authActor ! HttpRequestSender.Stop
     requestActorProbe.expectMessage(HttpRequestSender.Stop)

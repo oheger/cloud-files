@@ -25,7 +25,7 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.stream.scaladsl.Sink
 import akka.util.ByteString
 import com.github.cloudfiles.http.HttpRequestSender.{FailedResponseException, SendRequest}
-import com.github.cloudfiles.http.{HttpRequestSender, OAuthConfig}
+import com.github.cloudfiles.http.HttpRequestSender
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}

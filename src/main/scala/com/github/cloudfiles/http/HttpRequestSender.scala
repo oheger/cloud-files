@@ -163,6 +163,26 @@ object HttpRequestSender {
   }
 
   /**
+   * Generates a ''Result'' object from the result of a request that has been
+   * forwarded to another actor. This function is intended to be used by
+   * extension actors. It expects that the request data contains the original
+   * request. Therefore, this request is extracted, and a correct result is
+   * constructed which references it. If the data object of the forwarded
+   * request is not of type ''SendRequest'', this function fails with a match
+   * error.
+   *
+   * @param result the result from the forwarded request
+   * @return the result to return to the original caller
+   */
+  def resultFromForwardedRequest(result: Result): Result =
+    (result: @unchecked) match {
+      case HttpRequestSender.SuccessResult(SendRequest(_, data: SendRequest, _), response) =>
+        HttpRequestSender.SuccessResult(data, response)
+      case HttpRequestSender.FailedResult(SendRequest(_, data: SendRequest, _), cause) =>
+        HttpRequestSender.FailedResult(data, cause)
+    }
+
+  /**
    * Internal factory function for creating a new behavior. Simplifies testing.
    *
    * @param uri          the URI defining the target host

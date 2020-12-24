@@ -67,14 +67,9 @@ object RetryAfterExtension {
         context.log.info("Received status 429 for {} {}. Retrying after {}", request.method, request.uri, delay)
         Behaviors.same
 
-      case (_, ForwardedResult(HttpRequestSender.SuccessResult(HttpRequestSender.SendRequest(_,
-      data: HttpRequestSender.SendRequest, _), response))) =>
-        data.replyTo ! HttpRequestSender.SuccessResult(data, response)
-        Behaviors.same
-
-      case (_, ForwardedResult(HttpRequestSender.FailedResult(HttpRequestSender.SendRequest(_,
-      data: HttpRequestSender.SendRequest, _), cause))) =>
-        data.replyTo ! HttpRequestSender.FailedResult(data, cause)
+      case (_, ForwardedResult(fwdResult)) =>
+        val result = HttpRequestSender.resultFromForwardedRequest(fwdResult)
+        result.request.replyTo ! result
         Behaviors.same
 
       case (_, HttpRequestSender.Stop) =>

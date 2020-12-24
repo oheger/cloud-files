@@ -250,12 +250,7 @@ object OAuthExtension {
    * @return the next behavior
    */
   private def propagateResult(result: HttpRequestSender.Result): Behavior[HttpRequestSender.HttpCommand] = {
-    val response = (result: @unchecked) match {
-      case HttpRequestSender.SuccessResult(SendRequest(_, data: SendRequest, _), response) =>
-        HttpRequestSender.SuccessResult(data, response)
-      case HttpRequestSender.FailedResult(SendRequest(_, data: SendRequest, _), cause) =>
-        HttpRequestSender.FailedResult(data, cause)
-    }
+    val response = HttpRequestSender.resultFromForwardedRequest(result)
     response.request.replyTo ! response
     Behaviors.same
   }

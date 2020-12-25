@@ -16,6 +16,7 @@
 
 package com.github.cloudfiles.http
 
+import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
@@ -179,6 +180,58 @@ object HttpRequestSender {
       case HttpRequestSender.FailedResult(SendRequest(_, data: SendRequest, _), cause) =>
         HttpRequestSender.FailedResult(data, cause)
     }
+
+  /**
+   * Convenience function to send an HTTP request to a ''HttpRequestSender''
+   * actor. This function simplifies the sending of requests from outside an
+   * actor context. It implements the corresponding ask pattern.
+   *
+   * @param sender      the actor to process the request
+   * @param request     the HTTP request to be sent
+   * @param requestData the data object associated with the request
+   * @param system      the actor system
+   * @param timeout     the timeout for the ask operation
+   * @return a ''Future'' with the result of request processing
+   */
+  def sendRequest(sender: ActorRef[HttpCommand], request: HttpRequest, requestData: Any)
+                 (implicit system: ActorSystem[_], timeout: Timeout): Future[Result] =
+    sender.ask { ref =>
+      SendRequest(request, requestData, ref)
+    }
+
+  /**
+   * Discards the bytes of the entity from the given result from an
+   * ''HttpRequestSender'' actor. This function is useful if the caller is not
+   * interested in the response body. (Nevertheless, the body stream needs to
+   * be processed to avoid blocking of the HTTP stream.) If the result is not a
+   * [[SuccessResult]], no action is performed.
+   *
+   * @param result the result
+   * @param system the actor system
+   * @tparam R the type of the result
+   * @return a ''Future'' with the result with the entity bytes discarded
+   */
+  def discardEntityBytes[R <: Result](result: R)(implicit system: ActorSystem[_]): Future[R] =
+    result match {
+      case SuccessResult(_, response) =>
+        response.entity.discardBytes().future().map(_ => result)(system.executionContext)
+      case res =>
+        Future.successful(res)
+    }
+
+  /**
+   * Discards the bytes of the entity from the given ''Future'' result from an
+   * ''HttpRequestSender'' actor. Works like the method with the same name, but
+   * operates on the result future rather than the actual result.
+   *
+   * @param futResult the ''Future'' with the result object
+   * @param system    the actor system
+   * @return a ''Future'' of the result with the entity discarded
+   */
+  def discardEntityBytes[R <: Result](futResult: Future[R])(implicit system: ActorSystem[_]): Future[R] = {
+    implicit val ec: ExecutionContext = system.executionContext
+    futResult flatMap (result => discardEntityBytes(result))
+  }
 
   /**
    * Internal factory function for creating a new behavior. Simplifies testing.

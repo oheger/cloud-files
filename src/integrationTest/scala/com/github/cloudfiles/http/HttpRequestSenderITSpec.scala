@@ -16,18 +16,21 @@
 
 package com.github.cloudfiles.http
 
+import akka.Done
 import akka.actor.DeadLetter
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
+import akka.http.scaladsl.model._
 import akka.util.Timeout
 import com.github.cloudfiles.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.Fault
 import org.mockito.Mockito
+import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object HttpRequestSenderITSpec {
@@ -135,5 +138,59 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     actor ! HttpRequestSender.Stop
     actor ! HttpRequestSender.SendRequest(HttpRequest(uri = Path), RequestData, probeReply.ref)
     probe.expectMessageType[DeadLetter]
+  }
+
+  it should "support sending requests via a convenience function" in {
+    stubFor(get(urlPathEqualTo(Path))
+      .willReturn(aResponse()
+        .withStatus(StatusCodes.Accepted.intValue)
+        .withBodyFile("response.txt")))
+    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val request = HttpRequest(uri = Path)
+
+    val result = futureResult(HttpRequestSender.sendRequest(actor, request, RequestData))
+    result.request.request should be(request)
+    result.request.data should be(RequestData)
+
+    result match {
+      case HttpRequestSender.SuccessResult(_, response) =>
+        response.status should be(StatusCodes.Accepted)
+        val content = futureResult(entityToString(response))
+        content should be(FileTestHelper.TestDataSingleLine)
+
+      case res => fail("Unexpected result: " + res)
+    }
+  }
+
+  it should "discard the entity bytes for a failed result" in {
+    val result = HttpRequestSender.FailedResult(null, new Exception("don't care"))
+
+    val discardedResult = futureResult(HttpRequestSender.discardEntityBytes(result))
+    discardedResult should be(result)
+  }
+
+  it should "discard the entity bytes of a successful result" in {
+    val entity = mock[ResponseEntity]
+    val discardedEntity = new HttpMessage.DiscardedEntity(Future.successful(Done))
+    when(entity.discardBytes()).thenReturn(discardedEntity)
+    val response = HttpResponse(entity = entity)
+    val result = HttpRequestSender.SuccessResult(null, response)
+
+    val discardedResult = futureResult(HttpRequestSender.discardEntityBytes(result))
+    discardedResult should be(result)
+    Mockito.verify(entity).discardBytes()
+  }
+
+  it should "discard the entity bytes of a successful result future" in {
+    val entity = mock[ResponseEntity]
+    val discardedEntity = new HttpMessage.DiscardedEntity(Future.successful(Done))
+    when(entity.discardBytes()).thenReturn(discardedEntity)
+    val response = HttpResponse(entity = entity)
+    val result = HttpRequestSender.SuccessResult(null, response)
+    val futResult = Future.successful(result)
+
+    val discardedResult = futureResult(HttpRequestSender.discardEntityBytes(futResult))
+    discardedResult should be(result)
+    Mockito.verify(entity).discardBytes()
   }
 }

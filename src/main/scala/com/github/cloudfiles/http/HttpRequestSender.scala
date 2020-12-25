@@ -16,15 +16,13 @@
 
 package com.github.cloudfiles.http
 
-import akka.actor.ActorSystem
-import akka.actor.typed.scaladsl.adapter._
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
-import akka.actor.typed.{ActorRef, Behavior, PostStop}
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import akka.util.Timeout
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -189,11 +187,10 @@ object HttpRequestSender {
    * @param queueCreator the request queue
    * @return the behavior of the actor
    */
-  private[http] def create(uri: Uri, queueCreator: ActorSystem => RequestQueue): Behavior[HttpCommand] =
+  private[http] def create(uri: Uri, queueCreator: ActorSystem[_] => RequestQueue): Behavior[HttpCommand] =
     Behaviors.setup { context =>
-      implicit val actorSystem: ActorSystem = context.system.toClassic
-      import actorSystem.dispatcher
-      val requestQueue = queueCreator(actorSystem)
+      val requestQueue = queueCreator(context.system)
+      implicit val ec: ExecutionContext = context.system.executionContext
 
       Behaviors.receive[HttpCommand] { (context, command) =>
         (command: @unchecked) match {
@@ -236,16 +233,16 @@ object HttpRequestSender {
    *
    * @param req      the original request
    * @param response the response from the server
-   * @param system   the actor system
    * @return a future with the generated result
    */
-  private def resultFromResponse(context: ActorContext[HttpCommand], req: SendRequest)(response: HttpResponse)
-                                (implicit system: ActorSystem): Future[Result] = {
+  private def resultFromResponse(context: ActorContext[HttpCommand], req: SendRequest)(response: HttpResponse):
+  Future[Result] = {
     context.log.debug("{} {} - {} {}", req.request.method.value, req.request.uri,
       response.status.intValue(), response.status.defaultMessage())
+    implicit val mat: ActorSystem[Nothing] = context.system
     if (response.status.isSuccess())
       Future.successful(SuccessResult(req, response))
     else response.entity.discardBytes().future()
-      .map(_ => FailedResult(req, FailedResponseException(response)))(system.dispatcher)
+      .map(_ => FailedResult(req, FailedResponseException(response)))(context.system.executionContext)
   }
 }

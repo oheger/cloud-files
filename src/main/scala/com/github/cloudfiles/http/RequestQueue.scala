@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.http
 
-import akka.actor.ActorSystem
+import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import akka.http.scaladsl.{Http, HttpExt}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source, SourceQueueWithComplete}
 import akka.stream.{OverflowStrategy, QueueOfferResult}
 
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
 
 private object RequestQueue {
@@ -86,7 +86,7 @@ private object RequestQueue {
  * @param queueSize the size of the request queue
  * @param system    the actor system
  */
-private class RequestQueue(uri: Uri, queueSize: Int = 2)(implicit system: ActorSystem) {
+private class RequestQueue(uri: Uri, queueSize: Int = 2)(implicit system: ActorSystem[_]) {
 
   import RequestQueue._
 
@@ -94,8 +94,6 @@ private class RequestQueue(uri: Uri, queueSize: Int = 2)(implicit system: ActorS
   val poolClientFlow: Flow[(HttpRequest, Promise[HttpResponse]),
     (Try[HttpResponse], Promise[HttpResponse]), Http.HostConnectionPool] =
     createPoolClientFlow[Promise[HttpResponse]](uri, Http())
-
-  import system.dispatcher
 
   /** The queue acting as source for the stream of requests and a kill switch. */
   val queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])] =
@@ -115,6 +113,7 @@ private class RequestQueue(uri: Uri, queueSize: Int = 2)(implicit system: ActorS
    * @return a ''Future'' with the response
    */
   def queueRequest(request: HttpRequest): Future[HttpResponse] = {
+    implicit val ec: ExecutionContext = system.executionContext
     val responsePromise = Promise[HttpResponse]()
     queue.offer(request -> responsePromise).flatMap {
       case QueueOfferResult.Enqueued =>

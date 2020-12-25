@@ -32,7 +32,7 @@ object BasicAuthExtension {
   def apply(requestSender: ActorRef[HttpRequestSender.HttpCommand], config: BasicAuthConfig):
   Behavior[HttpRequestSender.HttpCommand] = {
     val authHeader = createAuthHeader(config)
-    Behaviors.receiveMessage {
+    Behaviors.receiveMessagePartial {
       case request: HttpRequestSender.SendRequest =>
         val authHttpRequest = request.request.withHeaders(request.request.headers :+ authHeader)
         val authRequest = request.copy(request = authHttpRequest)

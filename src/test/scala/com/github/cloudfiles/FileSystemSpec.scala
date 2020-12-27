@@ -66,7 +66,7 @@ object FileSystemSpec {
     override def folderContent(id: String)(implicit system: ActorSystem[_]): Operation[String] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
-    override def createFolder(parent: String, folder: TestFolderImpl)(implicit system: ActorSystem[_]):
+    override def createFolder(parent: String, folder: Model.Folder[String])(implicit system: ActorSystem[_]):
     Operation[TestFolderImpl] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
@@ -77,11 +77,11 @@ object FileSystemSpec {
     override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
-    override def createFile(parent: String, file: TestFileImpl, content: Source[ByteString, Any])
+    override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])
                            (implicit system: ActorSystem[_]): Operation[TestFileImpl] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
-    override def updateFile(file: TestFileImpl)(implicit system: ActorSystem[_]): Operation[TestFileImpl] =
+    override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[TestFileImpl] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
     override def updateFileContent(fileID: String, size: Int, content: Source[ByteString, Any]): Operation[Unit] =

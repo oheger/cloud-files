@@ -132,7 +132,7 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param system the actor system
    * @return the ''Operation'' to create a new folder
    */
-  def createFolder(parent: ID, folder: FOLDER)(implicit system: ActorSystem[_]): Operation[FOLDER]
+  def createFolder(parent: ID, folder: Model.Folder[ID])(implicit system: ActorSystem[_]): Operation[FOLDER]
 
   /**
    * Updates the metadata of a folder. The passed in folder object must contain
@@ -167,7 +167,7 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param system  the actor system
    * @return the ''Operation'' to create a new file
    */
-  def createFile(parent: ID, file: FILE, content: Source[ByteString, Any])
+  def createFile(parent: ID, file: Model.File[ID], content: Source[ByteString, Any])
                 (implicit system: ActorSystem[_]): Operation[FILE]
 
   /**
@@ -178,7 +178,7 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param system the actor system
    * @return the ''Operation'' to update file metadata
    */
-  def updateFile(file: FILE)(implicit system: ActorSystem[_]): Operation[FILE]
+  def updateFile(file: Model.File[ID])(implicit system: ActorSystem[_]): Operation[FILE]
 
   /**
    * Updates the content of a file by uploading new data to the server.

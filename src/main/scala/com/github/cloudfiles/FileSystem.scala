@@ -23,7 +23,7 @@ import akka.util.ByteString
 import com.github.cloudfiles.FileSystem.Operation
 import com.github.cloudfiles.http.HttpRequestSender
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 object FileSystem {
 
@@ -38,7 +38,15 @@ object FileSystem {
    * @param run the function to execute this operation
    * @tparam A the result type of this operation
    */
-  case class Operation[A](run: ActorRef[HttpRequestSender.HttpCommand] => Future[A])
+  case class Operation[A](run: ActorRef[HttpRequestSender.HttpCommand] => Future[A]) {
+    def flatMap[B](f: A => Operation[B])(implicit ec: ExecutionContext): Operation[B] = Operation(actor =>
+      run(actor) flatMap { a => f(a).run(actor) }
+    )
+
+    def map[B](f: A => B)(implicit ec: ExecutionContext): Operation[B] = Operation(actor =>
+      run(actor) map f
+    )
+  }
 
 }
 
@@ -202,4 +210,57 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @return the ''Operation'' to delete the file
    */
   def deleteFile(fileID: ID)(implicit system: ActorSystem[_]): Operation[Unit]
+
+  /**
+   * Returns the folder object that is referenced by the path specified. This
+   * is a combination of resolving the path and obtaining the folder with the
+   * resulting ID.
+   *
+   * @param path   the path to the desired folder
+   * @param system the actor system
+   * @return the ''Operation'' to resolve the folder with this path
+   */
+  def resolveFolderByPath(path: String)(implicit system: ActorSystem[_]): Operation[FOLDER] =
+    for {
+      id <- resolvePath(path)
+      folder <- resolveFolder(id)
+    } yield folder
+
+  /**
+   * Returns the file object that is referenced by the path specified. This is
+   * a combination of resolving the path and obtaining the file with the
+   * resulting ID.
+   *
+   * @param path   the path of the desired file
+   * @param system the actor system
+   * @return the ''Operation'' to resolve the file with this path
+   */
+  def resolveFileByPath(path: String)(implicit system: ActorSystem[_]): Operation[FILE] =
+    for {
+      id <- resolvePath(path)
+      file <- resolveFile(id)
+    } yield file
+
+  /**
+   * Returns an object with the content of the root folder. This is a
+   * combination of requesting the root folder ID and requesting the content of
+   * this folder.
+   *
+   * @param system the actor system
+   * @return the ''Operation'' to obtain the content of the root folder
+   */
+  def rootFolderContent(implicit system: ActorSystem[_]): Operation[FOLDER_CONTENT] =
+    for {
+      rootId <- rootID
+      content <- folderContent(rootId)
+    } yield content
+
+  /**
+   * Helper function to obtain an implicit execution context from an implicit
+   * actor system.
+   *
+   * @param system the actor system
+   * @return the execution context in implicit scope
+   */
+  private implicit def ec(implicit system: ActorSystem[_]): ExecutionContext = system.executionContext
 }

@@ -47,10 +47,13 @@ lazy val testDependencies = Seq(
   "org.slf4j" % "slf4j-simple" % "1.7.25" % Test
 )
 
+def itFilter(name: String): Boolean = name endsWith "ITSpec"
+def unitFilter(name: String): Boolean = (name endsWith "Spec") && !itFilter(name)
+
 lazy val CloudFiles = (project in file("."))
   .configs(ITest)
-  .settings(inConfig(ITest)(Defaults.testSettings): _*)
   .settings(
+    inConfig(ITest)(Defaults.testTasks),
     version := "0.1-SNAPSHOT",
     scalaVersion := VersionScala,
     libraryDependencies ++= akkaDependencies,
@@ -75,5 +78,6 @@ lazy val CloudFiles = (project in file("."))
         url = url("https://github.com/oheger")
       )
     ),
-    IntegrationTest / parallelExecution := false
+    Test / testOptions := Seq(Tests.Filter(unitFilter)),
+    ITest / testOptions := Seq(Tests.Filter(itFilter))
   )

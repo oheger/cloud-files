@@ -100,9 +100,6 @@ object WireMockSupport {
   def bodyFile(file: String): ResponseFunc = builder =>
     builder.withBodyFile(file)
 
-  /** The path to the directory where resource files are located. */
-  private val ResourceDir = "src/integrationTest/resources"
-
   /**
    * Adds a Basic Auth header to the specified mapping builder with the
    * default user credentials.
@@ -131,8 +128,7 @@ trait WireMockSupport extends BeforeAndAfterEach {
 
   /** The managed WireMock server. */
   private val wireMockServer = new WireMockServer(wireMockConfig()
-    .dynamicPort()
-    .withRootDirectory(ResourceDir))
+    .dynamicPort())
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()

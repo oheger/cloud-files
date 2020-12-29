@@ -47,23 +47,19 @@ lazy val testDependencies = Seq(
   "org.slf4j" % "slf4j-simple" % "1.7.25" % Test
 )
 
+ThisBuild / organization := "com.github.oheger"
+ThisBuild / homepage := Some(url("https://github.com/oheger/cloud-files"))
+ThisBuild / scalaVersion := VersionScala
+ThisBuild / version := "0.1-SNAPSHOT"
+ThisBuild / licenses := Seq(("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0.html")))
+
 def itFilter(name: String): Boolean = name endsWith "ITSpec"
 def unitFilter(name: String): Boolean = (name endsWith "Spec") && !itFilter(name)
 
 lazy val CloudFiles = (project in file("."))
-  .configs(ITest)
   .settings(
-    inConfig(ITest)(Defaults.testTasks),
-    version := "0.1-SNAPSHOT",
-    scalaVersion := VersionScala,
-    libraryDependencies ++= akkaDependencies,
-    libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % VersionScalaXml,
-    libraryDependencies ++= testDependencies,
-    organization := "com.github.oheger",
-    homepage := Some(url("https://github.com/oheger/cloud-files")),
     name := "cloud-files",
     description := "A library for accessing files stored on various server types",
-    licenses += ("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0.html")),
     scmInfo := Some(
       ScmInfo(
         url("https://github.com/oheger/cloud-files.git"),
@@ -77,7 +73,18 @@ lazy val CloudFiles = (project in file("."))
         email = "oheger@apache.org",
         url = url("https://github.com/oheger")
       )
-    ),
+    )
+  ) aggregate core
+
+lazy val core = (project in file("core"))
+  .configs(ITest)
+  .settings(
+    inConfig(ITest)(Defaults.testTasks),
+    libraryDependencies ++= akkaDependencies,
+    libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % VersionScalaXml,
+    libraryDependencies ++= testDependencies,
+    name := "cloud-files-core",
+    description := "The core module of the cloud-files library",
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
     ITest / testOptions := Seq(Tests.Filter(itFilter))
   )

@@ -25,7 +25,7 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.client.{MappingBuilder, ResponseDefinitionBuilder}
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
-import org.scalatest.{BeforeAndAfterEach, Suite}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 
 import scala.concurrent.Future
 
@@ -121,14 +121,28 @@ object WireMockSupport {
  * use case for this project). The companion object defines some useful
  * constants.
  */
-trait WireMockSupport extends BeforeAndAfterEach {
+trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
   this: Suite =>
 
   import WireMockSupport._
 
+  /**
+   * A property defining the project root directory. This is needed to
+   * correctly determine the location of test resource files. This is a
+   * work-around for the problem that Wiremock cannot find the files to serve
+   * in a multi-project setup.
+   */
+  protected val resourceRoot: String
+
   /** The managed WireMock server. */
-  private val wireMockServer = new WireMockServer(wireMockConfig()
-    .dynamicPort())
+  private var wireMockServer: WireMockServer = _
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    wireMockServer = new WireMockServer(wireMockConfig()
+      .dynamicPort()
+      .withRootDirectory(s"$resourceRoot/src/test/resources"))
+  }
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()

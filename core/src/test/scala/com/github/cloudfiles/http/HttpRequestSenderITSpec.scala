@@ -50,6 +50,8 @@ object HttpRequestSenderITSpec {
 class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
   with AsyncTestHelper with WireMockSupport {
 
+  override protected val resourceRoot: String = "core"
+
   import HttpRequestSenderITSpec._
 
   "HttpRequestSender" should "send a HTTP request" in {

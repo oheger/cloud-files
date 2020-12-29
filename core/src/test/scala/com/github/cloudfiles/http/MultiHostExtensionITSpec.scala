@@ -28,6 +28,9 @@ import org.scalatestplus.mockito.MockitoSugar
 
 class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with MockitoSugar
   with WireMockSupport with AsyncTestHelper {
+
+  override protected val resourceRoot: String = "core"
+
   "MultiHostExtension" should "support sending requests to multiple hosts" in {
     val Path1 = "/server1/path"
     val Path2 = "/server2/other_path"

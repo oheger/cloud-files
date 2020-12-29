@@ -19,8 +19,7 @@ package com.github.cloudfiles
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.{FileVisitResult, Files, Path, SimpleFileVisitor}
-
+import java.nio.file.{FileVisitResult, Files, Path, Paths, SimpleFileVisitor}
 import scala.io.Source
 
 object FileTestHelper {
@@ -217,6 +216,16 @@ trait FileTestHelper {
       else Files delete path
     }
   }
+
+  /**
+   * Resolves a file from the (test) resources folder and returns the path to
+   * it. Throws an exception if the path specified cannot be resolved.
+   *
+   * @param path the path to the test file
+   * @return the resolved ''Path'' to this test file
+   */
+  def resourceFile(path: String): Path =
+    Paths get getClass.getResource(path).toURI
 
   /**
    * Checks whether the temporary directory has been created. If not, it is

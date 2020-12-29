@@ -74,17 +74,29 @@ lazy val CloudFiles = (project in file("."))
         url = url("https://github.com/oheger")
       )
     )
-  ) aggregate core
+  ) aggregate (core, webDav)
 
 lazy val core = (project in file("core"))
   .configs(ITest)
   .settings(
     inConfig(ITest)(Defaults.testTasks),
     libraryDependencies ++= akkaDependencies,
-    libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % VersionScalaXml,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-core",
     description := "The core module of the cloud-files library",
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
     ITest / testOptions := Seq(Tests.Filter(itFilter))
   )
+
+lazy val webDav = (project in file("webdav"))
+  .configs(ITest)
+  .settings(
+    inConfig(ITest)(Defaults.testTasks),
+    libraryDependencies ++= akkaDependencies,
+    libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % VersionScalaXml,
+    libraryDependencies ++= testDependencies,
+    name := "cloud-files-webdav",
+    description := "Adds support for the WebDav protocol",
+    Test / testOptions := Seq(Tests.Filter(unitFilter)),
+    ITest / testOptions := Seq(Tests.Filter(itFilter))
+  ) dependsOn (core % "compile->compile;test->test")

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/data/file/test.txt</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:creationdate>2018-09-19T20:08:00Z</D:creationdate>
+        <D:getcontentlanguage>de</D:getcontentlanguage>
+        <D:getetag>ZXKjw_kC_AJQsw_E03tzwSatD_G1YzikF4DT2NsHk-c</D:getetag>
+        <D:getlastmodified>Thu, 31 Dec 2020 19:23:52 GMT</D:getlastmodified>
+        <D:iscollection>false</D:iscollection>
+        <ns666:Win32LastModifiedTime xmlns:ns666="urn:schemas-microsoft-com:">Wed, 30 Dec 2020
+          19:23:52 GMT</ns666:Win32LastModifiedTime>
+        <ns666:Win32LastAccessTime xmlns:ns666="urn:schemas-microsoft-com:">Thu, 20 Sep 2018
+          20:11:00 GMT
+        </ns666:Win32LastAccessTime>
+        <D:getcontentlength>75482</D:getcontentlength>
+        <D:resourcetype/>
+        <ns666:Win32FileAttributes xmlns:ns666="urn:schemas-microsoft-com:">0
+        </ns666:Win32FileAttributes>
+        <D:displayname>test.txt</D:displayname>
+        <D:getcontenttype>audio/mp3</D:getcontenttype>
+        <ns666:Win32CreationTime xmlns:ns666="urn:schemas-microsoft-com:">Fri, 31 Aug 2018 20:20:20
+          GMT
+        </ns666:Win32CreationTime>
+        <ns667:testDesc xmlns:ns667="urn:test-org">A test description</ns667:testDesc>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>

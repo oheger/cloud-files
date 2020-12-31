@@ -97,9 +97,7 @@ object DavParser {
    */
   private def parseFolderContentXml(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
   Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder] = {
-    val xmlStream = new ByteArrayInputStream(xml.toArray)
-    val elem = XML.load(xmlStream)
-    val responses = elem \ ElemResponse
+    val responses = parseResponses(xml)
     val folderUri = Uri(elemText(responses.head, ElemHref))
 
     val folderElements = responses.drop(1) // first element is the folder itself
@@ -118,6 +116,23 @@ object DavParser {
   }
 
   /**
+   * Extracts a single element object from the given XML string. This is
+   * similar to parsing the content of a folder, but only the first element is
+   * extracted.
+   *
+   * @param xml               the XML response from the server
+   * @param optDescriptionKey optional key of the description element
+   * @return the model object for the extracted element
+   */
+  private def parseElementXml(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
+  Try[Model.Element[Uri]] =
+    for {
+      responses <- Try(parseResponses(xml))
+      respElem <- Try(responses.head)
+      elem <- extractElement(respElem, optDescriptionKey)
+    } yield elem
+
+  /**
    * Reads the source from the response of a folder request completely and
    * returns the resulting ''ByteString''.
    *
@@ -129,6 +144,19 @@ object DavParser {
                         (implicit system: ActorSystem[_]): Future[ByteString] = {
     val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
     source.runWith(sink)
+  }
+
+  /**
+   * Parses the given byte string as an XML document and returns a ''NodeSeq''
+   * with the response elements found in this document.
+   *
+   * @param xml the XML response from the server
+   * @return a sequence with the response elements
+   */
+  private def parseResponses(xml: ByteString): NodeSeq = {
+    val xmlStream = new ByteArrayInputStream(xml.toArray)
+    val elem = XML.load(xmlStream)
+    elem \ ElemResponse
   }
 
   /**
@@ -310,5 +338,22 @@ private class DavParser(optDescriptionKey: Option[DavModel.AttributeKey] = None)
     implicit val ec: ExecutionContext = system.executionContext
     readSource(source)
       .map(bs => parseFolderContentXml(bs, optDescriptionKey))
+  }
+
+  /**
+   * Parses a response from a WebDav server with the properties of a single
+   * element. Depending on the properties, either a file or a folder model
+   * object is returned.
+   *
+   * @param source the source with the response from the server
+   * @param system the actor system
+   * @return a ''Future'' with the element extracted from the response
+   */
+  def parseElement(source: Source[ByteString, Any])(implicit system: ActorSystem[_]): Future[Model.Element[Uri]] = {
+    implicit val ec: ExecutionContext = system.executionContext
+    for {
+      xml <- readSource(source)
+      elem <- Future.fromTry(parseElementXml(xml, optDescriptionKey))
+    } yield elem
   }
 }

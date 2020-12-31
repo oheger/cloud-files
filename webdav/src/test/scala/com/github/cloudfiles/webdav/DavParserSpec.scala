@@ -18,13 +18,15 @@ package com.github.cloudfiles.webdav
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.Uri
-import akka.stream.scaladsl.FileIO
+import akka.stream.scaladsl.{FileIO, Source}
+import akka.util.ByteString
 import com.github.cloudfiles.webdav.DavModel.AttributeKey
 import com.github.cloudfiles.{AsyncTestHelper, FileTestHelper}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.time.Instant
+import scala.xml.SAXParseException
 
 object DavParserSpec {
   /** The standard namespace for DAV. */
@@ -151,5 +153,52 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val file = result.files(Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3"))
     file.description should be("A test description")
     file.attributes.values.keys should not contain KeyDesc
+  }
+
+  it should "handle a non-XML response" in {
+    val content = ByteString("This is not an XML document!?")
+    val source = Source.single(content)
+    val parser = new DavParser()
+
+    expectFailedFuture[SAXParseException](parser.parseFolderContent(source))
+  }
+
+  it should "parse a folder element" in {
+    val testResponse = resourceFile("/__files/empty_folder.xml")
+    val source = FileIO.fromPath(testResponse)
+    val parser = new DavParser()
+
+    futureResult(parser.parseElement(source)) match {
+      case folder: DavModel.DavFolder =>
+        folder.name should be("test")
+        folder.lastModifiedAt should be(toInstant("2018-08-30T20:07:40Z"))
+        folder.attributes.values(DavModel.AttributeKey(NS_DAV, "getcontenttype")) should be("httpd/unix-directory")
+      case r =>
+        fail("Unexpected result: " + r)
+    }
+  }
+
+  it should "parse a file element" in {
+    val KeyDesc = AttributeKey("urn:test-org", "testDesc")
+    val testResponse = resourceFile("/__files/element_file.xml")
+    val source = FileIO.fromPath(testResponse)
+    val parser = new DavParser(optDescriptionKey = Some(KeyDesc))
+
+    futureResult(parser.parseElement(source)) match {
+      case file: DavModel.DavFile =>
+        file.name should be("test.txt")
+        file.lastModifiedAt should be(toInstant("2020-12-31T19:23:52Z"))
+        file.description should be("A test description")
+      case r =>
+        fail("Unexpected result: " + r)
+    }
+  }
+
+  it should "handle an unexpected response for an element" in {
+    val testResponse = resourceFile("/__files/element_unexpected.xml")
+    val source = FileIO.fromPath(testResponse)
+    val parser = new DavParser()
+
+    expectFailedFuture[Throwable](parser.parseElement(source))
   }
 }

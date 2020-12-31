@@ -19,6 +19,7 @@ lazy val AkkaVersion = "2.6.10"
 lazy val AkkaHttpVersion = "10.2.2"
 lazy val VersionScala = "2.13.4"
 lazy val VersionScalaXml = "1.3.0"
+lazy val VersionSlf4j = "1.7.30"
 lazy val VersionScalaTest = "3.2.0"
 lazy val VersionWireMock = "2.27.2"
 lazy val VersionMockito = "1.9.5"
@@ -44,7 +45,7 @@ lazy val testDependencies = Seq(
   "com.github.tomakehurst" % "wiremock" % VersionWireMock % Test,
   "org.mockito" % "mockito-core" % VersionMockito % Test,
   "junit" % "junit" % VersionJunit % Test,
-  "org.slf4j" % "slf4j-simple" % "1.7.25" % Test
+  "org.slf4j" % "slf4j-simple" % VersionSlf4j % Test
 )
 
 ThisBuild / organization := "com.github.oheger"
@@ -94,6 +95,7 @@ lazy val webDav = (project in file("webdav"))
     inConfig(ITest)(Defaults.testTasks),
     libraryDependencies ++= akkaDependencies,
     libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % VersionScalaXml,
+    libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-webdav",
     description := "Adds support for the WebDav protocol",

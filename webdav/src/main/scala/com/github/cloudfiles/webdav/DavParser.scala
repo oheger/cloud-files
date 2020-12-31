@@ -21,6 +21,7 @@ import akka.http.scaladsl.model.Uri
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
 import com.github.cloudfiles.Model
+import org.slf4j.LoggerFactory
 
 import java.io.ByteArrayInputStream
 import java.time.Instant
@@ -28,7 +29,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalQuery
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 import scala.xml.{Node, NodeSeq, XML}
 
 object DavParser {
@@ -84,6 +85,9 @@ object DavParser {
    */
   private val StandardAttributes = Set(AttrCreatedAt, AttrModifiedAt, AttrName, AttrSize)
 
+  /** The logger. */
+  private val log = LoggerFactory.getLogger(classOf[DavParser])
+
   /**
    * Extracts the content of a folder from the given XML string.
    *
@@ -100,12 +104,14 @@ object DavParser {
 
     val folderElements = responses.drop(1) // first element is the folder itself
       .foldLeft((Map.empty[Uri, DavModel.DavFolder], Map.empty[Uri, DavModel.DavFile])) { (maps, node) =>
-        extractElement(node, optDescriptionKey) match {
+        (extractElement(node, optDescriptionKey): @unchecked) match {
           case Success(folder: DavModel.DavFolder) =>
             (maps._1 + (folder.id -> folder), maps._2)
           case Success(file: DavModel.DavFile) =>
             (maps._1, maps._2 + (file.id -> file))
-          case _ => maps
+          case Failure(exception) =>
+            log.error("Could not parse response for element {}.", node, exception)
+            maps
         }
       }
     Model.FolderContent(folderUri, folderElements._2, folderElements._1)

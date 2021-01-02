@@ -125,14 +125,15 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
 
   /**
    * Creates a folder as a child of the given parent folder. The attributes of
-   * the new folder are defined by the folder object provided.
+   * the new folder are defined by the folder object provided. If the operation
+   * is successful, the ID of the new folder is returned.
    *
    * @param parent the ID of the parent folder
    * @param folder an object with the attributes of the new folder
    * @param system the actor system
    * @return the ''Operation'' to create a new folder
    */
-  def createFolder(parent: ID, folder: Model.Folder[ID])(implicit system: ActorSystem[_]): Operation[FOLDER]
+  def createFolder(parent: ID, folder: Model.Folder[ID])(implicit system: ActorSystem[_]): Operation[ID]
 
   /**
    * Updates the metadata of a folder. The passed in folder object must contain
@@ -142,7 +143,7 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param system the actor system
    * @return the ''Operation'' to update folder metadata
    */
-  def updateFolder(folder: Model.Folder[ID])(implicit system: ActorSystem[_]): Operation[FOLDER]
+  def updateFolder(folder: Model.Folder[ID])(implicit system: ActorSystem[_]): Operation[Unit]
 
   /**
    * Deletes the folder with the given ID. Note that depending on the concrete
@@ -159,7 +160,8 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * Creates a file as a child of the given parent folder by uploading the
    * file's content and setting some metadata attributes. The attributes to set
    * are provided in form of a file object; typically some properties are
-   * mandatory, such as the file name and the file size.
+   * mandatory, such as the file name and the file size. If the operation is
+   * successful, the ID of the new file is returned.
    *
    * @param parent  the ID of the parent folder
    * @param file    an object with the attributes of the new file
@@ -168,7 +170,7 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @return the ''Operation'' to create a new file
    */
   def createFile(parent: ID, file: Model.File[ID], content: Source[ByteString, Any])
-                (implicit system: ActorSystem[_]): Operation[FILE]
+                (implicit system: ActorSystem[_]): Operation[ID]
 
   /**
    * Updates the metadata of a file. The passed in file object must contain the
@@ -178,7 +180,7 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param system the actor system
    * @return the ''Operation'' to update file metadata
    */
-  def updateFile(file: Model.File[ID])(implicit system: ActorSystem[_]): Operation[FILE]
+  def updateFile(file: Model.File[ID])(implicit system: ActorSystem[_]): Operation[Unit]
 
   /**
    * Updates the content of a file by uploading new data to the server.
@@ -186,9 +188,11 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param fileID  the ID of the file affected
    * @param size    the size of the new content
    * @param content a ''Source'' with the content of the file
+   * @param system the actor system
    * @return the ''Operation'' to upload new file content
    */
-  def updateFileContent(fileID: ID, size: Int, content: Source[ByteString, Any]): Operation[Unit]
+  def updateFileContent(fileID: ID, size: Int, content: Source[ByteString, Any])
+                       (implicit system: ActorSystem[_]): Operation[Unit]
 
   /**
    * Returns an entity for downloading the content of a file. The download can

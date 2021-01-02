@@ -67,24 +67,25 @@ object FileSystemSpec {
       throw new UnsupportedOperationException("Unexpected invocation")
 
     override def createFolder(parent: String, folder: Model.Folder[String])(implicit system: ActorSystem[_]):
-    Operation[TestFolderImpl] =
+    Operation[String] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
     override def updateFolder(folder: Model.Folder[String])(implicit system: ActorSystem[_]):
-    Operation[TestFolderImpl] =
+    Operation[Unit] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
     override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
     override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])
-                           (implicit system: ActorSystem[_]): Operation[TestFileImpl] =
+                           (implicit system: ActorSystem[_]): Operation[String] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
-    override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[TestFileImpl] =
+    override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
-    override def updateFileContent(fileID: String, size: Int, content: Source[ByteString, Any]): Operation[Unit] =
+    override def updateFileContent(fileID: String, size: Int, content: Source[ByteString, Any])
+                                  (implicit system: ActorSystem[_]): Operation[Unit] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
     override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): Operation[HttpEntity] =

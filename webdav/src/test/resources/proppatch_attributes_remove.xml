@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:ns2="urn:test-org">
+    <D:set>
+        <D:prop>
+            <ns2:foo>&lt;foo&gt; value</ns2:foo>
+        </D:prop>
+    </D:set>
+    <D:set>
+        <D:prop>
+            <ns2:testDesc>&lt;cool&gt; description ;-)</ns2:testDesc>
+        </D:prop>
+    </D:set>
+    <D:remove>
+        <D:prop><ns2:del/></D:prop>
+    </D:remove>
+</D:propertyupdate>

@@ -23,7 +23,7 @@ import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import akka.util.Timeout
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -182,7 +182,7 @@ object HttpRequestSender {
     }
 
   /**
-   * Convenience function to send an HTTP request to a ''HttpRequestSender''
+   * Convenience function to send an HTTP request to an ''HttpRequestSender''
    * actor. This function simplifies the sending of requests from outside an
    * actor context. It implements the corresponding ask pattern.
    *
@@ -198,6 +198,29 @@ object HttpRequestSender {
     sender.ask { ref =>
       SendRequest(request, requestData, ref)
     }
+
+  /**
+   * Convenience function to send an HTTP request to an ''HttpRequestSender''
+   * actor and checking the result. This function invokes ''sendRequest()'' and
+   * then checks for the result. If it is a success result, it is returned.
+   * Otherwise, a failed future is returned with the exception from the failed
+   * result.
+   *
+   * @param sender      the actor to process the request
+   * @param request     the HTTP request to be sent
+   * @param requestData the data object associated with the request
+   * @param system      the actor system
+   * @param timeout     the timeout for the ask operation
+   * @return a ''Future'' with the successful result of request processing
+   */
+  def sendRequestSuccess(sender: ActorRef[HttpCommand], request: HttpRequest, requestData: Any)
+                        (implicit system: ActorSystem[_], timeout: Timeout): Future[SuccessResult] = {
+    implicit val ec: ExecutionContextExecutor = system.executionContext
+    sendRequest(sender, request, requestData) flatMap {
+      case HttpRequestSender.FailedResult(_, cause) => Future.failed(cause)
+      case suc: HttpRequestSender.SuccessResult => Future.successful(suc)
+    }
+  }
 
   /**
    * Discards the bytes of the entity from the given result from an

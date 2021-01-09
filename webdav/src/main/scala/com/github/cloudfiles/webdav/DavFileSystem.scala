@@ -352,10 +352,7 @@ class DavFileSystem(val config: DavConfig)
    */
   private def execute(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
                      (implicit system: ActorSystem[_]): Future[HttpRequestSender.SuccessResult] =
-    HttpRequestSender.sendRequest(httpSender, request, null) flatMap {
-      case HttpRequestSender.FailedResult(_, cause) => Future.failed(cause)
-      case suc: HttpRequestSender.SuccessResult => Future.successful(suc)
-    }
+    HttpRequestSender.sendRequestSuccess(httpSender, request, null)
 
   /**
    * Executes an HTTP request against the given request sender actor, for which

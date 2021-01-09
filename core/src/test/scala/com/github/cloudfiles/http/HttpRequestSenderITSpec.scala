@@ -21,6 +21,7 @@ import akka.actor.DeadLetter
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model._
 import akka.util.Timeout
+import com.github.cloudfiles.http.HttpRequestSender.FailedResponseException
 import com.github.cloudfiles.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.Fault
@@ -194,5 +195,39 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val discardedResult = futureResult(HttpRequestSender.discardEntityBytes(futResult))
     discardedResult should be(result)
     Mockito.verify(entity).discardBytes()
+  }
+
+  it should "support sending requests via a convenience function that checks for success results" in {
+    stubFor(get(urlPathEqualTo(Path))
+      .willReturn(aResponse()
+        .withStatus(StatusCodes.Accepted.intValue)
+        .withBodyFile("response.txt")))
+    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val request = HttpRequest(uri = Path)
+
+    val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, RequestData))
+    result.request.request should be(request)
+    result.request.data should be(RequestData)
+
+    result match {
+      case HttpRequestSender.SuccessResult(_, response) =>
+        response.status should be(StatusCodes.Accepted)
+        val content = futureResult(entityToString(response))
+        content should be(FileTestHelper.TestDataSingleLine)
+
+      case res => fail("Unexpected result: " + res)
+    }
+  }
+
+  it should "support sending requests via a convenience function that handles failed results" in {
+    stubFor(get(urlPathEqualTo(Path))
+      .willReturn(aResponse()
+        .withStatus(StatusCodes.BadRequest.intValue)))
+    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val request = HttpRequest(uri = Path)
+
+    val exception = expectFailedFuture[FailedResponseException](HttpRequestSender.sendRequestSuccess(actor,
+      request, RequestData))
+    exception.response.status should be(StatusCodes.BadRequest)
   }
 }

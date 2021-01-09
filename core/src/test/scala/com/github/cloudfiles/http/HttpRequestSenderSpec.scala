@@ -21,6 +21,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes, Uri}
 import akka.util.Timeout
+import com.github.cloudfiles.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.http.HttpRequestSenderSpec.TestExtension
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -42,17 +43,18 @@ object HttpRequestSenderSpec {
           case request: HttpRequestSender.SendRequest =>
             optTimeout match {
               case Some(timeout) =>
-                HttpRequestSender.forwardRequest(context, requestActor, request.request, request, timeout)
+                HttpRequestSender.forwardRequest(context, requestActor, request.request, request, timeout = timeout)
               case None =>
-                HttpRequestSender.forwardRequest(context, requestActor, request.request, request)
+                HttpRequestSender.forwardRequest(context, requestActor, request.request, request,
+                  discardMode = DiscardEntityMode.Never)
             }
 
           case HttpRequestSender.ForwardedResult(result@HttpRequestSender.SuccessResult(
-          HttpRequestSender.SendRequest(_, orgRequest: HttpRequestSender.SendRequest, _), _)) =>
+          HttpRequestSender.SendRequest(_, orgRequest: HttpRequestSender.SendRequest, _, _), _)) =>
             orgRequest.replyTo ! result
 
           case HttpRequestSender.ForwardedResult(result@HttpRequestSender.FailedResult(
-          HttpRequestSender.SendRequest(_, orgRequest: HttpRequestSender.SendRequest, _), _)) =>
+          HttpRequestSender.SendRequest(_, orgRequest: HttpRequestSender.SendRequest, _, _), _)) =>
             orgRequest.replyTo ! result
         }
 
@@ -77,6 +79,7 @@ class HttpRequestSenderSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLi
 
     extension ! request
     val forwardedRequest = probeRequestActor.expectMessageType[HttpRequestSender.SendRequest]
+    forwardedRequest.discardEntityMode should be(DiscardEntityMode.Never)
     val forwardResult = HttpRequestSender.SuccessResult(forwardedRequest, response)
     forwardedRequest.replyTo ! forwardResult
     val result = probeSender.expectMessageType[HttpRequestSender.SuccessResult]

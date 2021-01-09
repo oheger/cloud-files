@@ -134,7 +134,7 @@ object OAuthExtension {
           Behaviors.same
 
         case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(request,
-        data: SendRequest, _), exception: FailedResponseException))
+        data: SendRequest, _, _), exception: FailedResponseException))
           if exception.response.status == StatusCodes.Unauthorized =>
           if (usesCurrentToken(request, currentTokens.accessToken)) {
             refreshing(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, currentTokens,
@@ -206,16 +206,16 @@ object OAuthExtension {
           refreshBehavior(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, currentTokens,
             request :: pendingRequests)
 
-        case HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_, null, _), response)) =>
+        case HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_, null, _, _), response)) =>
           extractNewTokens(context, response, currentTokens)
 
-        case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_, null, _), cause)) =>
+        case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_, null, _, _), cause)) =>
           context.log.error("Got failed response for refresh token request.", cause)
           handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc,
             currentTokens, pendingRequests, cause)
 
         case HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_,
-        tokens: ExtractTokenResult, _), _)) =>
+        tokens: ExtractTokenResult, _, _), _)) =>
           tokens.tokens match {
             case Failure(exception) =>
               context.log.error("Could not parse refresh token response from IDP.", exception)
@@ -228,7 +228,7 @@ object OAuthExtension {
           }
 
         case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_,
-        data: SendRequest, _), exception: FailedResponseException))
+        data: SendRequest, _, _), exception: FailedResponseException))
           if exception.response.status == StatusCodes.Unauthorized =>
           refreshBehavior(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, currentTokens,
             data :: pendingRequests)

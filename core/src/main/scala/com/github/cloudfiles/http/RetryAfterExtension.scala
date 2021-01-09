@@ -60,7 +60,7 @@ object RetryAfterExtension {
         Behaviors.same
 
       case (context, ForwardedResult(FailedResult(HttpRequestSender.SendRequest(request,
-      data: HttpRequestSender.SendRequest, _), cause: FailedResponseException)))
+      data: HttpRequestSender.SendRequest, _, _), cause: FailedResponseException)))
         if cause.response.status == StatusCodes.TooManyRequests =>
         val delay = delayForRetry(cause.response, minimumDelay)
         context.scheduleOnce(delay, context.self, data)

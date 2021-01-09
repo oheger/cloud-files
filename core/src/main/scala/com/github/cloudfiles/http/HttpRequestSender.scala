@@ -16,11 +16,13 @@
 
 package com.github.cloudfiles.http
 
+import akka.Done
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import akka.util.Timeout
+import com.github.cloudfiles.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -36,6 +38,31 @@ import scala.util.{Failure, Success, Try}
 object HttpRequestSender {
 
   /**
+   * An enumeration that controls when the entity of a response should be
+   * discarded by the request sender actor.
+   *
+   * Note that it is important that the entity of a response is '''always'''
+   * either read or discarded; otherwise, the HTTP pipeline is blocked. This is
+   * in the responsibility of the application. [[HttpRequestSender]] supports
+   * this a mechanism to discard entities automatically controlled by this
+   * enumeration. The following values can be set:
+   *
+   *  - ''OnFailure'': The entity is discarded automatically if a response with
+   *    a non-success status code is received. This is the default behavior.
+   *  - ''Always'': The response entity is always discarded. This is useful for
+   *    instance for update requests, that typically do not return a response
+   *    entity.
+   *  - ''Never'': The response entity is never discarded; this has to be done
+   *    manually by the application. This is useful for instance if the server
+   *    returns important information in failure case.
+   */
+  object DiscardEntityMode extends Enumeration {
+    type DiscardEntityMode = Value
+
+    val OnFailure, Always, Never = Value
+  }
+
+  /**
    * The base trait for all commands understood by this actor class.
    */
   sealed trait HttpCommand
@@ -44,11 +71,15 @@ object HttpRequestSender {
    * A message class that describes a request to be sent. The request is
    * associated with a data object that is also part of the response.
    *
-   * @param request the request to be sent
-   * @param data    a data object
-   * @param replyTo the object to send the reply to
+   * @param request           the request to be sent
+   * @param data              a data object
+   * @param replyTo           the object to send the reply to
+   * @param discardEntityMode controls how to discard the response entity
    */
-  final case class SendRequest(request: HttpRequest, data: Any, replyTo: ActorRef[Result]) extends HttpCommand
+  final case class SendRequest(request: HttpRequest,
+                               data: Any,
+                               replyTo: ActorRef[Result],
+                               discardEntityMode: DiscardEntityMode = DiscardEntityMode.OnFailure) extends HttpCommand
 
   /**
    * A message causing this actor to stop itself. This can be used to clean up
@@ -149,12 +180,14 @@ object HttpRequestSender {
    * @param receiver    the actor to send the message to
    * @param request     the HTTP request to forward
    * @param requestData the request data
+   * @param discardMode controls when to discard the entity's bytes
    * @param timeout     a timeout for the request
    */
   def forwardRequest(context: ActorContext[HttpCommand], receiver: ActorRef[HttpCommand], request: HttpRequest,
-                     requestData: Any, timeout: Timeout = DefaultForwardTimeout): Unit = {
+                     requestData: Any, discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure,
+                     timeout: Timeout = DefaultForwardTimeout): Unit = {
     implicit val forwardTimeout: Timeout = timeout
-    context.ask(receiver, ref => SendRequest(request, requestData, ref)) {
+    context.ask(receiver, ref => SendRequest(request, requestData, ref, discardMode)) {
       case Failure(exception) =>
         ForwardedResult(FailedResult(SendRequest(request, requestData, null), exception))
       case Success(response) => ForwardedResult(response)
@@ -175,9 +208,9 @@ object HttpRequestSender {
    */
   def resultFromForwardedRequest(result: Result): Result =
     (result: @unchecked) match {
-      case HttpRequestSender.SuccessResult(SendRequest(_, data: SendRequest, _), response) =>
+      case HttpRequestSender.SuccessResult(SendRequest(_, data: SendRequest, _, _), response) =>
         HttpRequestSender.SuccessResult(data, response)
-      case HttpRequestSender.FailedResult(SendRequest(_, data: SendRequest, _), cause) =>
+      case HttpRequestSender.FailedResult(SendRequest(_, data: SendRequest, _, _), cause) =>
         HttpRequestSender.FailedResult(data, cause)
     }
 
@@ -189,14 +222,16 @@ object HttpRequestSender {
    * @param sender      the actor to process the request
    * @param request     the HTTP request to be sent
    * @param requestData the data object associated with the request
+   * @param discardMode controls when to discard the entity's bytes
    * @param system      the actor system
    * @param timeout     the timeout for the ask operation
    * @return a ''Future'' with the result of request processing
    */
-  def sendRequest(sender: ActorRef[HttpCommand], request: HttpRequest, requestData: Any)
+  def sendRequest(sender: ActorRef[HttpCommand], request: HttpRequest, requestData: Any,
+                  discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure)
                  (implicit system: ActorSystem[_], timeout: Timeout): Future[Result] =
     sender.ask { ref =>
-      SendRequest(request, requestData, ref)
+      SendRequest(request, requestData, ref, discardMode)
     }
 
   /**
@@ -209,14 +244,16 @@ object HttpRequestSender {
    * @param sender      the actor to process the request
    * @param request     the HTTP request to be sent
    * @param requestData the data object associated with the request
+   * @param discardMode controls when to discard the entity's bytes
    * @param system      the actor system
    * @param timeout     the timeout for the ask operation
    * @return a ''Future'' with the successful result of request processing
    */
-  def sendRequestSuccess(sender: ActorRef[HttpCommand], request: HttpRequest, requestData: Any)
+  def sendRequestSuccess(sender: ActorRef[HttpCommand], request: HttpRequest, requestData: Any,
+                         discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure)
                         (implicit system: ActorSystem[_], timeout: Timeout): Future[SuccessResult] = {
     implicit val ec: ExecutionContextExecutor = system.executionContext
-    sendRequest(sender, request, requestData) flatMap {
+    sendRequest(sender, request, requestData, discardMode) flatMap {
       case HttpRequestSender.FailedResult(_, cause) => Future.failed(cause)
       case suc: HttpRequestSender.SuccessResult => Future.successful(suc)
     }
@@ -307,6 +344,7 @@ object HttpRequestSender {
    * Otherwise, a failed result is returned, and the entity bytes of the
    * response are discarded.
    *
+   * @param context  the actor context
    * @param req      the original request
    * @param response the response from the server
    * @return a future with the generated result
@@ -315,10 +353,30 @@ object HttpRequestSender {
   Future[Result] = {
     context.log.debug("{} {} - {} {}", req.request.method.value, req.request.uri,
       response.status.intValue(), response.status.defaultMessage())
-    implicit val mat: ActorSystem[Nothing] = context.system
-    if (response.status.isSuccess())
-      Future.successful(SuccessResult(req, response))
-    else response.entity.discardBytes().future()
-      .map(_ => FailedResult(req, FailedResponseException(response)))(context.system.executionContext)
+
+    implicit val ec: ExecutionContextExecutor = context.system.executionContext
+    conditionallyDiscardEntity(context, response, req.discardEntityMode) map { _ =>
+      if (response.status.isSuccess())
+        SuccessResult(req, response)
+      else FailedResult(req, FailedResponseException(response))
+    }
   }
+
+  /**
+   * Evaluates the success status of the response and the discard mode and
+   * discards the entity bytes if necessary. If no action is necessary, a
+   * successful future is returned.
+   *
+   * @param context     the actor context
+   * @param response    the response
+   * @param discardMode the ''DiscardEntityMode''
+   * @return a future with the result of the operation
+   */
+  private def conditionallyDiscardEntity(context: ActorContext[HttpCommand], response: HttpResponse,
+                                         discardMode: DiscardEntityMode): Future[Done] =
+    if (discardMode == DiscardEntityMode.Always ||
+      (discardMode == DiscardEntityMode.OnFailure && response.status.isFailure())) {
+      implicit val mat: ActorSystem[Nothing] = context.system
+      response.entity.discardBytes().future()
+    } else Future.successful(Done)
 }

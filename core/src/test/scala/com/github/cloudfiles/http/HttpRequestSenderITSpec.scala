@@ -21,7 +21,7 @@ import akka.actor.DeadLetter
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model._
 import akka.util.Timeout
-import com.github.cloudfiles.http.HttpRequestSender.FailedResponseException
+import com.github.cloudfiles.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
 import com.github.cloudfiles.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.Fault
@@ -31,7 +31,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 object HttpRequestSenderITSpec {
@@ -55,7 +55,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
 
   import HttpRequestSenderITSpec._
 
-  "HttpRequestSender" should "send a HTTP request" in {
+  "HttpRequestSender" should "send an HTTP request" in {
     stubFor(get(urlPathEqualTo(Path))
       .willReturn(aResponse()
         .withStatus(StatusCodes.Accepted.intValue)
@@ -73,7 +73,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     content should be(FileTestHelper.TestDataSingleLine)
   }
 
-  it should "return a failed future for a non-success response" in {
+  it should "return a failed result for a non-success response" in {
     stubFor(get(urlPathEqualTo(Path))
       .willReturn(aResponse()
         .withStatus(StatusCodes.BadRequest.intValue)
@@ -229,5 +229,38 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val exception = expectFailedFuture[FailedResponseException](HttpRequestSender.sendRequestSuccess(actor,
       request, RequestData))
     exception.response.status should be(StatusCodes.BadRequest)
+  }
+
+  it should "allow keeping the entity bytes if failure responses are received" in {
+    val ErrorPath = "/error"
+    val ErrorEntity = "This is an error!"
+    stubFor(get(urlPathEqualTo(ErrorPath))
+      .willReturn(aResponse()
+        .withStatus(StatusCodes.BadRequest.intValue)
+        .withBody(ErrorEntity)))
+    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val request = HttpRequest(uri = ErrorPath)
+
+    val result = futureResult(HttpRequestSender.sendRequest(actor, request, RequestData, DiscardEntityMode.Never))
+    result match {
+      case HttpRequestSender.FailedResult(_, cause: FailedResponseException) =>
+        futureResult(entityToString(cause.response)) should be(ErrorEntity)
+      case r => fail("Unexpected result: " + r)
+    }
+  }
+
+  it should "support discarding the entity bytes always" in {
+    implicit val ec: ExecutionContext = system.executionContext
+    stubFor(get(urlPathEqualTo(Path))
+      .willReturn(aResponse()
+        .withStatus(StatusCodes.OK.intValue)
+        .withBodyFile("response.txt")))
+    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val request = HttpRequest(uri = Path)
+
+    val futResults = (1 to 16) map { _ =>
+      HttpRequestSender.sendRequestSuccess(actor, request, RequestData, discardMode = DiscardEntityMode.Always)
+    }
+    futureResult(Future.sequence(futResults))
   }
 }

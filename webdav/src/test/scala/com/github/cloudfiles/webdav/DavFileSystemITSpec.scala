@@ -284,8 +284,8 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val keyAdd = DavModel.AttributeKey(NS_TEST, "foo")
     val attributes = DavModel.Attributes(Map(keyAdd -> "<foo> value"))
     val expPatch = readDataFile(resourceFile("/proppatch_attributes.xml"))
-    val newFolder = DavModel.DavFolder(id = null, lastModifiedAt = null, createdAt = null,
-      name = FolderName, description = "<cool> description ;-)", attributes = attributes)
+    val newFolder = DavModel.newFolder(name = FolderName, description = "<cool> description ;-)",
+      attributes = attributes)
     stubFor(request("MKCOL", urlPathEqualTo(FolderUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.Created.intValue)))
     stubFor(request("PROPPATCH", urlPathEqualTo(FolderUri.path.toString() + "/"))
@@ -406,8 +406,8 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val keyAdd = DavModel.AttributeKey(NS_TEST, "foo")
     val attributes = DavModel.Attributes(Map(keyAdd -> "<foo> value"))
     val expPatch = readDataFile(resourceFile("/proppatch_attributes.xml"))
-    val newFile = DavModel.DavFile(id = null, lastModifiedAt = null, createdAt = null,
-      name = FileName, description = "<cool> description ;-)", attributes = attributes, size = FileContentSize)
+    val newFile = DavModel.newFile(name = FileName, description = "<cool> description ;-)",
+      attributes = attributes, size = FileContentSize)
     stubFor(put(urlPathEqualTo(FileUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     stubFor(request("PROPPATCH", urlPathEqualTo(FileUri.path.toString()))

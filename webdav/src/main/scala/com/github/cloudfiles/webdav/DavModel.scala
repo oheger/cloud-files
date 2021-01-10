@@ -121,4 +121,47 @@ object DavModel {
                      override val size: Long,
                      attributes: Attributes) extends Model.File[Uri]
 
+  /**
+   * An empty ''Attributes'' instances, i.e. an instance that contains no
+   * custom attributes.
+   */
+  final val EmptyAttributes: Attributes = Attributes(Map.empty)
+
+  /**
+   * Constructs a new ''DavFolder'' object based on the properties provided.
+   * This function can be used for instance to create a folder object that is
+   * passed to the ''createFolder()'' function of a [[DavFileSystem]] service.
+   * It expects all mandatory attributes of the new folder, provides default
+   * values for optional attributes, and ignores the ones that are not
+   * evaluated when creating a new folder. (Some properties like the creation
+   * date are set by the server and can usually not be overridden.)
+   *
+   * @param name        the name of the folder
+   * @param description an optional description
+   * @param attributes  optional custom attributes
+   * @return the new ''DavFolder'' object
+   */
+  def newFolder(name: String, description: String = null, attributes: Attributes = EmptyAttributes): DavFolder =
+    DavFolder(name = name, description = description, attributes = attributes, id = null, createdAt = null,
+      lastModifiedAt = null)
+
+  /**
+   * Constructs a new ''DavFile'' object based on the properties provided.
+   * This function can be used for instance to create a file object that is
+   * passed to the ''createFile()'' function of a [[DavFileSystem]] service.
+   * It expects all mandatory attributes of the new file, provides default
+   * values for optional attributes, and ignores the ones that not evaluated
+   * when creating a new file. (Some properties like the creation date are set
+   * by the server and can usually not be overridden.)
+   *
+   * @param name        the name of the file
+   * @param size        the size of the file's content
+   * @param description an optional description
+   * @param attributes  optional custom attributes
+   * @return the new ''DavFile'' object
+   */
+  def newFile(name: String, size: Long, description: String = null, attributes: Attributes = EmptyAttributes):
+  DavFile =
+    DavFile(name = name, size = size, description = description, attributes = attributes,
+      id = null, createdAt = null, lastModifiedAt = null)
 }

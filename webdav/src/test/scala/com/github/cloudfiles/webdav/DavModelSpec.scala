@@ -45,4 +45,51 @@ class DavModelSpec extends AnyFlatSpec with Matchers {
     attributes.values should have size 1
     attributes.values(key) should be("bar")
   }
+
+  "DavModel" should "provide an empty Attributes instance" in {
+    DavModel.EmptyAttributes.values should have size 0
+    DavModel.EmptyAttributes.keysToDelete should have size 0
+  }
+
+  it should "create a new folder with all properties" in {
+    val FolderName = "MyNewFolder"
+    val FolderDesc = "This is my new folder. Indeed."
+    val FolderAttrs = DavModel.Attributes(Map(DavModel.AttributeKey("ns", "attr") -> "someValue"))
+    val ExpFolder = DavModel.DavFolder(id = null, createdAt = null, lastModifiedAt = null, name = FolderName,
+      description = FolderDesc, attributes = FolderAttrs)
+
+    val folder = DavModel.newFolder(FolderName, FolderDesc, FolderAttrs)
+    folder should be(ExpFolder)
+  }
+
+  it should "create a new folder with default properties" in {
+    val FolderName = "NewFolderWithDefaults"
+    val ExpFolder = DavModel.DavFolder(id = null, createdAt = null, lastModifiedAt = null, name = FolderName,
+      description = null, attributes = DavModel.EmptyAttributes)
+
+    val folder = DavModel.newFolder(FolderName)
+    folder should be(ExpFolder)
+  }
+
+  it should "create a new file with all properties" in {
+    val FileName = "MyNewFile"
+    val FileSize = 20210110
+    val FileDesc = "A new test file"
+    val FileAttrs = DavModel.Attributes(Map(DavModel.AttributeKey("ns", "attr") -> "someFileValue"))
+    val ExpFile = DavModel.DavFile(id = null, createdAt = null, lastModifiedAt = null, name = FileName,
+      description = FileDesc, size = FileSize, attributes = FileAttrs)
+
+    val file = DavModel.newFile(FileName, FileSize, FileDesc, FileAttrs)
+    file should be(ExpFile)
+  }
+
+  it should "create a new file with default properties" in {
+    val FileName = "MyNewFile"
+    val FileSize = 20210110
+    val ExpFile = DavModel.DavFile(id = null, createdAt = null, lastModifiedAt = null, name = FileName,
+      description = null, size = FileSize, attributes = DavModel.EmptyAttributes)
+
+    val file = DavModel.newFile(FileName, FileSize)
+    file should be(ExpFile)
+  }
 }

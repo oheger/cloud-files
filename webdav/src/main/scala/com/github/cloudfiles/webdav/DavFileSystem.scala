@@ -24,6 +24,8 @@ import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.FileSystem.Operation
 import com.github.cloudfiles.http.HttpRequestSender
+import com.github.cloudfiles.http.HttpRequestSender.DiscardEntityMode
+import com.github.cloudfiles.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 import com.github.cloudfiles.{FileSystem, Model}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -345,14 +347,16 @@ class DavFileSystem(val config: DavConfig)
    * Executes an HTTP request against the given request sender actor with
    * error handling.
    *
-   * @param httpSender the HTTP request sender actor
-   * @param request    the request to execute
-   * @param system     the actor system
+   * @param httpSender  the HTTP request sender actor
+   * @param request     the request to execute
+   * @param discardMode controls when to discard the entity bytes
+   * @param system      the actor system
    * @return a ''Future'' with the successful result
    */
-  private def execute(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
+  private def execute(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest,
+                      discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure)
                      (implicit system: ActorSystem[_]): Future[HttpRequestSender.SuccessResult] =
-    HttpRequestSender.sendRequestSuccess(httpSender, request, null)
+    HttpRequestSender.sendRequestSuccess(httpSender, request, null, discardMode)
 
   /**
    * Executes an HTTP request against the given request sender actor, for which
@@ -366,10 +370,7 @@ class DavFileSystem(val config: DavConfig)
    */
   private def executeAndDiscardEntity(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
                                      (implicit system: ActorSystem[_]): Future[Unit] =
-    for {
-      result <- execute(httpSender, request)
-      _ <- HttpRequestSender.discardEntityBytes(result)
-    } yield ()
+    execute(httpSender, request, DiscardEntityMode.Always) map (_ => ())
 
   /**
    * Returns a correct URI pointing to a folder. Makes sure that the URI ends

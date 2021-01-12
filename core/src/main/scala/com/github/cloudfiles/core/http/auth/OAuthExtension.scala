@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http.auth
+package com.github.cloudfiles.core.http.auth
 
 import akka.actor.ActorSystem
 import akka.actor.typed.scaladsl.adapter.TypedActorSystemOps
@@ -24,8 +24,8 @@ import akka.http.scaladsl.model.{FormData, HttpMethods, HttpRequest, HttpRespons
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.stream.scaladsl.Sink
 import akka.util.ByteString
-import com.github.cloudfiles.http.HttpRequestSender.{FailedResponseException, SendRequest}
-import com.github.cloudfiles.http.HttpRequestSender
+import com.github.cloudfiles.core.http.HttpRequestSender.{FailedResponseException, SendRequest}
+import com.github.cloudfiles.core.http.HttpRequestSender
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -34,7 +34,7 @@ import scala.util.{Failure, Success, Try}
  * An actor implementation supporting an OAuth flow when interacting with an
  * HTTP server.
  *
- * This actor class wraps an [[com.github.cloudfiles.http.HttpRequestSender]]
+ * This actor class wraps an [[com.github.cloudfiles.core.http.HttpRequestSender]]
  * actor and adds a bearer token obtained from an OAuth identity provider to
  * HTTP requests. The actor is configured with the parameters of an OAuth
  * identity provider. When a request arrives, an authorization header with the

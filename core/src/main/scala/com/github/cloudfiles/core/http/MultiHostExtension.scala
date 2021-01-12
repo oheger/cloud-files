@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.core.http
 
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}

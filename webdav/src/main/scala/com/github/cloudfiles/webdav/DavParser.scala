@@ -20,7 +20,7 @@ import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.Uri
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
-import com.github.cloudfiles.Model
+import com.github.cloudfiles.core.Model
 import org.slf4j.LoggerFactory
 
 import java.io.ByteArrayInputStream

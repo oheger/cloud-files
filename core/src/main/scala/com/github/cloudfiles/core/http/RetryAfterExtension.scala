@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.core.http
 
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.headers.{RetryAfterDateTime, RetryAfterDuration, `Retry-After`}
 import akka.http.scaladsl.model.{DateTime, HttpResponse, StatusCodes}
-import com.github.cloudfiles.http.HttpRequestSender.{FailedResponseException, FailedResult, ForwardedResult}
+import com.github.cloudfiles.core.http.HttpRequestSender.{FailedResponseException, FailedResult, ForwardedResult}
 
 import scala.concurrent.duration._
 

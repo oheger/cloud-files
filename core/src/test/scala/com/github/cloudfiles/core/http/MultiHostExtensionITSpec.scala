@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.core.http
 
 import akka.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit, TestProbe}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
-import com.github.cloudfiles.{AsyncTestHelper, WireMockSupport}
+import com.github.cloudfiles.core.{AsyncTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig

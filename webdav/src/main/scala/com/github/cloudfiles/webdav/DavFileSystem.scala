@@ -22,11 +22,11 @@ import akka.http.scaladsl.model.headers.{Accept, ModeledCustomHeader, ModeledCus
 import akka.http.scaladsl.model._
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
-import com.github.cloudfiles.FileSystem.Operation
-import com.github.cloudfiles.http.HttpRequestSender
-import com.github.cloudfiles.http.HttpRequestSender.DiscardEntityMode
-import com.github.cloudfiles.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
-import com.github.cloudfiles.{FileSystem, Model}
+import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
+import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
+import com.github.cloudfiles.core.{FileSystem, Model}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try

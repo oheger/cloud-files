@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.core.http
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes, Uri}
 import akka.util.Timeout
-import com.github.cloudfiles.http.HttpRequestSender.DiscardEntityMode
-import com.github.cloudfiles.http.HttpRequestSenderSpec.TestExtension
+import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
+import com.github.cloudfiles.core.http.HttpRequestSenderSpec.TestExtension
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

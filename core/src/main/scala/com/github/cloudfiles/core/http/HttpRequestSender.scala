@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.core.http
 
 import akka.Done
 import akka.actor.typed.scaladsl.AskPattern._
@@ -22,7 +22,7 @@ import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import akka.util.Timeout
-import com.github.cloudfiles.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
+import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}

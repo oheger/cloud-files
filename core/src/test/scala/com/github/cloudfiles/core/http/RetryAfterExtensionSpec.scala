@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.core.http
 
 import akka.actor.testkit.typed.Effect.Scheduled
 import akka.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit, TestProbe}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.model.headers.`Retry-After`
 import akka.http.scaladsl.model.{DateTime, HttpHeader, HttpRequest, HttpResponse, StatusCode, StatusCodes}
-import com.github.cloudfiles.http.HttpRequestSender.FailedResponseException
+import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

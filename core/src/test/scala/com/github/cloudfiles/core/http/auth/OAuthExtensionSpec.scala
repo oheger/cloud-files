@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http.auth
+package com.github.cloudfiles.core.http.auth
 
 import akka.actor.{ActorSystem, DeadLetter}
 import akka.actor.testkit.typed.scaladsl.{ScalaTestWithActorTestKit, TestProbe}
@@ -26,8 +26,8 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken, `Cont
 import akka.http.scaladsl.model._
 import akka.stream.scaladsl.Sink
 import akka.util.ByteString
-import com.github.cloudfiles.http.HttpRequestSender.FailedResponseException
-import com.github.cloudfiles.http.{HttpRequestSender, Secret}
+import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
+import com.github.cloudfiles.core.http.{HttpRequestSender, Secret}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

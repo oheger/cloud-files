@@ -20,11 +20,11 @@ import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.{ByteString, Timeout}
-import com.github.cloudfiles.Model.Folder
-import com.github.cloudfiles.http.HttpRequestSender
-import com.github.cloudfiles.http.HttpRequestSender.FailedResponseException
+import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, FileTestHelper, Model, WireMockSupport}
+import com.github.cloudfiles.core.Model.Folder
+import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.cloudfiles.webdav.DavModel.AttributeKey
-import com.github.cloudfiles.{AsyncTestHelper, FileSystem, FileTestHelper, Model, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike

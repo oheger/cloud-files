@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.core.http
 
 import akka.Done
 import akka.actor.DeadLetter
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model._
 import akka.util.Timeout
-import com.github.cloudfiles.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
-import com.github.cloudfiles.{AsyncTestHelper, FileTestHelper, WireMockSupport}
+import com.github.cloudfiles.core.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
+import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.Fault
 import org.mockito.Mockito

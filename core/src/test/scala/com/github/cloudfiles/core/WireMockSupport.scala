@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles
+package com.github.cloudfiles.core
 
 import akka.http.scaladsl.model.headers.Authorization
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}

@@ -21,7 +21,7 @@ import akka.http.scaladsl.model.Uri
 import akka.stream.scaladsl.{FileIO, Source}
 import akka.util.ByteString
 import com.github.cloudfiles.webdav.DavModel.AttributeKey
-import com.github.cloudfiles.{AsyncTestHelper, FileTestHelper}
+import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

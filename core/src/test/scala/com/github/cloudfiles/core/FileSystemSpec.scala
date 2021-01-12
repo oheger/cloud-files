@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles
+package com.github.cloudfiles.core
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.HttpEntity
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
-import com.github.cloudfiles.FileSystem.Operation
-import com.github.cloudfiles.http.HttpRequestSender
+import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.http.HttpRequestSender
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar

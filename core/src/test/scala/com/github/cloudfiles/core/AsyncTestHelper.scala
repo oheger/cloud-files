@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles
+package com.github.cloudfiles.core
 
+import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.Failure
-import scala.concurrent.duration._
 
 /**
  * A test helper class that supports tests of functionality that runs

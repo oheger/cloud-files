@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles
+package com.github.cloudfiles.core
 
 import java.time.Instant
 

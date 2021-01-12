@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http.auth
+package com.github.cloudfiles.core.http.auth
 
 import java.util.regex.Pattern
 import scala.util.matching.Regex

@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http.auth
+package com.github.cloudfiles.core.http.auth
 
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials}
-import com.github.cloudfiles.http.HttpRequestSender
+import com.github.cloudfiles.core.http.HttpRequestSender
 
 /**
  * An actor implementation that adds basic authentication to HTTP requests.

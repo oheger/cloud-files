@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles
+package com.github.cloudfiles.core
 
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.{FileVisitResult, Files, Path, Paths, SimpleFileVisitor}
+import java.nio.file._
 import scala.io.Source
 
 object FileTestHelper {

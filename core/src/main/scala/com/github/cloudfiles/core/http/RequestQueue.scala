@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.cloudfiles.http
+package com.github.cloudfiles.core.http
 
 import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}

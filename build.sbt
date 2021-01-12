@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
+
 /** Definition of versions. */
 lazy val AkkaVersion = "2.6.10"
 lazy val AkkaHttpVersion = "10.2.2"
@@ -24,7 +26,7 @@ lazy val VersionScalaTest = "3.2.0"
 lazy val VersionWireMock = "2.27.2"
 lazy val VersionMockito = "1.9.5"
 lazy val VersionScalaTestMockito = "1.0.0-M2"
-lazy val VersionJunit = "4.13"  // needed by mockito
+lazy val VersionJunit = "4.13" // needed by mockito
 
 scalacOptions ++= Seq("-deprecation", "-feature")
 
@@ -46,6 +48,11 @@ lazy val testDependencies = Seq(
   "org.mockito" % "mockito-core" % VersionMockito % Test,
   "junit" % "junit" % VersionJunit % Test,
   "org.slf4j" % "slf4j-simple" % VersionSlf4j % Test
+)
+
+/** Adapt the OSGi configuration. */
+lazy val projectOsgiSettings = osgiSettings ++ Seq(
+  OsgiKeys.requireCapability := "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version>=1.8))\""
 )
 
 ThisBuild / organization := "com.github.oheger"
@@ -75,22 +82,28 @@ lazy val CloudFiles = (project in file("."))
         url = url("https://github.com/oheger")
       )
     )
-  ) aggregate (core, webDav)
+  ) aggregate(core, webDav)
 
 lazy val core = (project in file("core"))
+  .enablePlugins(SbtOsgi)
   .configs(ITest)
+  .settings(projectOsgiSettings)
   .settings(
     inConfig(ITest)(Defaults.testTasks),
     libraryDependencies ++= akkaDependencies,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-core",
     description := "The core module of the cloud-files library",
+    OsgiKeys.exportPackage := Seq("com.github.cloudfiles.core.*"),
+    OsgiKeys.privatePackage := Seq.empty,
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
     ITest / testOptions := Seq(Tests.Filter(itFilter))
   )
 
 lazy val webDav = (project in file("webdav"))
+  .enablePlugins(SbtOsgi)
   .configs(ITest)
+  .settings(projectOsgiSettings)
   .settings(
     inConfig(ITest)(Defaults.testTasks),
     libraryDependencies ++= akkaDependencies,
@@ -99,6 +112,8 @@ lazy val webDav = (project in file("webdav"))
     libraryDependencies ++= testDependencies,
     name := "cloud-files-webdav",
     description := "Adds support for the WebDav protocol",
+    OsgiKeys.exportPackage := Seq("com.github.cloudfiles.webdav.*"),
+    OsgiKeys.privatePackage := Seq.empty,
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
     ITest / testOptions := Seq(Tests.Filter(itFilter))
   ) dependsOn (core % "compile->compile;test->test")

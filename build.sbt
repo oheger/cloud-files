@@ -37,13 +37,13 @@ lazy val akkaDependencies = Seq(
   "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
   "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
   "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion,
-  "com.typesafe.akka" %% "akka-actor-testkit-typed" % AkkaVersion % Test,
   "org.scala-lang" % "scala-reflect" % VersionScala
 )
 
 lazy val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % VersionScalaTest % Test,
   "org.scalatestplus" %% "scalatestplus-mockito" % VersionScalaTestMockito % Test,
+  "com.typesafe.akka" %% "akka-actor-testkit-typed" % AkkaVersion % Test,
   "com.github.tomakehurst" % "wiremock" % VersionWireMock % Test,
   "org.mockito" % "mockito-core" % VersionMockito % Test,
   "junit" % "junit" % VersionJunit % Test,
@@ -64,6 +64,7 @@ ThisBuild / licenses := Seq(("Apache-2.0", url("https://www.apache.org/licenses/
 def itFilter(name: String): Boolean = name endsWith "ITSpec"
 def unitFilter(name: String): Boolean = (name endsWith "Spec") && !itFilter(name)
 
+/** The root project which aggregates all other modules. */
 lazy val CloudFiles = (project in file("."))
   .settings(
     name := "cloud-files",
@@ -82,8 +83,13 @@ lazy val CloudFiles = (project in file("."))
         url = url("https://github.com/oheger")
       )
     )
-  ) aggregate(core, webDav)
+  ) aggregate(core, webDav, oneDrive)
 
+/**
+ * The core project. This project defines the API for interacting with
+ * different types of servers and provides utilities that can be used by
+ * concrete protocol implementations.
+ */
 lazy val core = (project in file("core"))
   .enablePlugins(SbtOsgi)
   .configs(ITest)
@@ -100,6 +106,9 @@ lazy val core = (project in file("core"))
     ITest / testOptions := Seq(Tests.Filter(itFilter))
   )
 
+/**
+ * This project implements the CloudFiles API for WebDav servers.
+ */
 lazy val webDav = (project in file("webdav"))
   .enablePlugins(SbtOsgi)
   .configs(ITest)
@@ -113,6 +122,27 @@ lazy val webDav = (project in file("webdav"))
     name := "cloud-files-webdav",
     description := "Adds support for the WebDav protocol",
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.webdav.*"),
+    OsgiKeys.privatePackage := Seq.empty,
+    Test / testOptions := Seq(Tests.Filter(unitFilter)),
+    ITest / testOptions := Seq(Tests.Filter(itFilter))
+  ) dependsOn (core % "compile->compile;test->test")
+
+/**
+ * This project implements the CloudFiles API for Microsoft OneDrive. Refer to
+ * https://docs.microsoft.com/en-us/onedrive/developer/?view=odsp-graph-online.
+ */
+lazy val oneDrive = (project in file("onedrive"))
+  .enablePlugins(SbtOsgi)
+  .configs(ITest)
+  .settings(projectOsgiSettings)
+  .settings(
+    inConfig(ITest)(Defaults.testTasks),
+    libraryDependencies ++= akkaDependencies,
+    libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
+    libraryDependencies ++= testDependencies,
+    name := "cloud-files-onedrive",
+    description := "Adds support for Microsoft's OneDrive protocol",
+    OsgiKeys.exportPackage := Seq("com.github.cloudfiles.onedrive.*"),
     OsgiKeys.privatePackage := Seq.empty,
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
     ITest / testOptions := Seq(Tests.Filter(itFilter))

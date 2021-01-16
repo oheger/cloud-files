@@ -22,10 +22,22 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json._
 
+import java.time.Instant
+
 /**
  * Test class for ''OneDriveJsonProtocol''.
  */
 class OneDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTestHelper {
+  /**
+   * Checks whether a timestamp has the expected value.
+   *
+   * @param actual   the actual value
+   * @param expected the string representation of the expected value
+   */
+  private def checkInstant(actual: Instant, expected: String): Unit = {
+    actual should be(Instant.parse(expected))
+  }
+
   /**
    * Parses the JSON file with the response of a folder content request.
    *
@@ -88,5 +100,27 @@ class OneDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTestHe
 
     folderResponse.value.head.specialFolder.map(_.name) should be(Some("photos"))
     folderResponse.value(1).specialFolder should be(None)
+  }
+
+  it should "de-serialize timestamps" in {
+    val folderResponse = parseFolderResponse()
+
+    checkInstant(folderResponse.value.head.createdDateTime, "2017-10-29T10:07:55.113Z")
+    val file = folderResponse.value(2)
+    checkInstant(file.lastModifiedDateTime, "2019-10-27T16:45:12.627Z")
+    val fileSystemInfo = file.fileSystemInfo
+    checkInstant(fileSystemInfo.createdDateTime, "2019-10-27T16:45:12.443Z")
+    checkInstant(fileSystemInfo.lastModifiedDateTime, "2018-09-19T20:10:00Z")
+    fileSystemInfo.lastAccessedDateTime should be(None)
+  }
+
+  it should "handle an unexpected timestamp data type during de-serialization" in {
+    val responseJson = readDataFile(resourceFile("/folderResponse.json"))
+    val modifiedJson = responseJson.replace("\"2019-10-27T16:45:12.443Z\"", "42")
+    val jsonAst = modifiedJson.parseJson
+
+    intercept[DeserializationException] {
+      jsonAst.convertTo[FolderResponse]
+    }
   }
 }

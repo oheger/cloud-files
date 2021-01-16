@@ -16,7 +16,9 @@
 
 package com.github.cloudfiles.onedrive
 
-import spray.json.{DefaultJsonProtocol, RootJsonFormat}
+import spray.json.{DefaultJsonProtocol, JsString, JsValue, JsonFormat, RootJsonFormat, deserializationError}
+
+import java.time.Instant
 
 /**
  * A module defining data classes that correspond to the OneDrive REST API as
@@ -89,9 +91,9 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
    *                             list only)
    * @param lastModifiedDateTime the time of the last modification
    */
-  case class FileSystemInfo(createdDateTime: String,
-                            lastAccessedDateTime: Option[String],
-                            lastModifiedDateTime: String)
+  case class FileSystemInfo(createdDateTime: Instant,
+                            lastModifiedDateTime: Instant,
+                            lastAccessedDateTime: Option[Instant])
 
   /**
    * A data class representing a reference to another drive item.
@@ -125,7 +127,7 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
   case class Shared(owner: IdentitySet,
                     scope: String,
                     sharedBy: IdentitySet,
-                    sharedDateTime: String)
+                    sharedDateTime: Instant)
 
   /**
    * A data class describing a special folder. This information is available
@@ -163,9 +165,9 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
    */
   case class DriveItem(id: String,
                        createdBy: IdentitySet,
-                       createdDateTime: String,
+                       createdDateTime: Instant,
                        lastModifiedBy: IdentitySet,
-                       lastModifiedDateTime: String,
+                       lastModifiedDateTime: Instant,
                        name: String,
                        description: Option[String],
                        size: Long,
@@ -187,6 +189,20 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
    * @param nextLink an optional link to the next page
    */
   case class FolderResponse(value: List[DriveItem], nextLink: Option[String])
+
+  /**
+   * A format implementation to deal with date-time values. OneDrive uses the
+   * default ISO format that can be parsed by the ''Instant'' class. Therefore,
+   * this implementation is straight-forward.
+   */
+  implicit object InstantFormat extends JsonFormat[Instant] {
+    override def read(json: JsValue): Instant = json match {
+      case JsString(value) => Instant.parse(value)
+      case j => deserializationError(s"Expected a string for an instant, but was: $j.")
+    }
+
+    override def write(obj: Instant): JsValue = JsString(obj.toString)
+  }
 
   implicit val hashesFormat: RootJsonFormat[Hashes] = jsonFormat3(Hashes)
   implicit val identityFormat: RootJsonFormat[Identity] = jsonFormat2(Identity)

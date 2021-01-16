@@ -1,0 +1,169 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('test.user%40test-user.org')/drives('xxxyyyzzz1234567')/root/children",
+  "@odata.count": 11,
+  "value": [
+    {
+      "createdDateTime": "2017-10-29T10:07:55.113Z",
+      "cTag": "adDozRUU1MzkyMUNGRUQzRkI2ITcxOTMuNjM2NDQ4Njg0NzUxOTAwMDAw",
+      "eTag": "aM0VFNTM5MjFDRkVEM0ZCNiE3MTkzLjA",
+      "id": "xxxyyyzzz1234567!7193",
+      "lastModifiedDateTime": "2017-10-29T10:07:55.19Z",
+      "name": "folder (1)",
+      "size": 0,
+      "webUrl": "https://1drv.ms/f/s!XXX_XXXXX-XXX",
+      "createdBy": {
+        "application": {
+          "displayName": "MSOffice15",
+          "id": "480728c5"
+        },
+        "device": {
+          "id": "18400086c36a98"
+        },
+        "user": {
+          "displayName": "Test User",
+          "id": "xxxyyyzzz1234567"
+        }
+      },
+      "lastModifiedBy": {
+        "application": {
+          "displayName": "MSOffice15",
+          "id": "480728c5"
+        },
+        "device": {
+          "id": "18400086c36a98"
+        },
+        "user": {
+          "displayName": "Test User",
+          "id": "xxxyyyzzz1234567"
+        }
+      },
+      "parentReference": {
+        "driveId": "xxxyyyzzz1234567",
+        "driveType": "personal",
+        "id": "xxxyyyzzz1234567!103",
+        "path": "/drive/root:"
+      },
+      "fileSystemInfo": {
+        "createdDateTime": "2017-10-29T10:07:55.113Z",
+        "lastModifiedDateTime": "2017-10-29T10:07:55.113Z"
+      },
+      "folder": {
+        "childCount": 1,
+        "view": {
+          "viewType": "thumbnails",
+          "sortBy": "takenOrCreatedDateTime",
+          "sortOrder": "ascending"
+        }
+      },
+      "specialFolder": {
+        "name": "photos"
+      }
+    },
+    {
+      "createdDateTime": "2017-09-07T17:21:28.21Z",
+      "cTag": "adDozRUU1MzkyMUNGRUQzRkI2ITQ4OTEuNjM3MDc2OTQxMjc3NjAwMDAw",
+      "eTag": "aM0VFNTM5MjFDRkVEM0ZCNiE0ODkxLjA",
+      "id": "xxxyyyzzz1234567!4891",
+      "lastModifiedDateTime": "2019-10-26T13:42:07.76Z",
+      "name": "folder (2)",
+      "size": 876354385,
+      "webUrl": "https://1drv.ms/f/s!XXX_XXXXXXX-XXX",
+      "createdBy": {
+        "application": {
+          "displayName": "MSOffice15",
+          "id": "480728c5"
+        },
+        "user": {
+          "displayName": "Test User",
+          "id": "xxxyyyzzz1234567"
+        },
+        "oneDriveSync": {
+          "@odata.type": "#microsoft.graph.identity",
+          "id": "abcdef01-1234-1234-1234-1234567890ab"
+        }
+      },
+      "lastModifiedBy": {
+        "application": {
+          "displayName": "MSOffice15",
+          "id": "480728c5"
+        },
+        "user": {
+          "displayName": "Test User",
+          "id": "xxxyyyzzz1234567"
+        },
+        "oneDriveSync": {
+          "@odata.type": "#microsoft.graph.identity",
+          "id": "abcdef01-1234-1234-1234-1234567890ab"
+        }
+      },
+      "parentReference": {
+        "driveId": "xxxyyyzzz1234567",
+        "driveType": "personal",
+        "id": "xxxyyyzzz1234567!103",
+        "path": "/drive/root:"
+      },
+      "fileSystemInfo": {
+        "createdDateTime": "2017-09-07T17:06:55Z",
+        "lastModifiedDateTime": "2017-09-07T17:17:35Z"
+      },
+      "folder": {
+        "childCount": 821,
+        "view": {
+          "viewType": "thumbnails",
+          "sortBy": "name",
+          "sortOrder": "ascending"
+        }
+      }
+    },
+    {
+      "@microsoft.graph.downloadUrl": "https://public.db.files.1drv.com/y4mRSBRkvnXdwIlmgOyHa2hsVxglb6UUSnPa-aaO1ZBaIYGah8zPbYHybLuvpf4JLaMc5Ida0O-OWz6RdOOcLtOIgLXhmZkA3-WJnjpshUJDnJMaWXvYVe10-85bb434gghXUJgd3g-QIeGOLIuJGuTFJdolsjeugcEXZzeCMkTgXpfd4sAsVnb975abNJVMrfxnW7diHeRmBILdxuFJ2x_3XNx4IsdoejD9GdAY",
+      "createdDateTime": "2019-10-27T16:45:12.443Z",
+      "cTag": "aYzozRUU1MzkyMUNGRUQzRkI2ITI2OTkwLjI1Nw",
+      "eTag": "aM0VFNTM5MjFDRkVEM0ZCNiEyNjk5MC4x",
+      "id": "xxxyyyzzz1234567!26990",
+      "lastModifiedDateTime": "2019-10-27T16:45:12.627Z",
+      "name": "file (1).mp3",
+      "description": "A test file",
+      "size": 100,
+      "webUrl": "https://1drv.ms/u/s!XXX_XXXXXXXX-XXXX",
+      "createdBy": {
+        "application": {
+          "displayName": "StreamSync",
+          "id": "4c2e9422"
+        },
+        "user": {
+          "displayName": "Test User",
+          "id": "xxxyyyzzz1234567"
+        }
+      },
+      "lastModifiedBy": {
+        "application": {
+          "displayName": "StreamSync",
+          "id": "4c2e9422"
+        },
+        "user": {
+          "displayName": "Test User",
+          "id": "xxxyyyzzz1234567"
+        }
+      },
+      "parentReference": {
+        "driveId": "xxxyyyzzz1234567",
+        "driveType": "personal",
+        "id": "xxxyyyzzz1234567!26987",
+        "name": "test",
+        "path": "/drive/root:/test"
+      },
+      "file": {
+        "mimeType": "application/json",
+        "hashes": {
+          "quickXorHash": "IGwtls2AaRDoB2jk3pfomXh6FeQ=",
+          "sha1Hash": "579087E1CDCBEC248B159C33355E7599538A533A"
+        }
+      },
+      "fileSystemInfo": {
+        "createdDateTime": "2019-10-27T16:45:12.443Z",
+        "lastModifiedDateTime": "2018-09-19T20:10:00Z"
+      }
+    }
+  ]
+}

@@ -342,7 +342,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val expPatch = readDataFile(resourceFile("/proppatch_attributes_remove.xml"))
     val file = DavModel.DavFile(id = FileUri, lastModifiedAt = null, createdAt = null,
       name = "ignore", description = "<cool> description ;-)", attributes = attributes, size = 0)
-    stubFor(request("PROPPATCH", urlPathEqualTo(FileUri.path.toString() + "/"))
+    stubFor(request("PROPPATCH", urlPathEqualTo(FileUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig())
 

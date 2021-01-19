@@ -17,7 +17,7 @@
 package com.github.cloudfiles.core
 
 import akka.http.scaladsl.model.headers.Authorization
-import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
+import akka.http.scaladsl.model.{HttpResponse, StatusCode, StatusCodes}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import akka.util.ByteString
@@ -31,19 +31,25 @@ import scala.concurrent.Future
 
 object WireMockSupport {
   /** Test user ID. */
-  val UserId = "scott"
+  final val UserId = "scott"
 
   /** Test password for user credentials. */
-  val Password = "tiger"
+  final val Password = "tiger"
 
   /**
    * Priority for default stubs. These stubs act as catch-all for requests
    * for which no specific stub has been defined.
    */
-  val PriorityDefault = 10
+  final val PriorityDefault = 10
 
   /** Priority for stubs for specific resources. */
-  val PrioritySpecific = 1
+  final val PrioritySpecific = 1
+
+  /** Constant for the content-type header. */
+  final val HeaderContentType = "Content-Type"
+
+  /** The content type for a JSON entity. */
+  final val ContentTypeJson = "application/json"
 
   /**
    * Type definition of a function that applies authorization information to
@@ -55,13 +61,13 @@ object WireMockSupport {
    * Constant for an authorization function that does not apply any
    * authorization information.
    */
-  val NoAuthFunc: AuthFunc = identity
+  final val NoAuthFunc: AuthFunc = identity
 
   /**
    * Constant for an authorization function that adds a Basic Auth header with
    * default user credentials to a request.
    */
-  val BasicAuthFunc: AuthFunc = basicAuth
+  final val BasicAuthFunc: AuthFunc = basicAuth
 
   /**
    * Returns an authorization function that adds an authorization header with
@@ -142,18 +148,18 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
     wireMockServer = new WireMockServer(wireMockConfig()
       .dynamicPort()
       .withRootDirectory(s"$resourceRoot/src/test/resources"))
+    wireMockServer.start()
+    configureFor(wireMockServer.port())
   }
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    wireMockServer.start()
-    configureFor(wireMockServer.port())
-    resetAllRequests()
+    reset()
   }
 
-  override protected def afterEach(): Unit = {
+  override protected def afterAll(): Unit = {
     wireMockServer.stop()
-    super.afterEach()
+    super.afterAll()
   }
 
   /**
@@ -178,6 +184,18 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
         .withBody("<status>OK</status>")))
   }
+
+  /**
+   * A convenience function to create an initialized builder for a JSON
+   * response. The builder is initialized with the JSON content type.
+   *
+   * @param status the status code of the response
+   * @return the initialized builder for the response
+   */
+  protected def aJsonResponse(status: StatusCode = StatusCodes.OK): ResponseDefinitionBuilder =
+    aResponse()
+      .withStatus(status.intValue())
+      .withHeader(HeaderContentType, ContentTypeJson)
 
   /**
    * Reads the entity of the given response and converts it to a string.

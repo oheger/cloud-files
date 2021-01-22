@@ -180,6 +180,14 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
                        specialFolder: Option[SpecialFolder])
 
   /**
+   * A data class representing the response from the OneDrive server for a
+   * request to resolve a drive element.
+   *
+   * @param id the ID that has been resolved
+   */
+  case class ResolveResponse(id: String)
+
+  /**
    * A data class representing the OneDrive JSON response for a folder request.
    * Here we are only interested in the list with the child items of the
    * current folder. For large folders, the content is distributed over multiple
@@ -214,6 +222,7 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
   implicit val sharedFormat: RootJsonFormat[Shared] = jsonFormat4(Shared)
   implicit val specialFolderFormat: RootJsonFormat[SpecialFolder] = jsonFormat1(SpecialFolder)
   implicit val driveItemFormat: RootJsonFormat[DriveItem] = jsonFormat15(DriveItem)
+  implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat1(ResolveResponse)
   implicit val folderResponseFormat: RootJsonFormat[FolderResponse] =
     jsonFormat(FolderResponse.apply, "value", "@odata.nextLink")
 }

@@ -1,0 +1,4 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('some.user%40some-mail.org')/drives('xxxxxxxxxxxxxxx')/root/$entity",
+  "id": "some_test_id"
+}

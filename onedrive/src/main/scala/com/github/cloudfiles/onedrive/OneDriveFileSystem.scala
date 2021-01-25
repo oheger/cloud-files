@@ -18,16 +18,19 @@ package com.github.cloudfiles.onedrive
 
 import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.{HttpEntity, HttpRequest, HttpResponse, Uri}
+import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
+import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
 import com.github.cloudfiles.core.{FileSystem, Model}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.reflect.ClassTag
 
 object OneDriveFileSystem {
   /** The prefix to select the root path of a drive. */
@@ -56,9 +59,11 @@ class OneDriveFileSystem(config: OneDriveConfig)
 
   import OneDriveFileSystem._
 
+  /** The base URI for accessing the OneDrive API for the selected drive. */
+  private val baseUri = s"${UriEncodingHelper.removeTrailingSeparator(config.serverUri)}/${config.driveID}"
+
   /** The URI prefix pointing to the root of the current drive. */
-  private val rootUriPrefix =
-    s"${UriEncodingHelper.removeTrailingSeparator(config.serverUri)}/${config.driveID}$RootPrefix"
+  private val rootUriPrefix = s"$baseUri$RootPrefix"
 
   /** A prefix for URIs to resolve paths in this file system. */
   private val resolveUriPrefix = createResolvePrefix()
@@ -74,34 +79,17 @@ class OneDriveFileSystem(config: OneDriveConfig)
 
   override def rootID(implicit system: ActorSystem[_]): Operation[String] = resolveUriOperation(rootUri)
 
-  /**
-   * Returns the file identified by the given ID.
-   *
-   * @param id     the ID of the file in question
-   * @param system the actor system
-   * @return the ''Operation'' returning the file with this ID
-   */
-  override def resolveFile(id: String)(implicit system: ActorSystem[_]): FileSystem.Operation[OneDriveModel.OneDriveFile] = ???
+  override def resolveFile(id: String)(implicit system: ActorSystem[_]): Operation[OneDriveModel.OneDriveFile] =
+    resolveItem[OneDriveModel.OneDriveFile](id)
 
-  /**
-   * Returns the folder identified by the given ID.
-   *
-   * @param id     the ID of the folder in question
-   * @param system the actor system
-   * @return the ''Operation'' returning the folder with this ID
-   */
-  override def resolveFolder(id: String)(implicit system: ActorSystem[_]): FileSystem.Operation[OneDriveModel.OneDriveFolder] = ???
+  override def resolveFolder(id: String)(implicit system: ActorSystem[_]): Operation[OneDriveModel.OneDriveFolder] =
+    resolveItem[OneDriveModel.OneDriveFolder](id)
 
-  /**
-   * Returns an object describing the content of the folder with the given ID.
-   * This can be used to find the files and the folders that are the children
-   * of the folder with the ID specified.
-   *
-   * @param id     the ID of the folder in question
-   * @param system the actor system
-   * @return the ''Operation'' returning the content of this folder
-   */
-  override def folderContent(id: String)(implicit system: ActorSystem[_]): FileSystem.Operation[Model.FolderContent[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder]] = ???
+  override def folderContent(id: String)(implicit system: ActorSystem[_]):
+  Operation[Model.FolderContent[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder]] = Operation {
+    httpSender =>
+      fetchFolderContent(httpSender, id, s"${itemUri(id)}/children", Map.empty, Map.empty)
+  }
 
   /**
    * Creates a folder as a child of the given parent folder. The attributes of
@@ -125,16 +113,8 @@ class OneDriveFileSystem(config: OneDriveConfig)
    */
   override def updateFolder(folder: Model.Folder[String])(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
 
-  /**
-   * Deletes the folder with the given ID. Note that depending on the concrete
-   * implementation, it may be required that a folder is empty before it can be
-   * deleted. The root folder can typically not be deleted.
-   *
-   * @param folderID the ID of the folder to delete
-   * @param system   the actor system
-   * @return the ''Operation'' to delete a folder
-   */
-  override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
+  override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
+    deleteItem(folderID)
 
   /**
    * Creates a file as a child of the given parent folder by uploading the
@@ -184,14 +164,8 @@ class OneDriveFileSystem(config: OneDriveConfig)
    */
   override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): FileSystem.Operation[HttpEntity] = ???
 
-  /**
-   * Deletes the file with the given ID.
-   *
-   * @param fileID the ID of the file to delete
-   * @param system the actor system
-   * @return the ''Operation'' to delete the file
-   */
-  override def deleteFile(fileID: String)(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
+  override def deleteFile(fileID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
+    deleteItem(fileID)
 
   /**
    * Returns an operation that resolves the specified URI in this file system.
@@ -209,6 +183,93 @@ class OneDriveFileSystem(config: OneDriveConfig)
   }
 
   /**
+   * Returns an operation to resolve the drive item identified by its ID and
+   * map it to a destination type.
+   *
+   * @param id     the ID of the item to resolve
+   * @param system the actor system
+   * @param ct     the class tag for the destination type
+   * @tparam A the result type
+   * @return the operation to resolve the item
+   */
+  private def resolveItem[A](id: String)
+                            (implicit system: ActorSystem[_], ct: ClassTag[A]): Operation[A] = Operation {
+    httpSender =>
+      val folderRequest = HttpRequest(uri = itemUri(id))
+      executeJsonRequest[DriveItem](httpSender, folderRequest)
+        .map(createElement)
+        .map { elem =>
+          if (!ct.runtimeClass.isInstance(elem))
+            throw new IllegalArgumentException(s"Element with ID $id can be resolved, but is not of the expected " +
+              s"type ${ct.runtimeClass}.")
+          else elem
+        }.mapTo[A]
+  }
+
+  /**
+   * Creates an element of the correct type that wraps the given ''DriveItem''.
+   *
+   * @param item the ''DriveItem''
+   * @return the element wrapping this item
+   */
+  private def createElement(item: OneDriveJsonProtocol.DriveItem): OneDriveModel.OneDriveElement =
+    if (item.folder.isDefined) OneDriveModel.OneDriveFolder(item)
+    else OneDriveModel.OneDriveFile(item)
+
+  /**
+   * Retrieves the content of a folder that may be split over multiple pages.
+   * For each page a request is sent and the child elements are constructed.
+   * If the response indicates that another page is available, the function
+   * calls itself recursively to process it.
+   *
+   * @param httpSender the actor for sending HTTP requests
+   * @param id         the ID of the folder to retrieve
+   * @param uri        the URI for the next page to load
+   * @param files      the map with files that have been retrieved so far
+   * @param folders    the map with folders that have been retrieved so far
+   * @param system     the actor system
+   * @return a future with the content of the folder
+   */
+  private def fetchFolderContent(httpSender: ActorRef[HttpRequestSender.HttpCommand], id: String, uri: String,
+                                 files: Map[String, OneDriveModel.OneDriveFile],
+                                 folders: Map[String, OneDriveModel.OneDriveFolder])
+                                (implicit system: ActorSystem[_]):
+  Future[Model.FolderContent[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder]] = {
+    val contentRequest = HttpRequest(uri = uri)
+    executeJsonRequest[FolderResponse](httpSender, contentRequest) flatMap { response =>
+      val contentMaps = response.value.foldLeft((files, folders)) { (maps, item) =>
+        createElement(item) match {
+          case folder: OneDriveModel.OneDriveFolder =>
+            (maps._1, maps._2 + (item.id -> folder))
+          case file: OneDriveModel.OneDriveFile =>
+            (maps._1 + (item.id -> file), maps._2)
+        }
+      }
+
+      response.nextLink match {
+        case Some(link) =>
+          fetchFolderContent(httpSender, id, link, contentMaps._1, contentMaps._2)
+        case None =>
+          Future.successful(Model.FolderContent(folderID = id, files = contentMaps._1, folders = contentMaps._2))
+      }
+    }
+  }
+
+  /**
+   * Returns an operation to delete the ''DriveItem'' with the given ID. This
+   * is the same for files and folders.
+   *
+   * @param id     the ID of the element to delete
+   * @param system the actor system
+   * @return the operation to delete this element
+   */
+  private def deleteItem(id: String)(implicit system: ActorSystem[_]): Operation[Unit] = Operation {
+    httpSender =>
+      executeRequest(httpSender, HttpRequest(method = HttpMethods.DELETE, uri = itemUri(id)))
+        .map(_ => ())
+  }
+
+  /**
    * Helper function to execute a request an HTTP request that is expected to
    * yield a JSON response, which is to be converted to an object.
    *
@@ -222,9 +283,31 @@ class OneDriveFileSystem(config: OneDriveConfig)
   private def executeJsonRequest[R](httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
                                    (implicit system: ActorSystem[_], um: Unmarshaller[HttpResponse, R]): Future[R] =
     for {
-      result <- HttpRequestSender.sendRequestSuccess(httpSender, request, null)
+      result <- executeRequest(httpSender, request, DiscardEntityMode.OnFailure)
       obj <- Unmarshal(result.response).to[R]
     } yield obj
+
+  /**
+   * Convenience function to execute an HTTP request with the given parameters.
+   *
+   * @param httpSender  the request sender actor
+   * @param request     the request to be sent
+   * @param discardMode the mode to deal with the entity
+   * @param system      the actor system
+   * @return a future with the result of the execution
+   */
+  private def executeRequest(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest,
+                             discardMode: DiscardEntityMode = DiscardEntityMode.Always)
+                            (implicit system: ActorSystem[_]): Future[HttpRequestSender.SuccessResult] =
+    HttpRequestSender.sendRequestSuccess(httpSender, request, null, discardMode)
+
+  /**
+   * Generates the URI to resolve an item with the given ID.
+   *
+   * @param id the ID of the desired item
+   * @return the URI pointing to this item
+   */
+  private def itemUri(id: String): String = s"$baseUri/items/$id"
 
   /**
    * Provides the timeout for HTTP requests in implicit scope from the

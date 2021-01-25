@@ -1,0 +1,58 @@
+{
+  "@microsoft.graph.downloadUrl": "https://public.db.files.1drv.com/someURL",
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('test.user%40mail.org')/drives('XXXYYYYYZZZZ')/items/$entity",
+  "cTag": "aYzozRUU1MzkyMUNGRUQzRkI2ITU0OTMuMjU4",
+  "createdBy": {
+    "application": {
+      "displayName": "MSOffice15",
+      "id": "480728c5"
+    },
+    "oneDriveSync": {
+      "@odata.type": "#microsoft.graph.identity",
+      "id": "de34e407-e278-4468-83b8-6ba6785109fe"
+    },
+    "user": {
+      "displayName": "Test User",
+      "id": "9ac27854afbce1ac0"
+    }
+  },
+  "createdDateTime": "2017-09-07T17:24:37.95Z",
+  "eTag": "aM0VFNTM5MjFDRkVEM0ZCNiE1NDkzLjQ1",
+  "file": {
+    "hashes": {
+      "quickXorHash": "ZRyY8ttsdHoNW8JIGrjM0pUrCr4=",
+      "sha1Hash": "319D8515AC0683C7EA6AF60A547E142141F11BF5",
+      "sha256Hash": "E2EBEC54439652A999C2DA28CA0485FF595F71A515535629EA1CBB27E7553731"
+    },
+    "mimeType": "application/octet-stream"
+  },
+  "fileSystemInfo": {
+    "createdDateTime": "2017-09-07T17:06:55Z",
+    "lastModifiedDateTime": "2020-04-17T19:35:14.168Z"
+  },
+  "id": "some_test_id",
+  "lastModifiedBy": {
+    "application": {
+      "displayName": "StreamSync",
+      "id": "4c2e9422"
+    },
+    "user": {
+      "displayName": "Test User",
+      "id": "9ac27854afbce1ac0"
+    }
+  },
+  "lastModifiedDateTime": "2020-04-19T19:47:05.273Z",
+  "name": "test.txt",
+  "parentReference": {
+    "driveId": "XXXXYYYYZZZZ",
+    "driveType": "personal",
+    "id": "XXXXYYYYZZZZ!26111",
+    "name": "data",
+    "path": "/drive/root:/data"
+  },
+  "reactions": {
+    "commentCount": 0
+  },
+  "size": 327,
+  "webUrl": "https://1drv.ms/u/someUrl"
+}

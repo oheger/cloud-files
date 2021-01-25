@@ -17,13 +17,15 @@
 package com.github.cloudfiles.onedrive
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import akka.http.scaladsl.model.StatusCodes
 import com.github.cloudfiles.core.http.HttpRequestSender
-import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, WireMockSupport}
-import com.github.tomakehurst.wiremock.client.WireMock.{equalTo, get, stubFor, urlPathEqualTo}
+import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, FileTestHelper, WireMockSupport}
+import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, delete, deleteRequestedFor, equalTo, equalToJson, get, post, stubFor, urlPathEqualTo, verify}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.Future
+import java.time.Instant
+import scala.concurrent.{ExecutionContext, Future}
 
 object OneDriveFileSystemITSpec {
   /** Test OneDrive ID. */
@@ -53,7 +55,7 @@ object OneDriveFileSystemITSpec {
  * Test class for ''OneDriveFileSystem''.
  */
 class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers
-  with WireMockSupport with AsyncTestHelper {
+  with WireMockSupport with AsyncTestHelper with FileTestHelper {
   override protected val resourceRoot: String = "onedrive"
 
   import OneDriveFileSystemITSpec._
@@ -144,5 +146,121 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     val pathID = futureResult(runOp(fs.resolvePath(path)))
     pathID should be(ResolvedID)
+  }
+
+  it should "resolve a folder by its ID" in {
+    stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID")))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("resolve_folder_response.json")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    val folder = futureResult(runOp(fs.resolveFolder(ResolvedID)))
+    folder.id should be(ResolvedID)
+    folder.name should be("data")
+    folder.description should be(null)
+    folder.folderData.childCount should be(9)
+    folder.item.fileSystemInfo.createdDateTime should be(Instant.parse("2019-11-12T14:32:50.8Z"))
+  }
+
+  it should "check whether the ID points to a folder when resolving it" in {
+    stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID")))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("resolve_file_response.json")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFolder(ResolvedID)))
+  }
+
+  it should "resolve a file by its ID" in {
+    stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID")))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("resolve_file_response.json")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    val file = futureResult(runOp(fs.resolveFile(ResolvedID)))
+    file.id should be(ResolvedID)
+    file.name should be("test.txt")
+    file.size should be(327)
+    file.fileData.mimeType should be("application/octet-stream")
+    file.fileData.hashes.sha1Hash should be(Some("319D8515AC0683C7EA6AF60A547E142141F11BF5"))
+  }
+
+  it should "check whether the ID points to a file when resolving it" in {
+    stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID")))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("resolve_folder_response.json")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFile(ResolvedID)))
+  }
+
+  it should "return the content of a folder" in {
+    stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID/children")))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("folder_children_response.json")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    val content = futureResult(runOp(fs.folderContent(ResolvedID)))
+    content.folderID should be(ResolvedID)
+    content.folders should have size 2
+    content.folders("xxxyyyzzz1234567!7193").name should be("subFolder1")
+    content.folders("xxxyyyzzz1234567!4891").name should be("subFolder2")
+    content.files should have size 2
+    content.files("xxxyyyzzz1234567!26990").name should be("data.json")
+    content.files("xxxyyyzzz1234567!26988").name should be("info.txt")
+  }
+
+  it should "return the content of a folder split onto multiple pages" in {
+    val nextUri = drivePath("/next/folder/children")
+    val folder1Data = readDataFile(resourceFile("/__files/folder_children_with_next_response.json"))
+      .replace("${next.folder}", serverUri(nextUri))
+    stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID/children")))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBody(folder1Data)))
+    stubFor(get(urlPathEqualTo(nextUri))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("folder_children_response.json")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    val content = futureResult(runOp(fs.folderContent(ResolvedID)))
+    content.folderID should be(ResolvedID)
+    content.folders should have size 2
+    content.files should have size 4
+    content.files("xxxyyyzzz1234567!26990").name should be("data.json")
+    content.files("xxxyyyzzz1234567!26124").name should be("file (2).mp3")
+  }
+
+  it should "delete a folder" in {
+    val deletePath = drivePath(s"/items/$ResolvedID")
+    stubFor(delete(urlPathEqualTo(deletePath))
+      .willReturn(aResponse().withStatus(StatusCodes.NoContent.intValue)))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.deleteFolder(ResolvedID)))
+    verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+  }
+
+  it should "discard the entities of requests where the response does not matter" in {
+    implicit val ec: ExecutionContext = system.executionContext
+    stubSuccess(WireMockSupport.NoAuthFunc)
+    val fs = new OneDriveFileSystem(createConfig())
+
+    // Execute a number of operations. If the entities are not discarded, the
+    // HTTP pipeline will block, and we will run into a timeout.
+    val futResults = (1 to 16) map { idx =>
+      val id = s"id$idx"
+      runOp(fs.deleteFolder(id))
+    }
+    futureResult(Future.sequence(futResults))
+  }
+
+  it should "delete a file" in {
+    val deletePath = drivePath(s"/items/$ResolvedID")
+    stubFor(delete(urlPathEqualTo(deletePath))
+      .willReturn(aResponse().withStatus(StatusCodes.NoContent.intValue)))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.deleteFile(ResolvedID)))
+    verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
   }
 }

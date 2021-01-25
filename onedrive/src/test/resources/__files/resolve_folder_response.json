@@ -1,0 +1,49 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('some.user%40mail.org')/drives('XXXXYYYYZZZZ')/root/$entity",
+  "cTag": "adDozRUU1MzkyMUNGRUQzRkI2ITI2OTkxLjYzNzQ2MTA2NzI3ODcwMDAwMA",
+  "createdBy": {
+    "application": {
+      "displayName": "OneDrive website",
+      "id": "44048800"
+    },
+    "user": {
+      "displayName": "Test User",
+      "id": "9ac27854afbce1ac0"
+    }
+  },
+  "createdDateTime": "2019-11-12T14:32:50.8Z",
+  "eTag": "aM0VFNTM5MjFDRkVEM0ZCNiEyNjk5MS4w",
+  "fileSystemInfo": {
+    "createdDateTime": "2019-11-12T14:32:50.8Z",
+    "lastModifiedDateTime": "2019-11-12T14:32:50.8Z"
+  },
+  "folder": {
+    "childCount": 9,
+    "view": {
+      "sortBy": "name",
+      "sortOrder": "ascending",
+      "viewType": "thumbnails"
+    }
+  },
+  "id": "some_test_id",
+  "lastModifiedBy": {
+    "application": {
+      "displayName": "OneDrive website",
+      "id": "44048800"
+    },
+    "user": {
+      "displayName": "Test User",
+      "id": "9ac27854afbce1ac0"
+    }
+  },
+  "lastModifiedDateTime": "2021-01-13T03:52:07.87Z",
+  "name": "data",
+  "parentReference": {
+    "driveId": "XXXXYYYYZZZZ",
+    "driveType": "personal",
+    "id": "XXXXYYYYZZZZ!111",
+    "path": "/drive/root:"
+  },
+  "size": 923097749,
+  "webUrl": "https://1drv.ms/f/someUrl"
+}

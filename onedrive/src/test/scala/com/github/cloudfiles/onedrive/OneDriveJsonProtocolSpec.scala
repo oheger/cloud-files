@@ -51,6 +51,17 @@ class OneDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTestHe
     folderResponse
   }
 
+  /**
+   * Serializes the given item to its JSON representation.
+   *
+   * @param item the item
+   * @return the JSON string for this item
+   */
+  private def toJson(item: WritableDriveItem): String = {
+    val ast = item.toJson
+    ast.prettyPrint
+  }
+
   "OneDriveJsonProtocol" should "de-serialize a folder from a folder content response" in {
     val folderResponse = parseFolderResponse()
 
@@ -122,5 +133,26 @@ class OneDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTestHe
     intercept[DeserializationException] {
       jsonAst.convertTo[FolderResponse]
     }
+  }
+
+  it should "serialize a writable drive item" in {
+    val createdTimeStr = "2021-01-27T20:46:43.147Z"
+    val createdTime = Instant.parse(createdTimeStr)
+    val fsi = WritableFileSystemInfo(createdDateTime = Some(createdTime))
+    val item = WritableDriveItem(name = Some("myItem"), fileSystemInfo = Some(fsi), file = Some(MarkerProperty()))
+
+    val json = toJson(item)
+    json should include regex """"name"\s*:\s*"myItem""""
+    json should include regex (""""createdDateTime"\s*:\s*"""" + createdTimeStr)
+    json should include regex """"file"\s*:\s*\{\W*\}"""
+    json should not include "\"folder\""
+  }
+
+  it should "serialize a writable drive item without a fileSystemInfo" in {
+    val item = WritableDriveItem(description = Some("desc"))
+
+    val json = toJson(item)
+    json should not include "\"fileSystemInfo\""
+    json should include regex """"description"\s*:\s*"desc""""
   }
 }

@@ -180,6 +180,47 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
                        specialFolder: Option[SpecialFolder])
 
   /**
+   * A data class storing information related to the local file system for a
+   * drive item that is going to be created or updated. The user can fill in
+   * the fields that should be updated and leave the others undefined.
+   *
+   * @param createdDateTime      the local creation time of the item
+   * @param lastModifiedDateTime the local modified time of the item
+   * @param lastAccessedDateTime the access time (only in last-access list)
+   */
+  case class WritableFileSystemInfo(createdDateTime: Option[Instant] = None,
+                                    lastModifiedDateTime: Option[Instant] = None,
+                                    lastAccessedDateTime: Option[Instant] = None)
+
+  /**
+   * A data class used to generate an empty marker object in a JSON request.
+   * Such empty objects are needed for some use cases in OneDrive, e.g. to mark
+   * an item as a folder or a file. The intended usage is to have the optional
+   * property of an instance always be ''None'', so that no properties are
+   * generated.
+   *
+   * @param optValue the value, which typically should be undefined
+   */
+  case class MarkerProperty(optValue: Option[String] = None)
+
+  /**
+   * A data class representing a drive item that is going to be newly created
+   * or updated. For such use cases, only a subset of the properties of an
+   * item can be written; these are defined here.
+   *
+   * @param name           the name of the item
+   * @param description    the description
+   * @param fileSystemInfo information about the local file system
+   * @param file           marker object whether this is a file
+   * @param folder         marker object whether this is a folder
+   */
+  case class WritableDriveItem(name: Option[String] = None,
+                               description: Option[String] = None,
+                               fileSystemInfo: Option[WritableFileSystemInfo] = None,
+                               file: Option[MarkerProperty] = None,
+                               folder: Option[MarkerProperty] = None)
+
+  /**
    * A data class representing the response from the OneDrive server for a
    * request to resolve a drive element.
    *
@@ -222,6 +263,10 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
   implicit val sharedFormat: RootJsonFormat[Shared] = jsonFormat4(Shared)
   implicit val specialFolderFormat: RootJsonFormat[SpecialFolder] = jsonFormat1(SpecialFolder)
   implicit val driveItemFormat: RootJsonFormat[DriveItem] = jsonFormat15(DriveItem)
+  implicit val writableFileSystemInfoFormat: RootJsonFormat[WritableFileSystemInfo] =
+    jsonFormat3(WritableFileSystemInfo)
+  implicit val markerPropertyFormat: RootJsonFormat[MarkerProperty] = jsonFormat1(MarkerProperty)
+  implicit val writableDriveItemFormat: RootJsonFormat[WritableDriveItem] = jsonFormat5(WritableDriveItem)
   implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat1(ResolveResponse)
   implicit val folderResponseFormat: RootJsonFormat[FolderResponse] =
     jsonFormat(FolderResponse.apply, "value", "@odata.nextLink")

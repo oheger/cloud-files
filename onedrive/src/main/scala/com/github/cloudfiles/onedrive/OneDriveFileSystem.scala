@@ -18,6 +18,7 @@ package com.github.cloudfiles.onedrive
 
 import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.marshalling.{Marshal, Marshaller}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
@@ -36,8 +37,58 @@ object OneDriveFileSystem {
   /** The prefix to select the root path of a drive. */
   private val RootPrefix = "/root"
 
+  /** The suffix to select the children of a drive item. */
+  private val ChildrenSuffix = "/children"
+
   /** A query parameter to select only the ID field of a drive item. */
   private val SelectIDParam = "select=id"
+
+  /** The property to generate marker objects in JSON. */
+  private val Marker = OneDriveJsonProtocol.MarkerProperty()
+
+  /**
+   * Transforms the given ''DriveItem'' object to a ''WritableDriveItem'' that
+   * can be used for create or update operations. The resulting object contains
+   * only properties that can be written and that are defined in the source
+   * object.
+   *
+   * @param item the ''DriveItem''
+   * @return the corresponding ''WritableDriveItem''
+   */
+  private def toWritableItem(item: DriveItem): WritableDriveItem =
+    OneDriveJsonProtocol.WritableDriveItem(name = Option(item.name),
+      description = item.description, fileSystemInfo = toWritableFileSystemInfo(item.fileSystemInfo),
+      folder = item.folder map (_ => Marker), file = item.file map (_ => Marker))
+
+  /**
+   * Transforms the given ''FileSystemInfo'' object to a
+   * ''WritableFileSystemInfo'' that contains only defined properties. Result
+   * is an empty option if no properties are defined.
+   *
+   * @param info the ''FileSystemInfo''
+   * @return an option with the corresponding ''WritableFileSystemInfo''
+   */
+  private def toWritableFileSystemInfo(info: FileSystemInfo): Option[WritableFileSystemInfo] =
+    Option(info) map { fsi =>
+      WritableFileSystemInfo(createdDateTime = Option(fsi.createdDateTime),
+        lastModifiedDateTime = Option(fsi.lastModifiedDateTime),
+        lastAccessedDateTime = fsi.lastAccessedDateTime)
+    }
+
+  /**
+   * Returns a ''DriveItem'' that represents the passed in element. If the
+   * element is already a [[OneDriveModel.OneDriveElement]], the item can be
+   * extracted from there. Otherwise, a new item has to be created.
+   *
+   * @param element the element in question
+   * @return a ''DriveItem'' describing this element
+   */
+  private def itemFor(element: Model.Element[String]): DriveItem =
+    element match {
+      case e: OneDriveModel.OneDriveElement => e.item
+      case folder: Model.Folder[String] => OneDriveModel.newFolder(folder.name, folder.description).item
+      case file: Model.File[String] => OneDriveModel.newFile(file.name, file.description).item
+    }
 }
 
 /**
@@ -88,30 +139,23 @@ class OneDriveFileSystem(config: OneDriveConfig)
   override def folderContent(id: String)(implicit system: ActorSystem[_]):
   Operation[Model.FolderContent[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder]] = Operation {
     httpSender =>
-      fetchFolderContent(httpSender, id, s"${itemUri(id)}/children", Map.empty, Map.empty)
+      fetchFolderContent(httpSender, id, s"${itemUri(id)}$ChildrenSuffix", Map.empty, Map.empty)
   }
 
-  /**
-   * Creates a folder as a child of the given parent folder. The attributes of
-   * the new folder are defined by the folder object provided. If the operation
-   * is successful, the ID of the new folder is returned.
-   *
-   * @param parent the ID of the parent folder
-   * @param folder an object with the attributes of the new folder
-   * @param system the actor system
-   * @return the ''Operation'' to create a new folder
-   */
-  override def createFolder(parent: String, folder: Model.Folder[String])(implicit system: ActorSystem[_]): FileSystem.Operation[String] = ???
+  override def createFolder(parent: String, folder: Model.Folder[String])(implicit system: ActorSystem[_]):
+  Operation[String] = Operation {
+    httpSender =>
+      val createUrl = itemUri(parent) + ChildrenSuffix
+      val writableItem = toWritableItem(itemFor(folder))
+      for {
+        entity <- prepareJsonRequestEntity(writableItem)
+        request = HttpRequest(method = HttpMethods.POST, uri = createUrl, entity = entity)
+        response <- executeJsonRequest[DriveItem](httpSender, request)
+      } yield response.id
+  }
 
-  /**
-   * Updates the metadata of a folder. The passed in folder object must contain
-   * the ID of the folder affected and the attributes to update.
-   *
-   * @param folder the object representing the folder
-   * @param system the actor system
-   * @return the ''Operation'' to update folder metadata
-   */
-  override def updateFolder(folder: Model.Folder[String])(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
+  override def updateFolder(folder: Model.Folder[String])(implicit system: ActorSystem[_]): Operation[Unit] =
+    updateElement(folder)
 
   override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
     deleteItem(folderID)
@@ -131,15 +175,8 @@ class OneDriveFileSystem(config: OneDriveConfig)
    */
   override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])(implicit system: ActorSystem[_]): FileSystem.Operation[String] = ???
 
-  /**
-   * Updates the metadata of a file. The passed in file object must contain the
-   * ID of the file affected and the attributes to set.
-   *
-   * @param file   the object representing the file
-   * @param system the actor system
-   * @return the ''Operation'' to update file metadata
-   */
-  override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
+  override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
+    updateElement(file)
 
   /**
    * Updates the content of a file by uploading new data to the server.
@@ -268,6 +305,40 @@ class OneDriveFileSystem(config: OneDriveConfig)
       executeRequest(httpSender, HttpRequest(method = HttpMethods.DELETE, uri = itemUri(id)))
         .map(_ => ())
   }
+
+  /**
+   * Returns an operation to update the given element, which can be either a
+   * folder or a file. All the properties defined for the ''DriveItem''
+   * associated with the element get updated.
+   *
+   * @param element the element to be updated
+   * @param system  the actor system
+   * @return the operation to update this element
+   */
+  private def updateElement(element: Model.Element[String])(implicit system: ActorSystem[_]):
+  Operation[Unit] = Operation {
+    httpSender =>
+      val writableItem = toWritableItem(itemFor(element))
+      for {
+        entity <- prepareJsonRequestEntity(writableItem)
+        request = HttpRequest(method = HttpMethods.PATCH, uri = itemUri(element.id), entity = entity)
+        _ <- executeJsonRequest[DriveItem](httpSender, request)
+      } yield ()
+  }
+
+  /**
+   * Prepares a JSON request entity that is serialized from the given object.
+   * This is a thin wrapper around Akka HTTP's JSON marshalling facilities.
+   *
+   * @param entity the entity of the request as object
+   * @param m      a marshaller for this object
+   * @param system the actor system
+   * @tparam A the type of the entity
+   * @return a future with the entity
+   */
+  private def prepareJsonRequestEntity[A](entity: A)(implicit m: Marshaller[A, RequestEntity], system: ActorSystem[_]):
+  Future[RequestEntity] =
+    Marshal(entity).to[RequestEntity]
 
   /**
    * Helper function to execute a request an HTTP request that is expected to

@@ -17,7 +17,7 @@
 package com.github.cloudfiles.onedrive
 
 import com.github.cloudfiles.core.Model
-import com.github.cloudfiles.onedrive.OneDriveJsonProtocol.DriveItem
+import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 
 import java.time.Instant
 
@@ -34,6 +34,15 @@ import java.time.Instant
  * the additional information supported by the OneDrive protocol.
  */
 object OneDriveModel {
+  /**
+   * Constant for a data structure used to mark a drive item as a folder.
+   */
+  private val FolderMarker = Some(Folder(0))
+
+  /**
+   * Constant for a data structure used to mark a drive item as a file.
+   */
+  private val FileMarker = Some(File("", null))
 
   /**
    * A trait implementing base functionality needed by OneDrive file and folder
@@ -75,7 +84,7 @@ object OneDriveModel {
      *
      * @return the ''Folder'' object from the underlying ''DriveItem''
      */
-    def folderData: OneDriveJsonProtocol.Folder = {
+    def folderData: Folder = {
       assert(item.folder.isDefined, "No folder data available in underlying DriveItem.")
       item.folder.get
     }
@@ -96,10 +105,147 @@ object OneDriveModel {
      *
      * @return the ''File'' from the underlying ''DriveItem''
      */
-    def fileData: OneDriveJsonProtocol.File = {
+    def fileData: File = {
       assert(item.file.isDefined, "No file data available in underlying DriveItem.")
       item.file.get
     }
   }
 
+  /**
+   * Constructs a ''OneDriveFolder'' object for creating a folder on the
+   * server. As only a small number of a folder's properties are writable,
+   * creating such an object manually and passing in all the dummy values is
+   * cumbersome. Therefore, this utility function can be used, which deals only
+   * with relevant properties and sets defaults for all others.
+   *
+   * @param name        the name of the folder or '''null''' for undefined
+   * @param description the description or '''null''' for undefined
+   * @param info        optional object with local file system information
+   * @return the newly created ''OneDriveFolder'' object
+   */
+  def newFolder(name: String = null, description: String = null,
+                info: Option[WritableFileSystemInfo] = None): OneDriveFolder =
+    OneDriveFolder(itemForFolder(null, name, description, info))
+
+  /**
+   * Constructs a ''OneDriveFolder'' object that can be used to update an
+   * existing folder on the server. Like ''newFolder()'', this function takes
+   * only the writable properties into account.
+   *
+   * @param id          the ID of the folder to update; this is mandatory
+   * @param name        the name of the folder or '''null''' for undefined
+   * @param description the description or '''null''' for undefined
+   * @param info        optional object with local file system information
+   * @return the newly created ''OneDriveFolder'' object for the update
+   */
+  def updateFolder(id: String, name: String = null, description: String = null,
+                   info: Option[WritableFileSystemInfo] = None): OneDriveFolder =
+    OneDriveFolder(itemForFolder(id, name, description, info))
+
+  /**
+   * Constructs a ''OneDriveFile'' object for creating a file on the server. As
+   * only a small number of a file's properties are writable, creating such an
+   * object manually and passing in all the dummy values is cumbersome.
+   * Therefore, this utility function can be used, which deals only with
+   * relevant properties and sets defaults for all others.
+   *
+   * @param name        the name of the file or '''null''' for undefined
+   * @param description the description or '''null''' for undefined
+   * @param info        optional object with local file system information
+   * @return the newly created ''OneDriveFile'' object
+   */
+  def newFile(name: String = null, description: String = null,
+              info: Option[WritableFileSystemInfo] = None): OneDriveFile =
+    OneDriveFile(itemForFile(null, name, description, info))
+
+  /**
+   * Constructs a ''OneDriveFile'' object that can be used to update an
+   * existing file on the server. Like ''newFile()'', this function takes only
+   * the writable properties into account.
+   *
+   * @param id          the ID of the file to update; this is mandatory
+   * @param name        the name of the file or '''null''' if undefined
+   * @param description the description or '''null''' if undefined
+   * @param info        optional object with local file system information
+   * @return the newly created ''OneDriveFile'' object for the update
+   */
+  def updateFile(id: String, name: String = null, description: String = null,
+                 info: Option[WritableFileSystemInfo] = None): OneDriveFile =
+    OneDriveFile(itemForFile(id, name, description, info))
+
+  /**
+   * Constructs a ''FileSystemInfo'' object based on the passed in ''Option''
+   * of a ''WritableFileSystemInfo''.
+   *
+   * @param info the optional ''WritableFileSystemInfo''
+   * @return the resulting ''FileSystemInfo''
+   */
+  private def createFileSystemInfoFor(info: Option[WritableFileSystemInfo] = None): FileSystemInfo =
+    info.flatMap(checkFileSystemInfoDefined)
+      .map { fsi =>
+        FileSystemInfo(createdDateTime = fsi.createdDateTime.orNull,
+          lastModifiedDateTime = fsi.lastModifiedDateTime.orNull,
+          lastAccessedDateTime = fsi.lastAccessedDateTime)
+      }.orNull
+
+  /**
+   * Constructs a ''DriveItem'' object to represent the folder with the given
+   * properties.
+   *
+   * @param id          the folder ID
+   * @param name        the optional folder name
+   * @param description the optional folder description
+   * @param info        the optional file system info
+   * @return a ''DriveItem'' representing this folder
+   */
+  private def itemForFolder(id: String, name: String, description: String,
+                            info: Option[WritableFileSystemInfo]): DriveItem =
+    itemForElement(id, name, description, info, optFile = None, optFolder = FolderMarker)
+
+  /**
+   * Constructs a ''DriveItem'' object to represent the file with the given
+   * properties.
+   *
+   * @param id          the file ID
+   * @param name        the optional file name
+   * @param description the optional file description
+   * @param info        the optional file system info
+   * @return a ''DriveItem'' representing this folder
+   */
+  private def itemForFile(id: String, name: String, description: String,
+                          info: Option[WritableFileSystemInfo]): DriveItem =
+    itemForElement(id, name, description, info, optFile = FileMarker, optFolder = None)
+
+  /**
+   * Constructs a ''DriveItem'' object to represent the element with the given
+   * properties.
+   *
+   * @param id          the element ID
+   * @param name        the optional element name
+   * @param description the optional element description
+   * @param info        the optional file system info
+   * @param optFile     the optional file structure
+   * @param optFolder   the optional folder structure
+   * @return a ''DriveItem'' representing this element
+   */
+  private def itemForElement(id: String, name: String, description: String, info: Option[WritableFileSystemInfo],
+                             optFile: Option[File], optFolder: Option[Folder]): DriveItem =
+    DriveItem(id = id, name = name, description = Option(description),
+      createdBy = null, createdDateTime = null, lastModifiedBy = null, lastModifiedDateTime = null,
+      size = 0, webUrl = null, file = optFile, folder = optFolder,
+      fileSystemInfo = createFileSystemInfoFor(info), parentReference = None, shared = None,
+      specialFolder = None)
+
+  /**
+   * Checks whether the given file system info has at least one defined
+   * property. If not, the whole object does not need to appear in JSON, and
+   * therefore, the function return ''None''.
+   *
+   * @param info the object to check
+   * @return an ''Option'' with this object if defined; ''None'' otherwise
+   */
+  private def checkFileSystemInfoDefined(info: WritableFileSystemInfo): Option[WritableFileSystemInfo] =
+    if (List(info.createdDateTime, info.lastModifiedDateTime, info.lastAccessedDateTime).exists(_.isDefined))
+      Some(info)
+    else None
 }

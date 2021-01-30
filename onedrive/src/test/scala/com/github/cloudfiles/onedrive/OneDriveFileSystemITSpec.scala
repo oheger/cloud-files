@@ -19,10 +19,12 @@ package com.github.cloudfiles.onedrive
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.StatusCodes
 import com.github.cloudfiles.core.http.HttpRequestSender
-import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, FileTestHelper, WireMockSupport}
-import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, delete, deleteRequestedFor, equalTo, equalToJson, get, post, stubFor, urlPathEqualTo, verify}
+import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, FileTestHelper, Model, WireMockSupport}
+import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, delete, deleteRequestedFor, equalTo, equalToJson, get, patch, patchRequestedFor, post, stubFor, urlPathEqualTo, verify}
+import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
@@ -55,7 +57,7 @@ object OneDriveFileSystemITSpec {
  * Test class for ''OneDriveFileSystem''.
  */
 class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers
-  with WireMockSupport with AsyncTestHelper with FileTestHelper {
+  with MockitoSugar with WireMockSupport with AsyncTestHelper with FileTestHelper {
   override protected val resourceRoot: String = "onedrive"
 
   import OneDriveFileSystemITSpec._
@@ -262,5 +264,84 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     futureResult(runOp(fs.deleteFile(ResolvedID)))
     verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+  }
+
+  it should "create a new folder" in {
+    val ParentId = "someParent"
+    val expBody = readDataFile(resourceFile("/createFolder.json"))
+    stubFor(post(urlPathEqualTo(drivePath(s"/items/$ParentId/children")))
+      .withRequestBody(equalToJson(expBody))
+      .willReturn(aJsonResponse(StatusCodes.Created)
+        .withBodyFile("resolve_folder_response.json")))
+    val fsInfo =
+      OneDriveJsonProtocol.WritableFileSystemInfo(createdDateTime = Some(Instant.parse("2021-01-23T20:07:10.113Z")))
+    val folder = OneDriveModel.newFolder("cloud-files", "This is the description of the test folder.",
+      Some(fsInfo))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    val folderId = futureResult(runOp(fs.createFolder(ParentId, folder)))
+    folderId should be(ResolvedID)
+  }
+
+  it should "create a new folder from another Folder implementation" in {
+    val folder = mock[Model.Folder[String]]
+    when(folder.name).thenReturn("cloud-files")
+    val expBody = readDataFile(resourceFile("/createFolderMinimum.json"))
+    stubFor(post(urlPathEqualTo(drivePath(s"/items/$ResolvedID/children")))
+      .withRequestBody(equalToJson(expBody))
+      .willReturn(aJsonResponse(StatusCodes.Created)
+        .withBodyFile("resolve_folder_response.json")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    val folderId = futureResult(runOp(fs.createFolder(ResolvedID, folder)))
+    folderId should be(ResolvedID)
+  }
+
+  it should "update a folder" in {
+    val expBody = readDataFile(resourceFile("/createFolderMinimum.json"))
+    val updatePath = drivePath(s"/items/$ResolvedID")
+    stubFor(patch(urlPathEqualTo(updatePath))
+      .withRequestBody(equalToJson(expBody))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("resolve_folder_response.json")))
+    val folder = OneDriveModel.updateFolder(ResolvedID, "cloud-files",
+      info = Some(OneDriveJsonProtocol.WritableFileSystemInfo()))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.updateFolder(folder)))
+    verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+  }
+
+  it should "update a file" in {
+    val expBody = readDataFile(resourceFile("/createFile.json"))
+    val updatePath = drivePath(s"/items/$ResolvedID")
+    stubFor(patch(urlPathEqualTo(updatePath))
+      .withRequestBody(equalToJson(expBody))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("resolve_file_response.json")))
+    val fsInfo = OneDriveJsonProtocol.WritableFileSystemInfo(
+      lastModifiedDateTime = Some(Instant.parse("2021-01-30T15:54:20.224Z")),
+      lastAccessedDateTime = Some(Instant.parse("2021-01-30T15:54:48.448Z")))
+    val file = OneDriveModel.updateFile(ResolvedID, name = "cloudFiles.adoc", info = Some(fsInfo))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.updateFile(file)))
+    verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+  }
+
+  it should "update a file from another File implementation" in {
+    val file = mock[Model.File[String]]
+    when(file.id).thenReturn(ResolvedID)
+    when(file.description).thenReturn("A test file.")
+    val expBody = readDataFile(resourceFile("/createFileMinimum.json"))
+    val updatePath = drivePath(s"/items/$ResolvedID")
+    stubFor(patch(urlPathEqualTo(updatePath))
+      .withRequestBody(equalToJson(expBody))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("resolve_file_response.json")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.updateFile(file)))
+    verify(patchRequestedFor(urlPathEqualTo(updatePath)))
   }
 }

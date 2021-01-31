@@ -20,6 +20,7 @@ import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.{Marshal, Marshaller}
 import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.Location
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
@@ -101,6 +102,12 @@ object OneDriveFileSystem {
  * ''resolvePath()'' functions, which use path-based addressing (refer to
  * https://docs.microsoft.com/en-us/onedrive/developer/rest-api/concepts/addressing-driveitems?view=odsp-graph-online).
  * Both of these functions take the configured root path into account.
+ *
+ * Note that some operation against the OneDrive file system require
+ * interaction with multiple servers. For instance, when downloading a file,
+ * the client is typically redirected to another server, from which the file's
+ * content can be downloaded. The actor passed to the functions for executing
+ * HTTP requests must support this.
  *
  * @param config the configuration
  */
@@ -189,17 +196,14 @@ class OneDriveFileSystem(config: OneDriveConfig)
    */
   override def updateFileContent(fileID: String, size: Int, content: Source[ByteString, Any])(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
 
-  /**
-   * Returns an entity for downloading the content of a file. The download can
-   * be performed by creating a stream with the data bytes of the resulting
-   * entity. Note that the entity must be consumed in all cases, either by
-   * running the stream with the data bytes or by discarding the bytes.
-   *
-   * @param fileID the ID of the file affected
-   * @param system the actor system
-   * @return the ''Operation'' to obtain an entity for downloading a file
-   */
-  override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): FileSystem.Operation[HttpEntity] = ???
+  override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): Operation[HttpEntity] = Operation {
+    httpSender =>
+      val downloadUriRequest = HttpRequest(uri = itemUri(fileID) + "/content")
+      for {
+        uriResult <- executeRequest(httpSender, downloadUriRequest)
+        downloadResult <- sendDownloadRequest(httpSender, uriResult)
+      } yield downloadResult.response.entity
+  }
 
   override def deleteFile(fileID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
     deleteItem(fileID)
@@ -324,6 +328,34 @@ class OneDriveFileSystem(config: OneDriveConfig)
         request = HttpRequest(method = HttpMethods.PATCH, uri = itemUri(element.id), entity = entity)
         _ <- executeJsonRequest[DriveItem](httpSender, request)
       } yield ()
+  }
+
+  /**
+   * Sends the request to actually download a file. File downloads are a
+   * two-step process: First the URI from which to download the file has to be
+   * obtained; second, a GET to this URI has to be executed. This function
+   * performs the second step and expects the result of the first step as
+   * argument.
+   *
+   * @param httpSender          the actor for sending requests
+   * @param downloadUriResponse the response from the download URI request
+   * @param system              the actor system
+   * @return a future with the result of the download request
+   */
+  private def sendDownloadRequest(httpSender: ActorRef[HttpRequestSender.HttpCommand],
+                                  downloadUriResponse: HttpRequestSender.SuccessResult)
+                                 (implicit system: ActorSystem[_]):
+  Future[HttpRequestSender.SuccessResult] = {
+    val location = downloadUriResponse.response.header[Location]
+    location match {
+      case Some(downloadUri) =>
+        val request = HttpRequest(uri = downloadUri.uri)
+        executeRequest(httpSender, request, discardMode = DiscardEntityMode.OnFailure)
+      case None =>
+        Future.failed(
+          new IllegalStateException(s"Request for download URI to ${downloadUriResponse.request.request.uri} " +
+            "does not contain a Location header."))
+    }
   }
 
   /**

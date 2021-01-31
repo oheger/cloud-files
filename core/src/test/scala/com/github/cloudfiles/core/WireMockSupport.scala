@@ -107,6 +107,17 @@ object WireMockSupport {
     builder.withBodyFile(file)
 
   /**
+   * Generates an absolute URI to the given WireMock server with the path
+   * specified.
+   *
+   * @param server the target server
+   * @param path   the path of the URI (should start with a slash)
+   * @return the absolute URI pointing to the managed WireMock server
+   */
+  def serverUri(server: WireMockServer, path: String): String =
+    s"http://localhost:${server.port()}$path"
+
+  /**
    * Adds a Basic Auth header to the specified mapping builder with the
    * default user credentials.
    *
@@ -169,9 +180,7 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
    * @param path the path of the URI (should start with a slash)
    * @return the absolute URI pointing to the managed WireMock server
    */
-  protected def serverUri(path: String): String =
-    s"http://localhost:${wireMockServer.port()}$path"
-
+  protected def serverUri(path: String): String = WireMockSupport.serverUri(wireMockServer, path)
 
   /**
    * Adds a wildcard stubbing that accepts all requests with the proper
@@ -208,5 +217,28 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
     import mat.executionContext
     val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
     response.entity.dataBytes.runWith(sink).map(_.utf8String)
+  }
+
+  /**
+   * Support running a block of code that requires another mock server. This
+   * can be needed for instance to check correct redirect handling, e.g. if the
+   * API server refers to a different server for downloading files. The
+   * function starts a new server and passes it to the provided ''run''
+   * function. Afterwards, the server is stopped again.
+   *
+   * @param run the function to run with the new server
+   * @tparam A the result type of the function
+   * @return the result returned by the function
+   */
+  protected def runWithNewServer[A](run: WireMockServer => A): A = {
+    val server = new WireMockServer(wireMockConfig()
+      .dynamicPort()
+      .withRootDirectory(s"$resourceRoot/src/test/resources"))
+    server.start()
+    try {
+      run(server)
+    } finally {
+      server.stop()
+    }
   }
 }

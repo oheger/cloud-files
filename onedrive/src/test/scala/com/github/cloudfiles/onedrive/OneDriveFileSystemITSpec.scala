@@ -18,9 +18,11 @@ package com.github.cloudfiles.onedrive
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.StatusCodes
-import com.github.cloudfiles.core.http.HttpRequestSender
-import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, FileTestHelper, Model, WireMockSupport}
-import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, delete, deleteRequestedFor, equalTo, equalToJson, get, patch, patchRequestedFor, post, stubFor, urlPathEqualTo, verify}
+import akka.stream.scaladsl.Sink
+import akka.util.ByteString
+import com.github.cloudfiles.core.http.MultiHostExtension
+import com.github.cloudfiles.core._
+import com.github.tomakehurst.wiremock.client.WireMock._
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -78,10 +80,16 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
    * @return a future with the result of the operation
    */
   private def runOp[A](op: FileSystem.Operation[A]): Future[A] = {
-    val httpActor = spawn(HttpRequestSender(serverUri("")))
+    val httpActor = spawn(MultiHostExtension())
     op.run(httpActor)
   }
 
+  /**
+   * Prepares the mock server to expect a request to resolve an element and to
+   * return a corresponding response.
+   *
+   * @param path the expected path of the element
+   */
   private def stubResolvePath(path: String): Unit = {
     stubFor(get(urlPathEqualTo(drivePath(path)))
       .withQueryParam("select", equalTo("id"))
@@ -343,5 +351,34 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     futureResult(runOp(fs.updateFile(file)))
     verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+  }
+
+  it should "download the content of a file" in {
+    val DownloadUri = "/path/to/download/file.dat"
+    runWithNewServer { server =>
+      stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID/content")))
+        .willReturn(aResponse().withStatus(StatusCodes.Found.intValue)
+          .withHeader("Location", WireMockSupport.serverUri(server, DownloadUri))))
+      server.stubFor(get(urlPathEqualTo(DownloadUri))
+        .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
+          .withBody(FileTestHelper.TestData)))
+      val fs = new OneDriveFileSystem(createConfig())
+
+      val source = futureResult(runOp(fs.downloadFile(ResolvedID)))
+      val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
+      val content = futureResult(source.dataBytes.runWith(sink))
+      content.utf8String should be(FileTestHelper.TestData)
+    }
+  }
+
+  it should "handle a missing Location header when downloading a file" in {
+    val path = drivePath(s"/items/$ResolvedID/content")
+    stubFor(get(urlPathEqualTo(path))
+      .willReturn(aResponse().withStatus(StatusCodes.Found.intValue)
+        .withBody("Missing Location header")))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    val ex = expectFailedFuture[IllegalStateException](runOp(fs.downloadFile(ResolvedID)))
+    ex.getMessage should include(path)
   }
 }

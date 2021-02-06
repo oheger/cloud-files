@@ -1,0 +1,12 @@
+{
+  "item": {
+    "name": "new File.txt",
+    "description": "Upload test file description",
+    "fileSystemInfo": {
+      "createdDateTime": "2021-01-31T21:21:10.123Z",
+      "lastModifiedDateTime": "2021-01-31T21:21:50.987Z"
+    },
+    "file": {
+    }
+  }
+}

@@ -147,31 +147,35 @@ object OneDriveModel {
    * only a small number of a file's properties are writable, creating such an
    * object manually and passing in all the dummy values is cumbersome.
    * Therefore, this utility function can be used, which deals only with
-   * relevant properties and sets defaults for all others.
+   * relevant properties and sets defaults for all others. Note that the size
+   * of the file is required for a correct upload.
    *
+   * @param size        the size of the file (in bytes)
    * @param name        the name of the file or '''null''' for undefined
    * @param description the description or '''null''' for undefined
    * @param info        optional object with local file system information
    * @return the newly created ''OneDriveFile'' object
    */
-  def newFile(name: String = null, description: String = null,
+  def newFile(size: Long, name: String = null, description: String = null,
               info: Option[WritableFileSystemInfo] = None): OneDriveFile =
-    OneDriveFile(itemForFile(null, name, description, info))
+    OneDriveFile(itemForFile(null, name, description, size, info))
 
   /**
    * Constructs a ''OneDriveFile'' object that can be used to update an
    * existing file on the server. Like ''newFile()'', this function takes only
-   * the writable properties into account.
+   * the writable properties into account. Note that the size of the file is
+   * required for a correct upload.
    *
    * @param id          the ID of the file to update; this is mandatory
+   * @param size        the size of the file (in bytes)
    * @param name        the name of the file or '''null''' if undefined
    * @param description the description or '''null''' if undefined
    * @param info        optional object with local file system information
    * @return the newly created ''OneDriveFile'' object for the update
    */
-  def updateFile(id: String, name: String = null, description: String = null,
+  def updateFile(id: String, size: Long, name: String = null, description: String = null,
                  info: Option[WritableFileSystemInfo] = None): OneDriveFile =
-    OneDriveFile(itemForFile(id, name, description, info))
+    OneDriveFile(itemForFile(id, name, description, 0, info))
 
   /**
    * Constructs a ''FileSystemInfo'' object based on the passed in ''Option''
@@ -200,7 +204,7 @@ object OneDriveModel {
    */
   private def itemForFolder(id: String, name: String, description: String,
                             info: Option[WritableFileSystemInfo]): DriveItem =
-    itemForElement(id, name, description, info, optFile = None, optFolder = FolderMarker)
+    itemForElement(id, name, description, 0, info, optFile = None, optFolder = FolderMarker)
 
   /**
    * Constructs a ''DriveItem'' object to represent the file with the given
@@ -209,12 +213,13 @@ object OneDriveModel {
    * @param id          the file ID
    * @param name        the optional file name
    * @param description the optional file description
+   * @param size        the file size
    * @param info        the optional file system info
    * @return a ''DriveItem'' representing this folder
    */
-  private def itemForFile(id: String, name: String, description: String,
+  private def itemForFile(id: String, name: String, description: String, size: Long,
                           info: Option[WritableFileSystemInfo]): DriveItem =
-    itemForElement(id, name, description, info, optFile = FileMarker, optFolder = None)
+    itemForElement(id, name, description, size, info, optFile = FileMarker, optFolder = None)
 
   /**
    * Constructs a ''DriveItem'' object to represent the element with the given
@@ -223,16 +228,18 @@ object OneDriveModel {
    * @param id          the element ID
    * @param name        the optional element name
    * @param description the optional element description
+   * @param size        the size of the item
    * @param info        the optional file system info
    * @param optFile     the optional file structure
    * @param optFolder   the optional folder structure
    * @return a ''DriveItem'' representing this element
    */
-  private def itemForElement(id: String, name: String, description: String, info: Option[WritableFileSystemInfo],
-                             optFile: Option[File], optFolder: Option[Folder]): DriveItem =
+  private def itemForElement(id: String, name: String, description: String, size: Long,
+                             info: Option[WritableFileSystemInfo], optFile: Option[File],
+                             optFolder: Option[Folder]): DriveItem =
     DriveItem(id = id, name = name, description = Option(description),
       createdBy = null, createdDateTime = null, lastModifiedBy = null, lastModifiedDateTime = null,
-      size = 0, webUrl = null, file = optFile, folder = optFolder,
+      size = size, webUrl = null, file = optFile, folder = optFolder,
       fileSystemInfo = createFileSystemInfoFor(info), parentReference = None, shared = None,
       specialFolder = None)
 

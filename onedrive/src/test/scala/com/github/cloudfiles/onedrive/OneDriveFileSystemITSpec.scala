@@ -18,18 +18,23 @@ package com.github.cloudfiles.onedrive
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.Sink
+import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
-import com.github.cloudfiles.core.http.MultiHostExtension
 import com.github.cloudfiles.core._
+import com.github.cloudfiles.core.http.MultiHostExtension
+import com.github.cloudfiles.onedrive.OneDriveJsonProtocol.WritableFileSystemInfo
+import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
+import com.github.tomakehurst.wiremock.matching.AbsentPattern
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.time.Instant
+import java.util.concurrent.TimeoutException
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 
 object OneDriveFileSystemITSpec {
   /** Test OneDrive ID. */
@@ -43,6 +48,9 @@ object OneDriveFileSystemITSpec {
 
   /** A test ID that appears in some test server responses. */
   private val ResolvedID = "some_test_id"
+
+  /** Test URI to upload files. */
+  private val UploadUri = "/file-storage/data/temp123456.xyz"
 
   /**
    * Generates the full relative URI that corresponds to the given path.
@@ -330,7 +338,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fsInfo = OneDriveJsonProtocol.WritableFileSystemInfo(
       lastModifiedDateTime = Some(Instant.parse("2021-01-30T15:54:20.224Z")),
       lastAccessedDateTime = Some(Instant.parse("2021-01-30T15:54:48.448Z")))
-    val file = OneDriveModel.updateFile(ResolvedID, name = "cloudFiles.adoc", info = Some(fsInfo))
+    val file = OneDriveModel.updateFile(ResolvedID, name = "cloudFiles.adoc", info = Some(fsInfo), size = 2048)
     val fs = new OneDriveFileSystem(createConfig())
 
     futureResult(runOp(fs.updateFile(file)))
@@ -380,5 +388,134 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     val ex = expectFailedFuture[IllegalStateException](runOp(fs.downloadFile(ResolvedID)))
     ex.getMessage should include(path)
+  }
+
+  /**
+   * Generates the JSON response of a request for an upload session.
+   *
+   * @param server the server to send the upload chunks to
+   * @return the response of an upload session request
+   */
+  private def uploadSessionResponse(server: WireMockServer): String = {
+    val ExpirationTime = Instant.now().plusSeconds(300).toString
+    s"""
+       |{
+       |  "uploadUrl": "${WireMockSupport.serverUri(server, UploadUri)}",
+       |  "expirationDateTime": "$ExpirationTime"
+       |}
+       |""".stripMargin
+  }
+
+  /**
+   * Checks a file upload operation with different parameters.
+   *
+   * @param uploadChunkSize the upload chunk size
+   * @param groupSize       the group size in the stream
+   */
+  private def checkUploadNewFile(uploadChunkSize: Int, groupSize: Int): Unit = {
+    val ParentId = ResolvedID.reverse
+    val FileName = "new File.txt"
+    val FileDescription = "Upload test file description"
+    val Content = FileTestHelper.TestData * 8
+    val fileInfo = WritableFileSystemInfo(createdDateTime = Some(Instant.parse("2021-01-31T21:21:10.123Z")),
+      lastModifiedDateTime = Some(Instant.parse("2021-01-31T21:21:50.987Z")))
+    val file = OneDriveModel.newFile(name = FileName, description = FileDescription, info = Some(fileInfo),
+      size = Content.length)
+    val SourceUri = drivePath(s"/items/$ParentId:/new%20File.txt:/createUploadSession")
+    val uploadSessionRequest = readDataFile(resourceFile("/createUploadSession.json"))
+    val fileSource = Source(Content.grouped(groupSize).toList).map(ByteString(_))
+
+    runWithNewServer {
+      server =>
+        stubFor(post(urlPathEqualTo(SourceUri))
+          .withHeader("Content-Type", equalTo("application/json"))
+          .withHeader("Accept", equalTo("application/json"))
+          .withRequestBody(equalToJson(uploadSessionRequest))
+          .willReturn(aJsonResponse()
+            .withBody(uploadSessionResponse(server))))
+
+        Content.grouped(uploadChunkSize)
+          .zipWithIndex
+          .foreach { t =>
+            val startRange = t._2 * uploadChunkSize
+            val endRange = math.min(startRange + uploadChunkSize - 1, Content.length - 1)
+            val rangeHeader = s"bytes $startRange-$endRange/${Content.length}"
+            val lastChunk = endRange == Content.length - 1
+            server.stubFor(put(urlPathEqualTo(UploadUri))
+              .withHeader("Content-Range", equalTo(rangeHeader))
+              .withRequestBody(equalTo(t._1))
+              .willReturn(aJsonResponse(if (lastChunk) StatusCodes.Created else StatusCodes.Accepted)
+                .withBodyFile(if (lastChunk) "upload_complete_response.json" else "upload_progress_response.json")))
+          }
+
+        val fs = new OneDriveFileSystem(createConfig().copy(uploadChunkSize = uploadChunkSize))
+        val id = futureResult(runOp(fs.createFile(ParentId, file, fileSource)))
+        id should be(ResolvedID)
+    }
+  }
+
+  it should "upload a new file" in {
+    checkUploadNewFile(16384, 2048)
+  }
+
+  it should "upload a file with multiple chunks if the group size fits into the chunk size" in {
+    checkUploadNewFile(2048, 1024)
+  }
+
+  it should "upload a file with multiple chunks if the group size does not fit into the chunk size" in {
+    checkUploadNewFile(3333, 1024)
+  }
+
+  it should "handle an upload request that does not yield a result" in {
+    val ParentId = ResolvedID.reverse
+    val Content = FileTestHelper.TestData * 8
+    val file = OneDriveModel.newFile(name = "someFile.dat", size = Content.length)
+    val SourceUri = drivePath(s"/items/$ParentId:/someFile.dat:/createUploadSession")
+    val fileSource = Source(Content.grouped(1024).toList).map(ByteString(_))
+
+    runWithNewServer { server =>
+      stubFor(post(urlPathEqualTo(SourceUri))
+        .willReturn(aJsonResponse()
+          .withBody(uploadSessionResponse(server))))
+      server.stubFor(put(anyUrl())
+        .willReturn(aJsonResponse(StatusCodes.Created.intValue)
+          .withBody("{ \"foo\": \"bar\" }")))
+      val fs = new OneDriveFileSystem(createConfig().copy(uploadChunkSize = 2048))
+
+      expectFailedFuture[IllegalStateException](runOp(fs.createFile(ParentId, file, fileSource)))
+    }
+  }
+
+  it should "update the content of a file" in {
+    val SourceUri = drivePath(s"/items/$ResolvedID/createUploadSession")
+    val fileSource = Source(FileTestHelper.TestData.grouped(64).toList).map(ByteString(_))
+
+    runWithNewServer { server =>
+      stubFor(post(urlPathEqualTo(SourceUri))
+        .withHeader("Accept", equalTo("application/json"))
+        .withRequestBody(AbsentPattern.ABSENT)
+        .willReturn(aJsonResponse()
+          .withBody(uploadSessionResponse(server))))
+      val range = s"bytes 0-${FileTestHelper.TestData.length - 1}/${FileTestHelper.TestData.length()}"
+      server.stubFor(put(urlPathEqualTo(UploadUri))
+        .withHeader("Content-Range", equalTo(range))
+        .withRequestBody(equalTo(FileTestHelper.TestData))
+        .willReturn(aJsonResponse(StatusCodes.Created)
+          .withBodyFile("upload_complete_response.json")))
+      val fs = new OneDriveFileSystem(createConfig())
+
+      futureResult(runOp(fs.updateFileContent(ResolvedID, FileTestHelper.TestData.length, fileSource)))
+      server.verify(putRequestedFor(urlPathEqualTo(UploadUri)))
+    }
+  }
+
+  it should "apply the timeout from the configuration" in {
+    stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID")))
+      .willReturn(aJsonResponse(StatusCodes.OK)
+        .withBodyFile("resolve_folder_response.json")
+        .withFixedDelay(1000)))
+    val fs = new OneDriveFileSystem(createConfig().copy(timeout = 200.millis))
+
+    expectFailedFuture[TimeoutException](runOp(fs.resolveFolder(ResolvedID)))
   }
 }

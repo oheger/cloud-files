@@ -28,12 +28,12 @@ object OneDriveConfig {
   final val OneDriveServerUri = "https://graph.microsoft.com/v1.0/me/drives"
 
   /**
-   * Default value for the upload chunk size (in MB). OneDrive accepts only
+   * Default value for the upload chunk size (in bytes). OneDrive accepts only
    * uploads of a limited size (60 MB currently). Larger files need to be
    * split into multiple chunks. This constant defines the default chunk size
    * used when the user has not explicitly defined one.
    */
-  final val DefaultUploadChunkSizeMB = 10
+  final val DefaultUploadChunkSize = 10 * 1024 * 1024
 
   /**
    * The default timeout for requests against the OneDrive server. This value
@@ -50,19 +50,19 @@ object OneDriveConfig {
  * these properties. Some behavioral aspects are defined as well, such as
  * timeouts for requests.
  *
- * @param driveID           the ID of the drive to access
- * @param serverUri         the URI of the OneDrive server; the base URI for
- *                          OneDrive requests is generated from a concatenation
- *                          of this URI and the ''driveID'' property
- * @param optRootPath       allows defining an alternative root path; if
- *                          defined, this path is used as base when resolving
- *                          relative paths and also as root path; otherwise,
- *                          root is the drive's root folder
- * @param uploadChunkSizeMB the size (in MB) for splitting files in uploads
- * @param timeout           the timeout for server requests
+ * @param driveID         the ID of the drive to access
+ * @param serverUri       the URI of the OneDrive server; the base URI for
+ *                        OneDrive requests is generated from a concatenation
+ *                        of this URI and the ''driveID'' property
+ * @param optRootPath     allows defining an alternative root path; if
+ *                        defined, this path is used as base when resolving
+ *                        relative paths and also as root path; otherwise,
+ *                        root is the drive's root folder
+ * @param uploadChunkSize the size (in bytes) for splitting files in uploads
+ * @param timeout         the timeout for server requests
  */
 case class OneDriveConfig(driveID: String,
                           serverUri: String = OneDriveConfig.OneDriveServerUri,
                           optRootPath: Option[String] = None,
-                          uploadChunkSizeMB: Int = OneDriveConfig.DefaultUploadChunkSizeMB,
+                          uploadChunkSize: Int = OneDriveConfig.DefaultUploadChunkSize,
                           timeout: Timeout = OneDriveConfig.DefaultTimeout)

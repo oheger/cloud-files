@@ -20,7 +20,7 @@ import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.{Marshal, Marshaller}
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.Location
+import akka.http.scaladsl.model.headers.{Accept, Location}
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
@@ -46,6 +46,10 @@ object OneDriveFileSystem {
 
   /** The property to generate marker objects in JSON. */
   private val Marker = OneDriveJsonProtocol.MarkerProperty()
+
+  /** The headers to use for an upload session request. */
+  private val UploadSessionHeaders = List(Accept(MediaRange(MediaType.applicationWithFixedCharset("json",
+    HttpCharsets.`UTF-8`))))
 
   /**
    * Transforms the given ''DriveItem'' object to a ''WritableDriveItem'' that
@@ -88,7 +92,7 @@ object OneDriveFileSystem {
     element match {
       case e: OneDriveModel.OneDriveElement => e.item
       case folder: Model.Folder[String] => OneDriveModel.newFolder(folder.name, folder.description).item
-      case file: Model.File[String] => OneDriveModel.newFile(file.name, file.description).item
+      case file: Model.File[String] => OneDriveModel.newFile(file.size, file.name, file.description).item
     }
 }
 
@@ -167,34 +171,29 @@ class OneDriveFileSystem(config: OneDriveConfig)
   override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
     deleteItem(folderID)
 
-  /**
-   * Creates a file as a child of the given parent folder by uploading the
-   * file's content and setting some metadata attributes. The attributes to set
-   * are provided in form of a file object; typically some properties are
-   * mandatory, such as the file name and the file size. If the operation is
-   * successful, the ID of the new file is returned.
-   *
-   * @param parent  the ID of the parent folder
-   * @param file    an object with the attributes of the new file
-   * @param content a ''Source'' with the content of the file
-   * @param system  the actor system
-   * @return the ''Operation'' to create a new file
-   */
-  override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])(implicit system: ActorSystem[_]): FileSystem.Operation[String] = ???
+  override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])
+                         (implicit system: ActorSystem[_]): Operation[String] = Operation {
+    httpSender =>
+      val uri = s"${itemUri(parent)}:/${UriEncodingHelper.encode(file.name)}:/createUploadSession"
+      val item = toWritableItem(itemFor(file))
+      for {
+        entity <- prepareJsonRequestEntity(UploadSessionRequest(item))
+        uploadSessionRequest = HttpRequest(method = HttpMethods.POST, uri = uri, entity = entity,
+          headers = UploadSessionHeaders)
+        result <- uploadFile(uploadSessionRequest, file.size, content, httpSender)
+      } yield result
+  }
 
   override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
     updateElement(file)
 
-  /**
-   * Updates the content of a file by uploading new data to the server.
-   *
-   * @param fileID  the ID of the file affected
-   * @param size    the size of the new content
-   * @param content a ''Source'' with the content of the file
-   * @param system  the actor system
-   * @return the ''Operation'' to upload new file content
-   */
-  override def updateFileContent(fileID: String, size: Int, content: Source[ByteString, Any])(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
+  override def updateFileContent(fileID: String, size: Int, content: Source[ByteString, Any])
+                                (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
+    httpSender =>
+      val uri = s"${itemUri(fileID)}/createUploadSession"
+      val uploadSessionRequest = HttpRequest(uri = uri, method = HttpMethods.POST, headers = UploadSessionHeaders)
+      uploadFile(uploadSessionRequest, size, content, httpSender) map (_ => ())
+  }
 
   override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): Operation[HttpEntity] = Operation {
     httpSender =>
@@ -357,6 +356,25 @@ class OneDriveFileSystem(config: OneDriveConfig)
             "does not contain a Location header."))
     }
   }
+
+  /**
+   * Uploads a file by creating an upload session and then sending the content
+   * of the file to the target upload URL.
+   *
+   * @param uploadSessionRequest the request for the upload session
+   * @param size                 the file size
+   * @param content              the source with the file's content
+   * @param httpSender           the actor for sending requests
+   * @param system               the actor system
+   * @return a future with the ID of the uploaded file
+   */
+  private def uploadFile(uploadSessionRequest: HttpRequest, size: Long, content: Source[ByteString, Any],
+                         httpSender: ActorRef[HttpRequestSender.HttpCommand])
+                        (implicit system: ActorSystem[_]): Future[String] =
+    for {
+      sessionResponse <- executeJsonRequest[UploadSessionResponse](httpSender, uploadSessionRequest)
+      result <- OneDriveUpload.upload(config, size, content, sessionResponse.uploadUrl, httpSender)
+    } yield result
 
   /**
    * Prepares a JSON request entity that is serialized from the given object.

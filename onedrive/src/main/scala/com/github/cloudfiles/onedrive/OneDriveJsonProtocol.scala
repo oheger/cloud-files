@@ -240,6 +240,32 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
   case class FolderResponse(value: List[DriveItem], nextLink: Option[String])
 
   /**
+   * A data class to represent the response of a request to upload a chunk of a
+   * file. The upload response is different for the first chunks and the last
+   * chunk. For the last chunk, a ''DriveItem'' representation is sent, but we
+   * are only interested in the ID. The previous responses are irrelevant, so
+   * they are just ignored.
+   *
+   * @param id the ID of the item extracted from the response
+   */
+  case class UploadChunkResponse(id: Option[String])
+
+  /**
+   * A data class to represent the request for an upload session.
+   *
+   * @param item the item for which content is uploaded
+   */
+  case class UploadSessionRequest(item: WritableDriveItem)
+
+  /**
+   * A data class representing the response of an upload session request. We
+   * are only interested in the URL where the content needs to be uploaded.
+   *
+   * @param uploadUrl the URL to use for the following upload
+   */
+  case class UploadSessionResponse(uploadUrl: String)
+
+  /**
    * A format implementation to deal with date-time values. OneDrive uses the
    * default ISO format that can be parsed by the ''Instant'' class. Therefore,
    * this implementation is straight-forward.
@@ -268,6 +294,10 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
   implicit val markerPropertyFormat: RootJsonFormat[MarkerProperty] = jsonFormat1(MarkerProperty)
   implicit val writableDriveItemFormat: RootJsonFormat[WritableDriveItem] = jsonFormat5(WritableDriveItem)
   implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat1(ResolveResponse)
-  implicit val folderResponseFormat: RootJsonFormat[FolderResponse] =
+  implicit val folderResponseFormat: RootJsonFormat[FolderResponse] = {
     jsonFormat(FolderResponse.apply, "value", "@odata.nextLink")
+  }
+  implicit val uploadChunkResponseFormat: RootJsonFormat[UploadChunkResponse] = jsonFormat1(UploadChunkResponse)
+  implicit val uploadSessionRequest: RootJsonFormat[UploadSessionRequest] = jsonFormat1(UploadSessionRequest)
+  implicit val uploadSessionResponse: RootJsonFormat[UploadSessionResponse] = jsonFormat1(UploadSessionResponse)
 }

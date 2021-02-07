@@ -20,12 +20,13 @@ import akka.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTes
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
 import com.github.cloudfiles.core.{AsyncTestHelper, WireMockSupport}
-import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatestplus.mockito.MockitoSugar
 
+/**
+ * Integration test class for ''MultiHostExtension''.
+ */
 class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with MockitoSugar
   with WireMockSupport with AsyncTestHelper {
 
@@ -36,8 +37,6 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val Path2 = "/server2/other_path"
     val Result1 = "First result"
     val Result2 = "This is another result"
-    val server2 = new WireMockServer(wireMockConfig().dynamicPort())
-    server2.start()
 
     def checkResponse(probe: TestProbe[HttpRequestSender.Result], expRequest: HttpRequestSender.SendRequest,
                       expEntity: String): Unit = {
@@ -48,14 +47,14 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       entity should be(expEntity)
     }
 
-    try {
+    runWithNewServer { server2 =>
       stubFor(get(urlPathEqualTo(Path1))
         .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
           .withBody(Result1)))
       server2.stubFor(get(urlPathEqualTo(Path2))
         .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
           .withBody(Result2)))
-      val server2Uri = s"http://localhost:${server2.port()}$Path2"
+      val server2Uri = WireMockSupport.serverUri(server2, Path2)
       val probe = testKit.createTestProbe[HttpRequestSender.Result]()
       val req1 = HttpRequestSender.SendRequest(HttpRequest(uri = serverUri(Path1)), "data1", probe.ref)
       val req2 = HttpRequestSender.SendRequest(HttpRequest(uri = server2Uri), "data2", probe.ref)
@@ -65,8 +64,6 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       checkResponse(probe, req1, Result1)
       multiSender ! req2
       checkResponse(probe, req2, Result2)
-    } finally {
-      server2.stop()
     }
   }
 

@@ -16,7 +16,7 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.Uri
 
@@ -27,7 +27,9 @@ import akka.http.scaladsl.model.Uri
  * is configured with a single host, to which all requests are sent. This actor
  * implementation overcomes this limitation by creating request actors
  * dynamically whenever a request to a new host is encountered. All request
- * actors managed by an instance are hold in a map, so they are reused.
+ * actors managed by an instance are hold in a map, so they are reused. The
+ * creation of new child actors is done via a factory function, so it can be
+ * customized if necessary.
  *
  * Note that this implementation is not intended to be used as a generic
  * mechanism for sending arbitrary HTTP requests; keeping all the different
@@ -37,40 +39,69 @@ import akka.http.scaladsl.model.Uri
  */
 object MultiHostExtension {
   /**
+   * A function type to create new request actors. This function is used by the
+   * multi-host extension when it encounters a new host for the first time to
+   * create the request actor for this host. The function is passed the context
+   * of this actor (that can be used to spawn a new child actor), the URI of
+   * the current request, and the configured size of the request queue. It must
+   * return a new request actor.
+   */
+  type RequestActorFactory =
+    (ActorContext[HttpRequestSender.HttpCommand], Uri, Int) => ActorRef[HttpRequestSender.HttpCommand]
+
+  /**
    * Creates a new instance of this actor class.
    *
-   * @param requestQueueSize the size of the request queue
+   * @param requestQueueSize    the size of the request queue
+   * @param requestActorFactory the function to create new request actors
    * @return the initial behavior of the new actor instance
    */
-  def apply(requestQueueSize: Int = HttpRequestSender.DefaultQueueSize): Behavior[HttpRequestSender.HttpCommand] =
-    handleRequests(Map.empty, requestQueueSize)
+  def apply(requestQueueSize: Int = HttpRequestSender.DefaultQueueSize,
+            requestActorFactory: RequestActorFactory = defaultRequestActorFactory):
+  Behavior[HttpRequestSender.HttpCommand] =
+    handleRequests(Map.empty, requestQueueSize, requestActorFactory)
 
   /**
    * Returns the behavior for request handling. The map passed in contains the
    * request actors currently available. When receiving a request for another
    * host, a new actor is created and added to this map.
    *
-   * @param requestActors    the map with the current request actors
-   * @param requestQueueSize the size of the request queue
+   * @param requestActors       the map with the current request actors
+   * @param requestQueueSize    the size of the request queue
+   * @param requestActorFactory the function to create new request actors
    * @return the behavior to handle requests
    */
   private def handleRequests(requestActors: Map[Uri.Authority, ActorRef[HttpRequestSender.HttpCommand]],
-                             requestQueueSize: Int): Behavior[HttpRequestSender.HttpCommand] =
+                             requestQueueSize: Int, requestActorFactory: RequestActorFactory):
+  Behavior[HttpRequestSender.HttpCommand] =
     Behaviors.receivePartial {
       case (context, request: HttpRequestSender.SendRequest) =>
         val authority = request.request.uri.authority
         val nextRequestActors = if (requestActors.contains(authority)) requestActors
         else {
           context.log.info("Creating request actor for authority {}.", authority)
-          val requestActor = context.spawnAnonymous(HttpRequestSender(request.request.uri, requestQueueSize))
+          val requestActor = requestActorFactory(context, request.request.uri, requestQueueSize)
           requestActors + (authority -> requestActor)
         }
 
         nextRequestActors(authority) ! request
-        handleRequests(nextRequestActors, requestQueueSize)
+        handleRequests(nextRequestActors, requestQueueSize, requestActorFactory)
 
       case (_, HttpRequestSender.Stop) =>
         // This also stops all the request actors created as children of this actor.
         Behaviors.stopped
     }
+
+  /**
+   * The default factory function for creating new request actors. This
+   * function spawns an anonymous, plain [[HttpRequestSender]] actor.
+   *
+   * @param context          the actor context
+   * @param uri              the URI of the current request
+   * @param requestQueueSize the size of the request queue
+   * @return a reference to the newly created actor
+   */
+  private def defaultRequestActorFactory(context: ActorContext[HttpRequestSender.HttpCommand], uri: Uri,
+                                         requestQueueSize: Int): ActorRef[HttpRequestSender.HttpCommand] =
+    context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize))
 }

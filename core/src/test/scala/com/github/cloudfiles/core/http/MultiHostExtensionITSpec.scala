@@ -19,7 +19,8 @@ package com.github.cloudfiles.core.http
 import akka.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit, TestProbe}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
-import com.github.cloudfiles.core.{AsyncTestHelper, WireMockSupport}
+import com.github.cloudfiles.core.http.auth.{BasicAuthConfig, BasicAuthExtension}
+import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatestplus.mockito.MockitoSugar
@@ -72,5 +73,25 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     behaviorKit.run(HttpRequestSender.Stop)
     behaviorKit.returnedBehavior should be(Behaviors.stopped)
+  }
+
+  it should "support an alternative actor factory function" in {
+    val RequestQueueSize = 53
+    val authConfig = BasicAuthConfig(WireMockSupport.UserId, Secret(WireMockSupport.Password))
+    val Path = "/data/call"
+    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize) => {
+      queueSize should be(RequestQueueSize)
+      val requestActor = context.spawnAnonymous(HttpRequestSender(uri))
+      context.spawnAnonymous(BasicAuthExtension(requestActor, authConfig))
+    }
+    stubFor(WireMockSupport.BasicAuthFunc(get(urlPathEqualTo(Path))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
+        .withBody(FileTestHelper.TestData))))
+    val multiSender = testKit.spawn(MultiHostExtension(RequestQueueSize, factory))
+
+    val result = futureResult(HttpRequestSender.sendRequestSuccess(multiSender, HttpRequest(uri = serverUri(Path)),
+      null))
+    val entity = futureResult(entityToString(result.response))
+    entity should be(FileTestHelper.TestData)
   }
 }

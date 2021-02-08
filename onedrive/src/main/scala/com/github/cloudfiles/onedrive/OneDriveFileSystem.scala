@@ -16,7 +16,7 @@
 
 package com.github.cloudfiles.onedrive
 
-import akka.actor.typed.{ActorRef, ActorSystem}
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.{Marshal, Marshaller}
 import akka.http.scaladsl.model._
@@ -27,7 +27,8 @@ import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
-import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
+import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthExtension, OAuthTokenData}
+import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, UriEncodingHelper}
 import com.github.cloudfiles.core.{FileSystem, Model}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 
@@ -46,6 +47,43 @@ object OneDriveFileSystem {
 
   /** The property to generate marker objects in JSON. */
   private val Marker = OneDriveJsonProtocol.MarkerProperty()
+
+  /**
+   * Returns an actor behavior for sending HTTP requests that fulfills all the
+   * requirements of the OneDrive file system implementation. This actor has
+   * the following properties:
+   *  - It supports multiple hosts.
+   *  - Requests to the OneDrive API server are authorized with an OAuth token
+   *    as defined by the ''OAuthConfig'' provided.
+   *  - Requests to other hosts do not use authentication. (This refers to the
+   *    hosts for uploading and downloading files; requests to these hosts
+   *    should not have an ''Authorization'' header.)
+   *
+   * @param config     the OneDrive configuration
+   * @param authConfig the configuration of the OAuth provider
+   * @param tokenData  the object with token information
+   * @return the behavior of an actor for sending HTTP requests on behalf of a
+   *         OneDrive file system
+   */
+  def createHttpSender(config: OneDriveConfig, authConfig: OAuthConfig, tokenData: OAuthTokenData):
+  Behavior[HttpRequestSender.HttpCommand] = {
+    val serverUri = Uri(config.serverUri)
+    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize) => {
+      def createSender(uri: Uri, requestQueueSize: Int = HttpRequestSender.DefaultQueueSize):
+      ActorRef[HttpRequestSender.HttpCommand] =
+        context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize))
+
+      if (uri.authority == serverUri.authority) {
+        val idpSender = createSender(authConfig.tokenEndpoint)
+        val sender = createSender(uri, queueSize)
+        context.spawnAnonymous(OAuthExtension(sender, idpSender, authConfig, tokenData))
+      } else {
+        createSender(uri, queueSize)
+      }
+    }
+
+    MultiHostExtension(requestActorFactory = factory)
+  }
 
   /** The headers to use for an upload session request. */
   private val UploadSessionHeaders = List(Accept(MediaRange(MediaType.applicationWithFixedCharset("json",
@@ -111,7 +149,8 @@ object OneDriveFileSystem {
  * interaction with multiple servers. For instance, when downloading a file,
  * the client is typically redirected to another server, from which the file's
  * content can be downloaded. The actor passed to the functions for executing
- * HTTP requests must support this.
+ * HTTP requests must support this. The companion object of this class provides
+ * a function that can create an actor that fulfills all these requirements.
  *
  * @param config the configuration
  */

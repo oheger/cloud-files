@@ -21,7 +21,8 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
 import com.github.cloudfiles.core._
-import com.github.cloudfiles.core.http.MultiHostExtension
+import com.github.cloudfiles.core.http.{MultiHostExtension, Secret}
+import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthTokenData}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol.WritableFileSystemInfo
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
@@ -517,5 +518,53 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fs = new OneDriveFileSystem(createConfig().copy(timeout = 200.millis))
 
     expectFailedFuture[TimeoutException](runOp(fs.resolveFolder(ResolvedID)))
+  }
+
+  it should "create a correctly configured HTTP sender actor" in {
+    val config = createConfig()
+    val TokenUri = "/oauth/token"
+    val ExpiredAccessToken = "expiredToken"
+    val AccessToken = "theAccessToken"
+    val RefreshToken = "aRefreshToken"
+    val TokenResponse =
+      s"""
+         |{
+         |  "token_type": "bearer",
+         |  "expires_in": 3600,
+         |  "scope": "someScope",
+         |  "access_token": "$AccessToken",
+         |  "refresh_token": "$RefreshToken"
+         |}
+         |""".stripMargin
+    val SourceUri = drivePath(s"/items/$ResolvedID/createUploadSession")
+    val fileSource = Source(FileTestHelper.TestData.grouped(64).toList).map(ByteString(_))
+    stubFor(post(anyUrl())
+      .withHeader("Authorization", equalTo("Bearer " + ExpiredAccessToken))
+      .willReturn(aResponse().withStatus(StatusCodes.Unauthorized.intValue)))
+
+    runWithNewServer { authServer =>
+      val authConfig = OAuthConfig(tokenEndpoint = WireMockSupport.serverUri(authServer, TokenUri),
+        redirectUri = "https://some.redirect.org/uri", clientID = "someClient", clientSecret = Secret("foo"))
+      authServer.stubFor(post(urlPathEqualTo(TokenUri))
+        .willReturn(aJsonResponse(StatusCodes.OK)
+          .withBody(TokenResponse)))
+
+      runWithNewServer { uploadServer =>
+        stubFor(post(urlPathEqualTo(SourceUri))
+          .withHeader("Authorization", equalTo("Bearer " + AccessToken))
+          .willReturn(aJsonResponse()
+            .withBody(uploadSessionResponse(uploadServer))))
+        uploadServer.stubFor(put(urlPathEqualTo(UploadUri))
+          .withHeader("Authorization", AbsentPattern.ABSENT)
+          .willReturn(aJsonResponse(StatusCodes.Created)
+            .withBodyFile("upload_complete_response.json")))
+        val fs = new OneDriveFileSystem(config)
+
+        val sender = testKit.spawn(OneDriveFileSystem.createHttpSender(config, authConfig,
+          OAuthTokenData(ExpiredAccessToken, RefreshToken)))
+        val opUpdate = fs.updateFileContent(ResolvedID, FileTestHelper.TestData.length, fileSource)
+        futureResult(opUpdate.run(sender))
+      }
+    }
   }
 }

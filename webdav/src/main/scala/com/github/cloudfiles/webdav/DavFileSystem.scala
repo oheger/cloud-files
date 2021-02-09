@@ -137,7 +137,7 @@ class DavFileSystem(val config: DavConfig)
   override def updateFile(file: Model.File[Uri])(implicit system: ActorSystem[_]): Operation[Unit] =
     updateDavFile(toDavFile(file))
 
-  override def updateFileContent(fileID: Uri, size: Int, content: Source[ByteString, Any])
+  override def updateFileContent(fileID: Uri, size: Long, content: Source[ByteString, Any])
                                 (implicit system: ActorSystem[_]): Operation[Unit] = {
     for {
       _ <- conditionallyDeleteFileOp(fileID)

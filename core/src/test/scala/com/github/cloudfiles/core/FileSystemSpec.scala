@@ -84,7 +84,7 @@ object FileSystemSpec {
     override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
       throw new UnsupportedOperationException("Unexpected invocation")
 
-    override def updateFileContent(fileID: String, size: Int, content: Source[ByteString, Any])
+    override def updateFileContent(fileID: String, size: Long, content: Source[ByteString, Any])
                                   (implicit system: ActorSystem[_]): Operation[Unit] =
       throw new UnsupportedOperationException("Unexpected invocation")
 

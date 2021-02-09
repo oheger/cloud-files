@@ -191,7 +191,7 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param system the actor system
    * @return the ''Operation'' to upload new file content
    */
-  def updateFileContent(fileID: ID, size: Int, content: Source[ByteString, Any])
+  def updateFileContent(fileID: ID, size: Long, content: Source[ByteString, Any])
                        (implicit system: ActorSystem[_]): Operation[Unit]
 
   /**

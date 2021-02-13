@@ -18,15 +18,16 @@ package com.github.cloudfiles.webdav
 
 import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.model.Uri.Path
-import akka.http.scaladsl.model.headers.{Accept, ModeledCustomHeader, ModeledCustomHeaderCompanion}
 import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.{Accept, ModeledCustomHeader, ModeledCustomHeaderCompanion}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
-import com.github.cloudfiles.core.{FileSystem, Model}
+import com.github.cloudfiles.core.Model
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -58,7 +59,8 @@ object DavFileSystem {
 }
 
 /**
- * WebDav-specific implementation of the [[FileSystem]] trait.
+ * WebDav-specific implementation of the
+ * [[com.github.cloudfiles.core.FileSystem]] trait.
  *
  * This class allows interacting with the files and folders stored on a WebDav
  * server, which is defined by the configuration provided. Elements on the
@@ -68,7 +70,7 @@ object DavFileSystem {
  * @param config the configuration
  */
 class DavFileSystem(val config: DavConfig)
-  extends FileSystem[Uri, DavModel.DavFile, DavModel.DavFolder,
+  extends ExtensibleFileSystem[Uri, DavModel.DavFile, DavModel.DavFolder,
     Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder]] {
 
   import DavFileSystem._
@@ -156,6 +158,19 @@ class DavFileSystem(val config: DavConfig)
 
   override def deleteFile(fileID: Uri)(implicit system: ActorSystem[_]): Operation[Unit] =
     deleteElementOp(fileID)
+
+  override def patchFolder(source: Model.Folder[Uri], spec: ElementPatchSpec): DavModel.DavFolder = {
+    val davFolder = toDavFolder(source)
+    davFolder.copy(name = spec.patchName getOrElse davFolder.name,
+      description = spec.patchDescription getOrElse davFolder.description)
+  }
+
+  override def patchFile(source: Model.File[Uri], spec: ElementPatchSpec): DavModel.DavFile = {
+    val davFile = toDavFile(source)
+    davFile.copy(name = spec.patchName getOrElse davFile.name,
+      description = spec.patchDescription getOrElse davFile.description,
+      size = spec.patchSize getOrElse davFile.size)
+  }
 
   /**
    * Resolves an element by its ID and looks up its properties.

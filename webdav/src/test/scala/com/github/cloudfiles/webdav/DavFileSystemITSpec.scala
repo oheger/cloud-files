@@ -20,10 +20,11 @@ import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.{ByteString, Timeout}
-import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, FileTestHelper, Model, WireMockSupport}
 import com.github.cloudfiles.core.Model.Folder
+import com.github.cloudfiles.core.delegate.ElementPatchSpec
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
+import com.github.cloudfiles.core._
 import com.github.cloudfiles.webdav.DavModel.AttributeKey
 import com.github.tomakehurst.wiremock.client.WireMock._
 import org.mockito.Mockito.when
@@ -431,5 +432,63 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val fs = new DavFileSystem(createConfig().copy(timeout = Timeout(250.millis)))
 
     expectFailedFuture[TimeoutException](runOp(fs.resolveFile(FileUri)))
+  }
+
+  it should "patch a folder against an empty patch spec" in {
+    val folder = mock[Folder[Uri]]
+    val FolderID = Uri("https://my.test.dav/my/folder")
+    val FolderName = "originalFolderName"
+    val FolderDesc = "original folder description"
+    when(folder.id).thenReturn(FolderID)
+    when(folder.name).thenReturn(FolderName)
+    when(folder.description).thenReturn(FolderDesc)
+    val expFolder = DavModel.newFolder(FolderName, FolderDesc).copy(id = FolderID)
+    val fs = new DavFileSystem(createConfig())
+
+    fs.patchFolder(folder, ElementPatchSpec()) should be(expFolder)
+  }
+
+  it should "patch a folder against a defined patch spec" in {
+    val attributes = DavModel.Attributes(Map(AttributeKey("foo", "key1") -> "value1",
+      AttributeKey("bar", "key2") -> "value2"))
+    val folder = DavModel.newFolder("originalName", "original description", attributes)
+    val PatchedName = "newFolderName"
+    val PatchDescription = "This is the patched description of the folder"
+    val expFolder = DavModel.newFolder(PatchedName, PatchDescription, attributes)
+    val spec = ElementPatchSpec(patchName = Some(PatchedName), patchDescription = Some(PatchDescription),
+      patchSize = Some(42))
+    val fs = new DavFileSystem(createConfig())
+
+    fs.patchFolder(folder, spec) should be(expFolder)
+  }
+
+  it should "patch a file against an empty patch spec" in {
+    val FileID = Uri("https://my.test.dav/my/file.dat")
+    val FileName = "file.dat"
+    val FileDesc = "This is the description of my test file."
+    val FileSize = 20210213164214L
+    val attributes = DavModel.Attributes(Map(AttributeKey("foo", "key1") -> "value1",
+      AttributeKey("bar", "key2") -> "value2"))
+    val file = DavModel.newFile(FileName, FileSize, FileDesc, attributes).copy(id = FileID)
+    val fs = new DavFileSystem(createConfig())
+
+    fs.patchFile(file, ElementPatchSpec()) should be(file)
+  }
+
+  it should "patch a file against a defined patch spec" in {
+    val FileID = Uri("https://some.uri.org/foo")
+    val PatchedName = "newFileName.txt"
+    val PatchedDescription = "The modified description of the test file."
+    val PatchedSize = 20210213164608L
+    val file = mock[Model.File[Uri]]
+    when(file.id).thenReturn(FileID)
+    when(file.name).thenReturn("original.name")
+    when(file.size).thenReturn(11)
+    val expFile = DavModel.newFile(PatchedName, PatchedSize, PatchedDescription).copy(id = FileID)
+    val spec = ElementPatchSpec(patchDescription = Some(PatchedDescription),
+      patchName = Some(PatchedName), patchSize = Some(PatchedSize))
+    val fs = new DavFileSystem(createConfig())
+
+    fs.patchFile(file, spec) should be(expFile)
   }
 }

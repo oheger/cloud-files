@@ -175,7 +175,7 @@ object OneDriveModel {
    */
   def updateFile(id: String, size: Long, name: String = null, description: String = null,
                  info: Option[WritableFileSystemInfo] = None): OneDriveFile =
-    OneDriveFile(itemForFile(id, name, description, 0, info))
+    OneDriveFile(itemForFile(id, name, description, size, info))
 
   /**
    * Constructs a ''FileSystemInfo'' object based on the passed in ''Option''

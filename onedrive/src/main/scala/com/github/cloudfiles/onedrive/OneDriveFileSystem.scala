@@ -25,11 +25,12 @@ import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.Model
+import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthExtension, OAuthTokenData}
 import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, UriEncodingHelper}
-import com.github.cloudfiles.core.{FileSystem, Model}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -129,13 +130,29 @@ object OneDriveFileSystem {
   private def itemFor(element: Model.Element[String]): DriveItem =
     element match {
       case e: OneDriveModel.OneDriveElement => e.item
-      case folder: Model.Folder[String] => OneDriveModel.newFolder(folder.name, folder.description).item
-      case file: Model.File[String] => OneDriveModel.newFile(file.size, file.name, file.description).item
+      case folder: Model.Folder[String] => OneDriveModel.updateFolder(folder.id, folder.name, folder.description).item
+      case file: Model.File[String] => OneDriveModel.updateFile(file.id, file.size, file.name, file.description).item
     }
+
+  /**
+   * Returns a ''DriveItem'' that corresponds to the item of the source element
+   * provided with the given patch specification applied.
+   *
+   * @param source the source element
+   * @param spec   the patch specification to apply
+   * @return the patched ''DriveItem''
+   */
+  private def patchedItem(source: Model.Element[String], spec: ElementPatchSpec): DriveItem = {
+    val item = itemFor(source)
+    item.copy(name = spec.patchName getOrElse item.name,
+      description = spec.patchDescription.orElse(item.description),
+      size = spec.patchSize getOrElse item.size)
+  }
 }
 
 /**
- * The OneDrive-specific implementation of the [[FileSystem]] trait.
+ * The OneDrive-specific implementation of the
+ * [[com.github.cloudfiles.core.FileSystem]] trait.
  *
  * This class implements operations on files and folders located on a OneDrive
  * by sending REST requests against the OneDrive API, whose root URI is defined
@@ -155,7 +172,7 @@ object OneDriveFileSystem {
  * @param config the configuration
  */
 class OneDriveFileSystem(config: OneDriveConfig)
-  extends FileSystem[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder,
+  extends ExtensibleFileSystem[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder,
     Model.FolderContent[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder]] {
 
   import OneDriveFileSystem._
@@ -245,6 +262,12 @@ class OneDriveFileSystem(config: OneDriveConfig)
 
   override def deleteFile(fileID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
     deleteItem(fileID)
+
+  override def patchFolder(source: Model.Folder[String], spec: ElementPatchSpec): OneDriveModel.OneDriveFolder =
+    OneDriveModel.OneDriveFolder(patchedItem(source, spec))
+
+  override def patchFile(source: Model.File[String], spec: ElementPatchSpec): OneDriveModel.OneDriveFile =
+    OneDriveModel.OneDriveFile(patchedItem(source, spec))
 
   /**
    * Returns an operation that resolves the specified URI in this file system.

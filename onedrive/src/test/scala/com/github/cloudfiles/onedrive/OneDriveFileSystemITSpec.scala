@@ -21,6 +21,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
 import com.github.cloudfiles.core._
+import com.github.cloudfiles.core.delegate.ElementPatchSpec
 import com.github.cloudfiles.core.http.{MultiHostExtension, Secret}
 import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthTokenData}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol.WritableFileSystemInfo
@@ -566,5 +567,58 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         futureResult(opUpdate.run(sender))
       }
     }
+  }
+
+  it should "patch a folder against an empty patch spec" in {
+    val FolderName = "theFolder"
+    val FolderDesc = "Description of the test folder"
+    val folder = mock[Model.Folder[String]]
+    when(folder.id).thenReturn(ResolvedID)
+    when(folder.name).thenReturn(FolderName)
+    when(folder.description).thenReturn(FolderDesc)
+    val expFolder = OneDriveModel.updateFolder(ResolvedID, FolderName, FolderDesc)
+    val fs = new OneDriveFileSystem(createConfig())
+
+    fs.patchFolder(folder, ElementPatchSpec()) should be(expFolder)
+  }
+
+  it should "patch a folder against a defined patch spec" in {
+    val PatchedName = "theUpdatedFolder"
+    val PatchedDescription = "This description has changed."
+    val createdAt = Instant.parse("2021-02-13T16:07:30.214Z")
+    val lastModifiedAt = Instant.parse("2021-02-13T16:08:16.587Z")
+    val fileInfo = Some(WritableFileSystemInfo(createdDateTime = Some(createdAt),
+      lastModifiedDateTime = Some(lastModifiedAt)))
+    val folder = OneDriveModel.updateFolder(ResolvedID, "someName", info = fileInfo)
+    val expFolder = OneDriveModel.updateFolder(ResolvedID, PatchedName, PatchedDescription, fileInfo)
+    val spec = ElementPatchSpec(patchName = Some(PatchedName), patchDescription = Some(PatchedDescription))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    fs.patchFolder(folder, spec) should be(expFolder)
+  }
+
+  it should "patch a file against an empty patch spec" in {
+    val fileInfo = WritableFileSystemInfo(createdDateTime = Some(Instant.parse("2021-02-13T20:03:43.587Z")))
+    val file = OneDriveModel.updateFile(ResolvedID, 20210213210435L, info = Some(fileInfo))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    fs.patchFile(file, ElementPatchSpec()) should be(file)
+  }
+
+  it should "patch a file against a defined patch spec" in {
+    val PatchedName = "modifiedFileName.dat"
+    val PatchedSize = 20210213210711L
+    val FileDescription = "The original file description."
+    val file = mock[Model.File[String]]
+    when(file.id).thenReturn(ResolvedID)
+    when(file.name).thenReturn("originalName.txt")
+    when(file.description).thenReturn(FileDescription)
+    when(file.size).thenReturn(42L)
+    val expFile = OneDriveModel.updateFile(ResolvedID, PatchedSize, PatchedName, FileDescription)
+    expFile.size should be(PatchedSize)
+    val spec = ElementPatchSpec(patchName = Some(PatchedName), patchSize = Some(PatchedSize))
+    val fs = new OneDriveFileSystem(createConfig())
+
+    fs.patchFile(file, spec) should be(expFile)
   }
 }

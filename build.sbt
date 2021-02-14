@@ -83,7 +83,7 @@ lazy val CloudFiles = (project in file("."))
         url = url("https://github.com/oheger")
       )
     )
-  ) aggregate(core, webDav, oneDrive)
+  ) aggregate(core, webDav, oneDrive, crypt)
 
 /**
  * The core project. This project defines the API for interacting with
@@ -146,4 +146,21 @@ lazy val oneDrive = (project in file("onedrive"))
     OsgiKeys.privatePackage := Seq.empty,
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
     ITest / testOptions := Seq(Tests.Filter(itFilter))
+  ) dependsOn (core % "compile->compile;test->test")
+
+/**
+ * This project provides extension file systems that support encrypted file
+ * content and file names.
+ */
+lazy val crypt = (project in file("crypt"))
+  .enablePlugins(SbtOsgi)
+  .settings(projectOsgiSettings)
+  .settings(
+    libraryDependencies ++= akkaDependencies,
+    libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
+    libraryDependencies ++= testDependencies,
+    name := "cloud-files-crypt",
+    description := "Provides encrypted file systems",
+    OsgiKeys.exportPackage := Seq("com.github.cloudfiles.crypt.*"),
+    OsgiKeys.privatePackage := Seq.empty
   ) dependsOn (core % "compile->compile;test->test")

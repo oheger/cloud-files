@@ -266,5 +266,5 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param system the actor system
    * @return the execution context in implicit scope
    */
-  private implicit def ec(implicit system: ActorSystem[_]): ExecutionContext = system.executionContext
+  protected implicit def ec(implicit system: ActorSystem[_]): ExecutionContext = system.executionContext
 }

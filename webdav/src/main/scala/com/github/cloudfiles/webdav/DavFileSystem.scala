@@ -23,13 +23,13 @@ import akka.http.scaladsl.model.headers.{Accept, ModeledCustomHeader, ModeledCus
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
-import com.github.cloudfiles.core.Model
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.util.Try
 
 object DavFileSystem {
@@ -397,14 +397,6 @@ class DavFileSystem(val config: DavConfig)
   private def folderUri(uri: Uri): Uri =
     if (uri.path.endsWithSlash) uri
     else uri.withPath(uri.path ++ Path.SingleSlash)
-
-  /**
-   * Provides an implicit execution context from the implicit actor system.
-   *
-   * @param system the actor system
-   * @return the execution context
-   */
-  private implicit def executionContext(implicit system: ActorSystem[_]): ExecutionContext = system.executionContext
 }
 
 /**

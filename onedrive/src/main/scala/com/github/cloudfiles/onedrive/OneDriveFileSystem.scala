@@ -33,7 +33,7 @@ import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthExtension, OAuthT
 import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, UriEncodingHelper}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.reflect.ClassTag
 
 object OneDriveFileSystem {
@@ -500,15 +500,6 @@ class OneDriveFileSystem(config: OneDriveConfig)
    * @return the timeout for HTTP requests
    */
   private implicit def fetchTimeout(implicit system: ActorSystem[_]): Timeout = config.timeout
-
-  /**
-   * Provides the execution context for handling futures in implicit scope.
-   * This service uses the context from the actor system.
-   *
-   * @param system the actor system
-   * @return the ''ExecutionContext''
-   */
-  private implicit def executionContext(implicit system: ActorSystem[_]): ExecutionContext = system.executionContext
 
   /**
    * Generates the URI to access the root drive item for the current drive. If

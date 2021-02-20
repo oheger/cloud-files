@@ -125,6 +125,23 @@ object Model {
    */
   case class FolderContent[ID, FILE, FOLDER](folderID: ID,
                                              files: Map[ID, FILE],
-                                             folders: Map[ID, FOLDER])
+                                             folders: Map[ID, FOLDER]) {
+    /**
+     * Applies mappings to the content stored in this object. The mapping
+     * functions that are defined are invoked on the files and folders, and a
+     * new instance is created with the results. Note: The mapping functions
+     * must not change the IDs of elements.
+     *
+     * @param mapFiles   optional mapping function on files
+     * @param mapFolders optional mapping function on folders
+     * @return the result of the mapping
+     */
+    def mapContent(mapFiles: Option[FILE => FILE] = None,
+                   mapFolders: Option[FOLDER => FOLDER] = None): FolderContent[ID, FILE, FOLDER] = {
+      val newFiles = mapFiles.fold(files)(f => files.map(e => (e._1, f(e._2))))
+      val newFolders = mapFolders.fold(folders)(f => folders.map(e => (e._1, f(e._2))))
+      copy(files = newFiles, folders = newFolders)
+    }
+  }
 
 }

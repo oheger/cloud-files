@@ -17,10 +17,11 @@
 package com.github.cloudfiles.crypt.service
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
+import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm.CipherText
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -29,9 +30,6 @@ import java.security.SecureRandom
 object CryptServiceSpec {
   /** The source of randomness. */
   private implicit val secRandom: SecureRandom = new SecureRandom
-
-  /** Stores the encrypted test text. */
-  private val CipherText = ShiftCryptAlgorithm.encrypt(ByteString(FileTestHelper.TestData))
 }
 
 class CryptServiceSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with AsyncTestHelper {
@@ -89,10 +87,8 @@ class CryptServiceSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike wi
    * @param source the source
    * @return the bytes received from the source
    */
-  private def runSource(source: Source[ByteString, Any]): ByteString = {
-    val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
-    futureResult(source.runWith(sink))
-  }
+  private def runSource(source: Source[ByteString, Any]): ByteString =
+    futureResult(ShiftCryptAlgorithm.concatStream(source))
 
   it should "encrypt a source" in {
     val source = Source(FileTestHelper.TestData.grouped(32).map(ByteString(_)).toList)

@@ -16,17 +16,24 @@
 
 package com.github.cloudfiles.crypt.alg
 
+import akka.stream.Materializer
+import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
+import com.github.cloudfiles.core.FileTestHelper
 
 import java.nio.charset.StandardCharsets
 import java.security.{Key, SecureRandom}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import scala.concurrent.Future
 
 /**
  * Basic implementation of the [[CryptAlgorithm]] trait for testing purposes.
  *
  * This algorithm implements a simple shift of characters, so that the plain
  * text "abc" is converted to "bcd".
+ *
+ * The module also offers some helper functionality that is useful for
+ * different test classes.
  */
 object ShiftCryptAlgorithm extends CryptAlgorithm {
   /** The name of this algorithm. */
@@ -37,6 +44,9 @@ object ShiftCryptAlgorithm extends CryptAlgorithm {
 
   /** Marker for the end of a cipher text. */
   private val End = Array(0.toByte)
+
+  /** Constant for the encrypted test text. */
+  final val CipherText = encrypt(ByteString(FileTestHelper.TestData))
 
   /**
    * Returns a key for encrypting data.
@@ -77,6 +87,26 @@ object ShiftCryptAlgorithm extends CryptAlgorithm {
    */
   def decrypt(data: ByteString): ByteString =
     transformBlock(data, encryptCipher(decryptKey))
+
+  /**
+   * Returns a sink for concatenating the byte strings that flow through a
+   * stream. This is often needed when applying transformations to stream
+   * sources.
+   *
+   * @return the ''Sink'' concatenating the data of a stream
+   */
+  def byteStringSink: Sink[ByteString, Future[ByteString]] =
+    Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
+
+  /**
+   * Runs a stream with the given source and concatenates the resulting data.
+   *
+   * @param source the source
+   * @param mat    the object to materialize the stream
+   * @return a future with the bytes received from the source
+   */
+  def concatStream(source: Source[ByteString, Any])(implicit mat: Materializer): Future[ByteString] =
+    source.runWith(byteStringSink)
 
   /**
    * Generates a key that can be used together with this algorithm.

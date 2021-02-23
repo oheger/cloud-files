@@ -21,9 +21,7 @@ import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
-import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
-import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, Model}
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
 import org.mockito.ArgumentCaptor
@@ -34,21 +32,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.security.SecureRandom
-import scala.concurrent.Future
-
-object CryptContentFileSystemSpec {
-  /** Alias for the type of files. */
-  type FileType = Model.File[String]
-
-  /** Alias for the type of folders. */
-  type FolderType = Model.Folder[String]
-
-  /** Alias for the type used for the folder content. */
-  type ContentType = Model.FolderContent[String, FileType, FolderType]
-
-  /** Constant for an ID value. */
-  private val FileID = "testFileID"
-}
 
 /**
  * Test class for ''CryptContentFileSystem''.
@@ -56,34 +39,7 @@ object CryptContentFileSystemSpec {
 class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
   with AsyncTestHelper {
 
-  import CryptContentFileSystemSpec._
-
-  /**
-   * Generates a stub operation that just returns a successful future with the
-   * value provided.
-   *
-   * @param value the value to return from the operation
-   * @tparam A the result type of the operation
-   * @return the operation returning this value
-   */
-  private def stubOperation[A](value: A): Operation[A] =
-    Operation { httpSender =>
-      httpSender should not be null
-      Future.successful(value)
-    }
-
-  /**
-   * Executes the passed in operation and returns its result.
-   *
-   * @param op the operation to execute
-   * @tparam A the result type of the operation
-   * @return the result returned by the operation
-   */
-  private def runOp[A](op: Operation[A]): A = {
-    // The sender actor is not expected to be actually invoked.
-    val sender = testKit.spawn(HttpRequestSender.apply("http://localhost"))
-    futureResult(op.run(sender))
-  }
+  import CryptFileSystemTestHelper._
 
   /**
    * Creates a new crypt file system instance for a test case.
@@ -121,7 +77,7 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.delegate.resolveFile(FileID)).thenReturn(stubOperation(orgFile))
     when(fs.delegate.patchFile(orgFile, ElementPatchSpec(patchSize = Some(CryptFileSize)))).thenReturn(patchedFile)
 
-    runOp(fs.resolveFile(FileID)) should be(patchedFile)
+    runOp(testKit, fs.resolveFile(FileID)) should be(patchedFile)
   }
 
   it should "return a patched content of a folder" in {
@@ -143,7 +99,7 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
       ElementPatchSpec(patchSize = Some(ShiftCryptAlgorithm.decryptedSize(file2.size)))))
       .thenReturn(file2Patched)
 
-    val actContent = runOp(fs.folderContent(FileID))
+    val actContent = runOp(testKit, fs.folderContent(FileID))
     actContent.folderID should be(content.folderID)
     actContent.folders should have size 1
     actContent.folders("folder") should be(folder)
@@ -158,7 +114,7 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
     val fs = createCryptFileSystem()
     when(fs.delegate.downloadFile(FileID)).thenReturn(stubOperation(cryptEntity))
 
-    val fileSource = runOp(fs.downloadFile(FileID))
+    val fileSource = runOp(testKit, fs.downloadFile(FileID))
     val fileContent = futureResult(ShiftCryptAlgorithm.concatStream(fileSource.dataBytes))
     fileContent.utf8String should be(FileTestHelper.TestData)
   }
@@ -190,7 +146,7 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
       .thenReturn(patchedFile)
     when(fs.delegate.createFile(argEq(ParentID), argEq(patchedFile), any())(any())).thenReturn(stubOperation(FileID))
 
-    runOp(fs.createFile(ParentID, file, fileContentSource)) should be(FileID)
+    runOp(testKit, fs.createFile(ParentID, file, fileContentSource)) should be(FileID)
     val captSource = ArgumentCaptor.forClass(classOf[Source[ByteString, Any]])
     verify(fs.delegate).createFile(argEq(ParentID), argEq(patchedFile), captSource.capture())(any())
     checkUploadSource(captSource)
@@ -203,7 +159,7 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.delegate.updateFileContent(argEq(FileID), argEq(CryptFileSize), any())(any()))
       .thenReturn(stubOperation())
 
-    runOp(fs.updateFileContent(FileID, FileSize, fileContentSource))
+    runOp(testKit, fs.updateFileContent(FileID, FileSize, fileContentSource))
     val captSource = ArgumentCaptor.forClass(classOf[Source[ByteString, Any]])
     verify(fs.delegate).updateFileContent(argEq(FileID), argEq(CryptFileSize), captSource.capture())(any())
     checkUploadSource(captSource)

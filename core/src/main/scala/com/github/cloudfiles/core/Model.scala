@@ -17,6 +17,7 @@
 package com.github.cloudfiles.core
 
 import java.time.Instant
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * A module defining basic types to represent files and folders in a cloud
@@ -142,6 +143,45 @@ object Model {
       val newFolders = mapFolders.fold(folders)(f => folders.map(e => (e._1, f(e._2))))
       copy(files = newFiles, folders = newFolders)
     }
+
+    /**
+     * Applies mappings in parallel to the content stored in this object. This
+     * function is analogous to ''mapContent()'', but invocations to mapping
+     * functions are wrapped in ''Future'' objects, and therefore run
+     * concurrently. The resulting future completes when all mappings are done.
+     *
+     * @param mapFiles   optional mapping function on files
+     * @param mapFolders optional mapping function on folders
+     * @param ec         the execution context
+     * @return a ''Future'' with the result of the mapping
+     */
+    def mapContentParallel(mapFiles: Option[FILE => FILE] = None,
+                           mapFolders: Option[FOLDER => FOLDER] = None)
+                          (implicit ec: ExecutionContext): Future[FolderContent[ID, FILE, FOLDER]] = {
+      val futFiles = mapFiles.fold(Future.successful(files))(f => mapInParallel(files)(f))
+      val futFolders = mapFolders.fold(Future.successful(folders))(f => mapInParallel(folders)(f))
+      for {
+        mappedFiles <- futFiles
+        mappedFolders <- futFolders
+      } yield copy(files = mappedFiles, folders = mappedFolders)
+    }
+
+    /**
+     * Applies the specified mapping function to all elements of the given map
+     * in parallel.
+     *
+     * @param elements the map with elements
+     * @param f        the mapping function
+     * @param ec       the execution context
+     * @tparam A the value type of the map
+     * @return a ''Future'' with the processed map
+     */
+    private def mapInParallel[A](elements: Map[ID, A])(f: A => A)(implicit ec: ExecutionContext): Future[Map[ID, A]] =
+      Future.sequence(elements.toList map { e =>
+        Future {
+          (e._1, f(e._2))
+        }
+      }) map (_.toMap)
   }
 
 }

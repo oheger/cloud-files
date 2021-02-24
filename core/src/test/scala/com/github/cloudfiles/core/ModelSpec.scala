@@ -21,10 +21,32 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
+object ModelSpec {
+  /**
+   * Generates the name of a file that has been mapped by a mapping function.
+   * @param file the original file
+   * @return the mapped name of this file
+   */
+  private def mappedFileName(file: Model.File[String]): String =
+    file.name + "_mappedFile"
+
+  /**
+   * Generates the name of a folder that has been mapped by a mapping function.
+   * @param folder the original folder
+   * @return the mapped name of this folder
+   */
+  private def mappedFolderName(folder: Model.Folder[String]): String =
+    folder.name + "_mappedFolder"
+}
+
 /**
  * Test class for ''Model'' and the classes it defines.
  */
-class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar {
+class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTestHelper {
+  import ModelSpec._
+
   /**
    * Prepares a mock for an element to return the properties provided.
    *
@@ -63,25 +85,37 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar {
     folder
   }
 
+  /**
+   * A test mapping function for files that updates the file name.
+   * @param file the file to map
+   * @return the mapped file
+   */
+  private def mapFile(file: Model.File[String]): Model.File[String] =
+    fileMock(file.id, mappedFileName(file))
+
+  /**
+   * A test mapping function for folders that updates the folder name.
+   * @param folder the folder to map
+   * @return the mapped folder
+   */
+  private def mapFolder(folder: Model.Folder[String]): Model.Folder[String] =
+    folderMock(folder.id, mappedFolderName(folder))
+
   "FolderContent" should "map files and folders" in {
-    val mapFile: Model.File[String] => Model.File[String] =
-      file => fileMock(file.id, file.name + "_mapped")
-    val mapFolder: Model.Folder[String] => Model.Folder[String] =
-      folder => folderMock(folder.id, folder.name + "_mapped")
     val file1 = fileMock("f1", "file1")
     val file2 = fileMock("f2", "file2")
     val folder = folderMock("fo1", "folder1")
     val content = Model.FolderContent("someFolderID",
-      Map("f1" -> file1, "f2" -> file2),
-      Map("fo1" -> folder))
+      Map(file1.id -> file1, file2.id -> file2),
+      Map(folder.id -> folder))
 
     val mappedContent = content.mapContent(mapFiles = Some(mapFile), mapFolders = Some(mapFolder))
     mappedContent.folderID should be(content.folderID)
     mappedContent.files should have size 2
-    mappedContent.files("f1").name should be("file1_mapped")
-    mappedContent.files("f2").name should be("file2_mapped")
+    mappedContent.files(file1.id).name should be(mappedFileName(file1))
+    mappedContent.files(file2.id).name should be(mappedFileName(file2))
     mappedContent.folders should have size 1
-    mappedContent.folders("fo1").name should be("folder1_mapped")
+    mappedContent.folders(folder.id).name should be(mappedFolderName(folder))
   }
 
   it should "deal with undefined mapping functions" in {
@@ -92,6 +126,41 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar {
         "fo2" -> folderMock("fo2", "oneMoreFolder")))
 
     val mappedContent = content.mapContent()
+    mappedContent should be(content)
+    mappedContent.files shouldBe theSameInstanceAs(content.files)
+    mappedContent.folders shouldBe theSameInstanceAs(content.folders)
+  }
+
+  it should "map files and folders in parallel" in {
+    val file1 = fileMock("f1", "file1")
+    val file2 = fileMock("f2", "file2")
+    val folder1 = folderMock("fo1", "folder1")
+    val folder2 = folderMock("fo2", "folder2")
+    val folder3 = folderMock("fo3", "folder3")
+    val content = Model.FolderContent("someFolderID",
+      Map(file1.id -> file1, file2.id -> file2),
+      Map(folder1.id -> folder1, folder2.id -> folder2, folder3.id -> folder3))
+
+    val mappedContent =
+      futureResult(content.mapContentParallel(mapFiles = Some(mapFile), mapFolders = Some(mapFolder)))
+    mappedContent.folderID should be(content.folderID)
+    mappedContent.files should have size 2
+    mappedContent.files(file1.id).name should be(mappedFileName(file1))
+    mappedContent.files(file2.id).name should be(mappedFileName(file2))
+    mappedContent.folders should have size 3
+    mappedContent.folders(folder1.id).name should be(mappedFolderName(folder1))
+    mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
+    mappedContent.folders(folder3.id).name should be(mappedFolderName(folder3))
+  }
+
+  it should "deal with undefined mapping functions when mapping in parallel" in {
+    val content = Model.FolderContent("someFolderID",
+      Map("fi1" -> fileMock("fi1", "oneFile.txt"),
+        "fi2" -> fileMock("fi2", "anotherFile.doc")),
+      Map("fo1" -> folderMock("fo1", "someFolder"),
+        "fo2" -> folderMock("fo2", "oneMoreFolder")))
+
+    val mappedContent = futureResult(content.mapContentParallel())
     mappedContent should be(content)
     mappedContent.files shouldBe theSameInstanceAs(content.files)
     mappedContent.folders shouldBe theSameInstanceAs(content.folders)

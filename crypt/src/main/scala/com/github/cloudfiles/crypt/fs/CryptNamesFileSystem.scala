@@ -26,7 +26,6 @@ import com.github.cloudfiles.crypt.alg.CryptAlgorithm
 import com.github.cloudfiles.crypt.service.CryptService
 
 import java.security.{Key, SecureRandom}
-import scala.concurrent.Future
 
 object CryptNamesFileSystem {
   /**
@@ -82,20 +81,14 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
    *             underlying file system and then decrypts its name.
    */
   override def resolveFolder(id: ID)(implicit system: ActorSystem[_]): Operation[FOLDER] =
-    super.resolveFolder(id) map { orgFolder =>
-      val decryptName = decryptElementName(orgFolder)
-      patchFolder(orgFolder, decryptName)
-    }
+    super.resolveFolder(id) map folderWithDecryptedName
 
   /**
    * @inheritdoc This implementation obtains the file to be resolved from the
    *             underlying file system and then decrypts its name.
    */
   override def resolveFile(id: ID)(implicit system: ActorSystem[_]): Operation[FILE] =
-    super.resolveFile(id) map { orgFile =>
-      val decryptName = decryptElementName(orgFile)
-      patchFile(orgFile, decryptName)
-    }
+    super.resolveFile(id) map fileWithDecryptedName
 
   /**
    * @inheritdoc This implementation encrypts the name of the folder before
@@ -126,12 +119,8 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
   override def folderContent(id: ID)(implicit system: ActorSystem[_]):
   Operation[Model.FolderContent[ID, FILE, FOLDER]] = super.folderContent(id) flatMap { cryptContent =>
     Operation { _ =>
-      val futFiles = decryptFileNames(cryptContent)
-      val futFolders = decryptFolderNames(cryptContent)
-      for {
-        files <- futFiles
-        folders <- futFolders
-      } yield cryptContent.copy(files = files, folders = folders)
+      cryptContent.mapContentParallel(mapFiles = Some(fileWithDecryptedName),
+        mapFolders = Some(folderWithDecryptedName))
     }
   }
 
@@ -174,40 +163,21 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
     delegate.patchFile(orgFile, patchSpec(name))
 
   /**
-   * Decrypts the names of all folders in the given content object and returns
-   * a map with patched folder objects.
+   * Returns a folder based on the passed in one with the folder name
+   * decrypted.
    *
-   * @param content the content object
-   * @param system  the actor system
-   * @return a future with a map of folders with decrypted names
+   * @param folder the original folder
+   * @return the folder with the decrypted name
    */
-  private def decryptFolderNames(content: Model.FolderContent[ID, FILE, FOLDER])
-                                (implicit system: ActorSystem[_]): Future[Map[ID, FOLDER]] =
-    Future.sequence(content.folders.values.map(folder => Future {
-      patchFolder(folder, decryptElementName(folder))
-    })) map toMap
+  private def folderWithDecryptedName(folder: FOLDER): FOLDER =
+    patchFolder(folder, decryptElementName(folder))
 
   /**
-   * Decrypts the names of all files in the given content object and returns
-   * a map with patched file objects.
+   * Returns a file based on the passed in one with the file name decrypted.
    *
-   * @param content the content object
-   * @param system  the actor system
-   * @return a future with a map of files with decrypted names
+   * @param file the original file
+   * @return the file with the decrypted name
    */
-  private def decryptFileNames(content: Model.FolderContent[ID, FILE, FOLDER])
-                              (implicit system: ActorSystem[_]): Future[Map[ID, FILE]] =
-    Future.sequence(content.files.values.map(file => Future {
-      patchFile(file, decryptElementName(file))
-    })) map toMap
-
-  /**
-   * Constructs a map from the given elements using the element IDs as keys.
-   *
-   * @param elements the elements
-   * @tparam A the element type
-   * @return the map with these elements
-   */
-  private def toMap[A <: Model.Element[ID]](elements: Iterable[A]): Map[ID, A] =
-    elements.map(e => e.id -> e).toMap
+  private def fileWithDecryptedName(file: FILE): FILE =
+    patchFile(file, decryptElementName(file))
 }

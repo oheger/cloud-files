@@ -66,8 +66,10 @@ class CryptContentFileSystem[ID, FILE <: Model.File[ID], FOLDER](override val de
    *             content returned by the underlying file system.
    */
   override def folderContent(id: ID)(implicit system: ActorSystem[_]):
-  Operation[Model.FolderContent[ID, FILE, FOLDER]] = super.folderContent(id) map { content =>
-    content.mapContent(mapFiles = Some(patchDecryptFileSize))
+  Operation[Model.FolderContent[ID, FILE, FOLDER]] = super.folderContent(id) flatMap { content =>
+    Operation {
+      _ => content.mapContentParallel(mapFiles = Some(patchDecryptFileSize))
+    }
   }
 
   /**

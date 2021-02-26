@@ -198,4 +198,20 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     val result = futureResult(op.run(requestActor))
     result should be(RootContent)
   }
+
+  it should "resolve a sequence of path components by combining them to a path" in {
+    val pathComponents = Seq("the", "path that", "must(!) be", "resolved")
+    val expectedPath = "/the/path%20that/must%28%21%29%20be/resolved"
+    val requestActor = mock[ActorRef[HttpRequestSender.HttpCommand]]
+    val fs = new FileSystemImpl {
+      override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[String] =
+        checkActorOp(requestActor) { _ =>
+          Future.successful(path)
+        }
+    }
+
+    val op = fs.resolvePathComponents(pathComponents)
+    val result = futureResult(op.run(requestActor))
+    result should be(expectedPath)
+  }
 }

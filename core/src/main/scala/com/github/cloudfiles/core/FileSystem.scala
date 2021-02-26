@@ -21,7 +21,7 @@ import akka.http.scaladsl.model.HttpEntity
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
-import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -73,17 +73,36 @@ object FileSystem {
 trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
   /**
    * Resolves the ID of an element (file or folder) that is specified by its
-   * path. In a hierarchical file system, there is typically a direct
-   * relation between a path and a URI that uniquely identifies an element. But
-   * no all file systems are hierarchical; e.g. in Google Drive a single file
-   * can be contained in multiple folders, so a resolve operation can be
-   * actually complex.
+   * path. This function is analogous to ''resolvePathComponents()'', but the
+   * target element of the operation is identified by a URI-like path. It is
+   * assumed that the single components in this path are encoded as necessary
+   * to yield a valid URI.
    *
    * @param path   the path to be resolved
    * @param system the actor system
    * @return the ''Operation'' to resolve the path
    */
   def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[ID]
+
+  /**
+   * Resolves the ID of an element (file or folder) that is specified by a
+   * sequence of path components. The components define the names of folders to
+   * traverse from the root in order to come to the target element. In a
+   * hierarchical file system, there is typically a direct relation between a
+   * path and a URI that uniquely identifies an element. But not all file
+   * systems are hierarchical; e.g. in Google Drive a single file can be
+   * contained in multiple folders, so a resolve operation can be actually
+   * complex. The single components passed to this function should be plain
+   * file or folder names; no encoding is expected. This implementation encodes
+   * the components and concatenates them to a path URI and invokes
+   * ''resolvePath()'' with this path.
+   *
+   * @param components the sequence of path components
+   * @param system     the actor system
+   * @return the ''Operation'' to resolve these path components
+   */
+  def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[ID] =
+    resolvePath(UriEncodingHelper.fromComponentsWithEncode(components))
 
   /**
    * Returns the ID of the root folder of this file system. This can be used as
@@ -188,7 +207,7 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
    * @param fileID  the ID of the file affected
    * @param size    the size of the new content
    * @param content a ''Source'' with the content of the file
-   * @param system the actor system
+   * @param system  the actor system
    * @return the ''Operation'' to upload new file content
    */
   def updateFileContent(fileID: ID, size: Long, content: Source[ByteString, Any])

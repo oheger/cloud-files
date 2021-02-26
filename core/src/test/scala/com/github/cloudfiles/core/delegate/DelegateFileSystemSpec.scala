@@ -84,6 +84,15 @@ class DelegateFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
     fs.resolvePath(path) should be(op)
   }
 
+  it should "resolve path components" in {
+    val components = Seq("the", "single", "path", "components")
+    val fs = createDelegateFileSystem()
+    val op = operationMock[String]
+    when(fs.delegate.resolvePathComponents(components)).thenReturn(op)
+
+    fs.resolvePathComponents(components) should be(op)
+  }
+
   it should "resolve a file" in {
     val FileID = "myFileID"
     val fs = createDelegateFileSystem()

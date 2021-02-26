@@ -53,6 +53,9 @@ trait DelegateFileSystem[ID, FILE, FOLDER]
 
   override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[ID] = delegate.resolvePath(path)
 
+  override def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[ID] =
+    delegate.resolvePathComponents(components)
+
   override def rootID(implicit system: ActorSystem[_]): Operation[ID] = delegate.rootID
 
   override def resolveFile(id: ID)(implicit system: ActorSystem[_]): Operation[FILE] = delegate.resolveFile(id)

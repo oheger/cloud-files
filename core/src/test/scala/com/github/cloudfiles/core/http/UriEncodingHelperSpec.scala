@@ -184,11 +184,25 @@ class UriEncodingHelperSpec extends AnyFlatSpec with Matchers {
     UriEncodingHelper splitComponents uri should be(uriComponents)
   }
 
+  it should "split a URI into its components and decode them" in {
+    val Uri = "/a/test%20uri/to%20be/split"
+    val Expected = Array("a", "test uri", "to be", "split")
+
+    UriEncodingHelper splitAndDecodeComponents Uri should be(Expected)
+  }
+
   it should "generate a URI from its components" in {
     val Uri = "/a/uri/with/multiple/components"
     val components = UriEncodingHelper splitComponents Uri
 
     UriEncodingHelper fromComponents components should be(Uri)
+  }
+
+  it should "generate a URI from its components after encoding them" in {
+    val components = Array("a", "test uri", "to be", "split")
+    val ExpectedUri = "/a/test%20uri/to%20be/split"
+
+    UriEncodingHelper.fromComponentsWithEncode(components) should be(ExpectedUri)
   }
 
   it should "map the components of a URI" in {

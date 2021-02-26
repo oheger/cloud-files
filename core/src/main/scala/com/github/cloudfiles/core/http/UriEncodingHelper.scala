@@ -192,6 +192,18 @@ object UriEncodingHelper {
     removeLeadingSeparator(uri).split(UriSeparator).toSeq
 
   /**
+   * Splits the given URI into its components separated by the URI separator
+   * and then applies URL decoding to the resulting components. This is useful
+   * for URI paths pointing to hierarchical file systems; after the decoding,
+   * the components contain the correct names of folders and files.
+   *
+   * @param uri the URI to be split
+   * @return a sequence with the single components
+   */
+  def splitAndDecodeComponents(uri: String): Seq[String] =
+    splitComponents(uri) map decode
+
+  /**
    * Creates a URI string from the given components. The components are
    * combined using the URI separator.
    *
@@ -200,6 +212,16 @@ object UriEncodingHelper {
    */
   def fromComponents(components: Seq[String]): String =
     UriSeparator + components.mkString(UriSeparator)
+
+  /**
+   * Creates a URI string from the given components that need to be encoded
+   * first. The encoded components are combined using the URI separator.
+   *
+   * @param components the sequence with components
+   * @return the resulting URI
+   */
+  def fromComponentsWithEncode(components: Seq[String]): String =
+    fromComponents(components map encode)
 
   /**
    * Transforms a URI by applying the given mapping function to all its

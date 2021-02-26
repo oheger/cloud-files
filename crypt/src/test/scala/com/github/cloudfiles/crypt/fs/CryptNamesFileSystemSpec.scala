@@ -205,4 +205,84 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     runOp(testKit, fs.folderContent(FileID)) should be(content)
   }
+
+  it should "resolve an empty path to the root folder ID" in {
+    val fs = createCryptFileSystem()
+    when(fs.delegate.rootID).thenReturn(stubOperation(FileID))
+
+    runOp(testKit, fs.resolvePathComponents(Nil)) should be(FileID)
+  }
+
+  it should "resolve a path to an existing folder" in {
+    val RootID = "theRootFolder"
+    val components = Seq("the", "desired", "folder")
+    val rootFolders = Map(folderID(1) -> createFolderMock(1, encryptName(folderName(1))),
+      folderID(2) -> createFolderMock(2, encryptName(folderName(2))),
+      folderID(3) -> createFolderMock(3, encryptName("the")))
+    val rootContent = Model.FolderContent(RootID, Map.empty[String, FileType], rootFolders)
+    val level1Folders = Map(folderID(4) -> createFolderMock(4, encryptName("desired")),
+      folderID(5) -> createFolderMock(5, encryptName(folderName(5))))
+    val level1Files = Map(fileID(1) -> createFileMock(1, encryptName(fileName(1))))
+    val level1Content = Model.FolderContent(folderID(3), level1Files, level1Folders)
+    val level2Folders = Map(folderID(6) -> createFolderMock(6, encryptName(folderName(6))),
+      folderID(7) -> createFolderMock(7, encryptName(folderName(7))),
+      folderID(8) -> createFolderMock(8, encryptName("folder")),
+      folderID(9) -> createFolderMock(9, encryptName(folderName(9))))
+    val level2Files = Map(fileID(2) -> createFileMock(2, encryptName(fileName(2))))
+    val level2Content = Model.FolderContent(folderID(4), level2Files, level2Folders)
+    val fs = createCryptFileSystem()
+    when(fs.delegate.rootID).thenReturn(stubOperation(RootID))
+    when(fs.delegate.folderContent(RootID)).thenReturn(stubOperation(rootContent))
+    when(fs.delegate.folderContent(level1Content.folderID)).thenReturn(stubOperation(level1Content))
+    when(fs.delegate.folderContent(level2Content.folderID)).thenReturn(stubOperation(level2Content))
+
+    runOp(testKit, fs.resolvePathComponents(components)) should be(folderID(8))
+  }
+
+  it should "resolve a path to an existing file" in {
+    val RootID = "theRootFolder"
+    val Path = "/the/desired/test%20file.doc"
+    val rootFolders = Map(folderID(1) -> createFolderMock(1, encryptName(folderName(1))),
+      folderID(2) -> createFolderMock(2, encryptName(folderName(2))),
+      folderID(3) -> createFolderMock(3, encryptName("the")))
+    val rootContent = Model.FolderContent(RootID, Map.empty[String, FileType], rootFolders)
+    val level1Folders = Map(folderID(4) -> createFolderMock(4, encryptName("desired")),
+      folderID(5) -> createFolderMock(5, encryptName(folderName(5))))
+    val level1Files = Map(fileID(1) -> createFileMock(1, encryptName(fileName(1))))
+    val level1Content = Model.FolderContent(folderID(3), level1Files, level1Folders)
+    val level2Folders = Map(folderID(6) -> createFolderMock(6, encryptName(folderName(6))))
+    val level2Files = Map(fileID(2) -> createFileMock(2, encryptName(fileName(2))),
+      fileID(3) -> createFileMock(3, encryptName("test file.doc")),
+      fileID(4) -> createFileMock(4, encryptName(fileName(4))))
+    val level2Content = Model.FolderContent(folderID(4), level2Files, level2Folders)
+    val fs = createCryptFileSystem()
+    when(fs.delegate.rootID).thenReturn(stubOperation(RootID))
+    when(fs.delegate.folderContent(RootID)).thenReturn(stubOperation(rootContent))
+    when(fs.delegate.folderContent(level1Content.folderID)).thenReturn(stubOperation(level1Content))
+    when(fs.delegate.folderContent(level2Content.folderID)).thenReturn(stubOperation(level2Content))
+
+    runOp(testKit, fs.resolvePath(Path)) should be(fileID(3))
+  }
+
+  it should "handle a path that cannot be resolved" in {
+    val RootID = "theRootFolder"
+    val components = Seq("the", "desired", "folder")
+    val rootFolders = Map(folderID(1) -> createFolderMock(1, encryptName(folderName(1))),
+      folderID(2) -> createFolderMock(2, encryptName(folderName(2))),
+      folderID(3) -> createFolderMock(3, encryptName("the")))
+    val rootFiles = Map(fileID(0) -> createFileMock(0, encryptName("the")))
+    val rootContent = Model.FolderContent(RootID, rootFiles, rootFolders)
+    val level1Folders = Map(folderID(4) -> createFolderMock(4, encryptName(folderName(4))),
+      folderID(5) -> createFolderMock(5, encryptName(folderName(5))))
+    val level1Files = Map(fileID(1) -> createFileMock(1, encryptName(fileName(1))),
+      fileID(2) -> createFileMock(2, encryptName("desired")))
+    val level1Content = Model.FolderContent(folderID(3), level1Files, level1Folders)
+    val fs = createCryptFileSystem()
+    when(fs.delegate.rootID).thenReturn(stubOperation(RootID))
+    when(fs.delegate.folderContent(RootID)).thenReturn(stubOperation(rootContent))
+    when(fs.delegate.folderContent(level1Content.folderID)).thenReturn(stubOperation(level1Content))
+
+    val ex = expectFailedFuture[IllegalArgumentException](runOpFuture(testKit, fs.resolvePathComponents(components)))
+    ex.getMessage should include(components.tail.toString())
+  }
 }

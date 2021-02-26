@@ -56,15 +56,28 @@ object CryptFileSystemTestHelper extends Matchers with AsyncTestHelper {
     }
 
   /**
-   * Executes the passed in operation and returns its result.
+   * Executes the passed in operation and returns its ''Future'' result.
    *
-   * @param op the operation to execute
+   * @param testKit the actor testkit
+   * @param op      the operation to execute
+   * @tparam A the result type of the operation
+   * @return the ''Future'' returned by the operation
+   */
+  def runOpFuture[A](testKit: ActorTestKit, op: Operation[A]): Future[A] = {
+    // The sender actor is not expected to be actually invoked.
+    val sender = testKit.spawn(HttpRequestSender.apply("http://localhost"))
+    op.run(sender)
+  }
+
+  /**
+   * Executes the passed in operation and returns the result contained in the
+   * ''Future'' produced by the operation.
+   *
+   * @param testKit the actor testkit
+   * @param op      the operation to execute
    * @tparam A the result type of the operation
    * @return the result returned by the operation
    */
-  def runOp[A](testKit: ActorTestKit, op: Operation[A]): A = {
-    // The sender actor is not expected to be actually invoked.
-    val sender = testKit.spawn(HttpRequestSender.apply("http://localhost"))
-    futureResult(op.run(sender))
-  }
+  def runOp[A](testKit: ActorTestKit, op: Operation[A]): A =
+    futureResult(runOpFuture(testKit, op))
 }

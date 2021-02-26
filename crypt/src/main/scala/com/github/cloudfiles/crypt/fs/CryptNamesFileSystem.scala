@@ -22,10 +22,12 @@ import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{DelegateFileSystem, ElementPatchSpec, ExtensibleFileSystem}
+import com.github.cloudfiles.core.http.UriEncodingHelper
 import com.github.cloudfiles.crypt.alg.CryptAlgorithm
 import com.github.cloudfiles.crypt.service.CryptService
 
 import java.security.{Key, SecureRandom}
+import scala.concurrent.Future
 
 object CryptNamesFileSystem {
   /**
@@ -123,6 +125,74 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
         mapFolders = Some(folderWithDecryptedName))
     }
   }
+
+  /**
+   * @inheritdoc This implementation splits the passed in path and delegates to
+   *             ''resolvePathComponents()''.
+   */
+  override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[ID] =
+    resolvePathComponents(UriEncodingHelper.splitAndDecodeComponents(path))
+
+  /**
+   * @inheritdoc This implementation tries to identify the single components in
+   *             the path provided by requesting the root folder content and
+   *             the contents of further folders in the sequence of components.
+   *             The names in the folder content objects need to be decrypted
+   *             first, so that they can be matched against the path
+   *             components in the given sequence.
+   */
+  override def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[ID] = {
+    val root = delegate.rootID
+    if (components.isEmpty) root
+    else root flatMap (resolveNextPathComponent(_, components))
+  }
+
+  /**
+   * Tries to resolve a path component in the content of the folder with the
+   * given ID. This function is invoked recursively until all path components
+   * have been resolved or an unresolvable component is encountered. In the
+   * latter case, the resulting ''Future'' fails with an
+   * ''IllegalArgumentException'' exception whose message lists the components
+   * that could not be resolved.
+   *
+   * @param folderID   the ID of the current folder
+   * @param components the remaining components to be resolved
+   * @param system     the actor system
+   * @return an ''Operation'' with the ID of the resolved element
+   */
+  private def resolveNextPathComponent(folderID: ID, components: Seq[String])
+                                      (implicit system: ActorSystem[_]): Operation[ID] =
+    delegate.folderContent(folderID) flatMap { content =>
+      val optId = findPathComponent(content.folders, components.head)
+        .orElse(if (components.size == 1) findPathComponent(content.files, components.head) else None)
+      optId.fold(failedResolveOperation(components)) { id =>
+        if (components.size == 1) Operation(_ => Future.successful(id))
+        else resolveNextPathComponent(id, components.tail)
+      }
+    }
+
+  /**
+   * Returns an ''Operation'' to report a failure when resolving path
+   * components.
+   *
+   * @param components the components that could not be resolved
+   * @return the ''Operation'' producing a failed ''Future''
+   */
+  private def failedResolveOperation(components: Seq[String]): Operation[ID] = Operation { _ =>
+    Future.failed(
+      new IllegalArgumentException("Could not resolve all path components. Remaining components: " + components))
+  }
+
+  /**
+   * Looks up an element name in an encrypted map with folder content elements.
+   *
+   * @param elements the map with encrypted elements
+   * @param name     the name to be searched for
+   * @tparam A the element type of the map
+   * @return an ''Option'' with the ID of the element that was found
+   */
+  private def findPathComponent[A <: Model.Element[ID]](elements: Map[ID, A], name: String): Option[ID] =
+    elements.find(e => decryptElementName(e._2) == name) map (_._1)
 
   /**
    * Returns the decrypted name of the passed in element.

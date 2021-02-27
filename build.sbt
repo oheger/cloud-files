@@ -83,7 +83,7 @@ lazy val CloudFiles = (project in file("."))
         url = url("https://github.com/oheger")
       )
     )
-  ) aggregate(core, webDav, oneDrive, crypt)
+  ) aggregate(core, webDav, oneDrive, crypt, cryptAlgAES)
 
 /**
  * The core project. This project defines the API for interacting with
@@ -164,3 +164,18 @@ lazy val crypt = (project in file("crypt"))
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.crypt.*"),
     OsgiKeys.privatePackage := Seq.empty
   ) dependsOn (core % "compile->compile;test->test")
+
+/**
+ * This project contains the implementation of the AES crypto algorithm.
+ */
+lazy val cryptAlgAES = (project in file("crypt-algs/aes"))
+  .enablePlugins(SbtOsgi)
+  .settings(projectOsgiSettings)
+  .settings(
+    libraryDependencies ++= akkaDependencies,
+    libraryDependencies ++= testDependencies,
+    name := "cloud-files-cryptalg-aes",
+    description := "Implements the AES crypto algorithm",
+    OsgiKeys.exportPackage := Seq("com.github.cloudfiles.crypt.alg.aes.*"),
+    OsgiKeys.privatePackage := Seq.empty
+  ) dependsOn (crypt, core % "test->test")

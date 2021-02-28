@@ -19,7 +19,8 @@ import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
 /** Definition of versions. */
 lazy val AkkaVersion = "2.6.12"
 lazy val AkkaHttpVersion = "10.2.3"
-lazy val VersionScala = "2.13.4"
+lazy val VersionScala213 = "2.13.5"
+lazy val VersionScala212 = "2.12.13"
 lazy val VersionScalaXml = "1.3.0"
 lazy val VersionSlf4j = "1.7.30"
 lazy val VersionScalaTest = "3.2.0"
@@ -27,6 +28,8 @@ lazy val VersionWireMock = "2.27.2"
 lazy val VersionMockito = "1.9.5"
 lazy val VersionScalaTestMockito = "1.0.0-M2"
 lazy val VersionJunit = "4.13" // needed by mockito
+
+lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
 
 scalacOptions ++= Seq("-deprecation", "-feature")
 
@@ -36,8 +39,7 @@ lazy val akkaDependencies = Seq(
   "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
   "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
   "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
-  "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion,
-  "org.scala-lang" % "scala-reflect" % VersionScala
+  "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion
 )
 
 lazy val testDependencies = Seq(
@@ -57,7 +59,7 @@ lazy val projectOsgiSettings = osgiSettings ++ Seq(
 
 ThisBuild / organization := "com.github.oheger"
 ThisBuild / homepage := Some(url("https://github.com/oheger/cloud-files"))
-ThisBuild / scalaVersion := VersionScala
+ThisBuild / scalaVersion := VersionScala213
 ThisBuild / version := "0.1-SNAPSHOT"
 ThisBuild / licenses := Seq(("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0.html")))
 
@@ -69,6 +71,7 @@ lazy val CloudFiles = (project in file("."))
   .settings(
     name := "cloud-files",
     description := "A library for accessing files stored on various server types",
+    crossScalaVersions := Nil,
     scmInfo := Some(
       ScmInfo(
         url("https://github.com/oheger/cloud-files.git"),
@@ -100,6 +103,7 @@ lazy val core = (project in file("core"))
     libraryDependencies ++= testDependencies,
     name := "cloud-files-core",
     description := "The core module of the cloud-files library",
+    crossScalaVersions := supportedScalaVersions,
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.core.*"),
     OsgiKeys.privatePackage := Seq.empty,
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
@@ -121,6 +125,7 @@ lazy val webDav = (project in file("webdav"))
     libraryDependencies ++= testDependencies,
     name := "cloud-files-webdav",
     description := "Adds support for the WebDav protocol",
+    crossScalaVersions := supportedScalaVersions,
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.webdav.*"),
     OsgiKeys.privatePackage := Seq.empty,
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
@@ -142,6 +147,7 @@ lazy val oneDrive = (project in file("onedrive"))
     libraryDependencies ++= testDependencies,
     name := "cloud-files-onedrive",
     description := "Adds support for Microsoft's OneDrive protocol",
+    crossScalaVersions := supportedScalaVersions,
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.onedrive.*"),
     OsgiKeys.privatePackage := Seq.empty,
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
@@ -161,6 +167,7 @@ lazy val crypt = (project in file("crypt"))
     libraryDependencies ++= testDependencies,
     name := "cloud-files-crypt",
     description := "Provides encrypted file systems",
+    crossScalaVersions := supportedScalaVersions,
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.crypt.*"),
     OsgiKeys.privatePackage := Seq.empty
   ) dependsOn (core % "compile->compile;test->test")
@@ -176,6 +183,7 @@ lazy val cryptAlgAES = (project in file("crypt-algs/aes"))
     libraryDependencies ++= testDependencies,
     name := "cloud-files-cryptalg-aes",
     description := "Implements the AES crypto algorithm",
+    crossScalaVersions := supportedScalaVersions,
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.crypt.alg.aes.*"),
     OsgiKeys.privatePackage := Seq.empty
   ) dependsOn (crypt, core % "test->test")

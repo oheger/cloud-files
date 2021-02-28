@@ -71,7 +71,7 @@ class CryptStage(val cryptCipher: CryptCipher)(implicit random: SecureRandom)
           if (dataProcessed) {
             val finalBytes = cryptCipher.complete()
             if (finalBytes.nonEmpty) {
-              push(out, ByteString(finalBytes))
+              push(out, finalBytes)
             }
           }
           super.onUpstreamFinish()

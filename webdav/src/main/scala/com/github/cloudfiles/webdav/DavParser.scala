@@ -108,7 +108,7 @@ object DavParser {
           case Success(file: DavModel.DavFile) =>
             (maps._1, maps._2 + (file.id -> file))
           case Failure(exception) =>
-            log.error("Could not parse response for element {}.", node, exception)
+            log.error(s"Could not parse response for element $node.", exception)
             maps
         }
       }

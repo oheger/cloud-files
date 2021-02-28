@@ -312,7 +312,7 @@ object HttpRequestSender {
             context.pipeToSelf(futResponse) { triedResponse =>
               WrappedHttpResponse(request, triedResponse)
             }
-            context.log.info("{} {}", request.request.method.value, request.request.uri)
+            context.log.info("{} {}", request.request.method.value, request.request.uri: Any)
             Behaviors.same
 
           case WrappedHttpResponse(request, triedResponse) =>
@@ -351,8 +351,12 @@ object HttpRequestSender {
    */
   private def resultFromResponse(context: ActorContext[HttpCommand], req: SendRequest)(response: HttpResponse):
   Future[Result] = {
-    context.log.debug("{} {} - {} {}", req.request.method.value, req.request.uri,
-      response.status.intValue(), response.status.defaultMessage())
+    if (context.log.isDebugEnabled) {
+      // Note: In Scala 2.12, there is a compiler error: "overloaded method value debug with alternatives"
+      // for the log method with multiple arguments; therefore, do the string replacement manually.
+      context.log.debug(s"${req.request.method.value} ${req.request.uri} - ${response.status.intValue()} " +
+        response.status.defaultMessage())
+    }
 
     implicit val ec: ExecutionContextExecutor = context.system.executionContext
     conditionallyDiscardEntity(context, response, req.discardEntityMode) map { _ =>

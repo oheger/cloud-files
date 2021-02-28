@@ -48,7 +48,7 @@ class BasicAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
     val headerContent = `Content-Type`(ContentTypes.`application/json`)
     val headerAuth = Authorization(BasicHttpCredentials(User, Password))
     val httpRequest = HttpRequest(method = HttpMethods.DELETE, uri = Uri("/path/to/delete"),
-      headers = Seq(headerContent))
+      headers = List(headerContent))
     val request = HttpRequestSender.SendRequest(httpRequest, new Object, resultProbe.ref)
     val authActor = testKit.spawn(BasicAuthExtension(requestActorProbe.ref, TestAuthConfig))
 

@@ -53,8 +53,8 @@ object RetryAfterExtensionSpec {
    * @param headers headers of the response
    * @return the resulting ''FailedResult'' object
    */
-  private def failedResult(request: HttpRequestSender.SendRequest, status: StatusCode, headers: Seq[HttpHeader] = Nil):
-  HttpRequestSender.FailedResult =
+  private def failedResult(request: HttpRequestSender.SendRequest, status: StatusCode,
+                           headers: List[HttpHeader] = Nil): HttpRequestSender.FailedResult =
     HttpRequestSender.FailedResult(request,
       FailedResponseException(HttpResponse(status = status, headers = headers)))
 }
@@ -146,7 +146,7 @@ class RetryAfterExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
   }
 
   it should "handle a request failing with status 429 with a retry-after header and a delay" in {
-    val headers = Seq(`Retry-After`(27))
+    val headers = List(`Retry-After`(27))
     val probeRequest = testKit.createTestProbe[HttpRequestSender.HttpCommand]()
     val probeReply = testKit.createTestProbe[HttpRequestSender.Result]()
     val request = createSendRequest(probeReply)
@@ -160,7 +160,7 @@ class RetryAfterExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
   it should "handle a request failing with status 429 with a retry-after header and a date" in {
     val now = DateTime.now
     val dateAfter = now + 1.minute.toMillis
-    val headers = Seq(`Retry-After`(dateAfter))
+    val headers = List(`Retry-After`(dateAfter))
     val probeRequest = testKit.createTestProbe[HttpRequestSender.HttpCommand]()
     val probeReply = testKit.createTestProbe[HttpRequestSender.Result]()
     val request = createSendRequest(probeReply)

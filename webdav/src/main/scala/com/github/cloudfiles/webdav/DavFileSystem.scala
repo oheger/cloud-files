@@ -116,7 +116,7 @@ class DavFileSystem(val config: DavConfig)
   Operation[Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder]] = Operation {
     httpSender =>
       val contentRequest = HttpRequest(uri = id, method = MethodPropFind,
-        headers = Seq(HeaderAccept, HeaderDepthContent))
+        headers = List(HeaderAccept, HeaderDepthContent))
       for {
         response <- execute(httpSender, contentRequest)
         content <- davParser.parseFolderContent(response.response.entity.dataBytes)
@@ -183,7 +183,7 @@ class DavFileSystem(val config: DavConfig)
   private def resolveElement(uri: Uri, httpSender: ActorRef[HttpRequestSender.HttpCommand])
                             (implicit system: ActorSystem[_]): Future[Model.Element[Uri]] = {
     val folderRequest = HttpRequest(uri = uri, method = MethodPropFind,
-      headers = Seq(HeaderAccept, HeaderDepthElement))
+      headers = List(HeaderAccept, HeaderDepthElement))
     for {
       response <- execute(httpSender, folderRequest)
       elem <- davParser.parseElement(response.response.entity.dataBytes)

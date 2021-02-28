@@ -59,7 +59,7 @@ private object PropPatchGenerator {
       descKey <- optDescriptionKey
       descValue <- Option(desc)
     } yield (descKey, descValue)
-    val setCommands = List(attributes.values.toList, optDesc).flatten
+    val setCommands = List(attributes.values.toList, optDesc.toList).flatten
 
     if (setCommands.isEmpty && attributes.keysToDelete.isEmpty) None
     else {

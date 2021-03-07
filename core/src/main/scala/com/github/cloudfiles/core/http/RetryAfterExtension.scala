@@ -43,17 +43,25 @@ object RetryAfterExtension {
   final val DefaultMinimumDelay = 100.millis
 
   /**
+   * A configuration class defining all the options supported by a
+   * [[RetryAfterExtension]] actor.
+   *
+   * @param minimumDelay the minimum delay when retrying a request
+   */
+  case class RetryAfterConfig(minimumDelay: FiniteDuration = RetryAfterExtension.DefaultMinimumDelay)
+
+  /**
    * Returns the behavior of a new actor instance. Requests are forwarded to
-   * the given request actor. The minimum delay provided is a lower bound for
-   * the delays used by this actor; it is also applied if no ''Retry-After''
-   * header is found in the response.
+   * the given request actor. The minimum delay contained in the configuration
+   * provided is a lower bound for the delays used by this actor; it is also
+   * applied if no ''Retry-After'' header is found in the response.
    *
    * @param requestSender the request sender to decorate
-   * @param minimumDelay  the minimum delay when retrying a request
+   * @param config        the configuration for this actor
    * @return the behavior of the new actor
    */
   def apply(requestSender: ActorRef[HttpRequestSender.HttpCommand],
-            minimumDelay: FiniteDuration = DefaultMinimumDelay): Behavior[HttpRequestSender.HttpCommand] =
+            config: RetryAfterConfig = RetryAfterConfig()): Behavior[HttpRequestSender.HttpCommand] =
     Behaviors.receivePartial {
       case (context, request: HttpRequestSender.SendRequest) =>
         HttpRequestSender.forwardRequest(context, requestSender, request.request, request)
@@ -62,7 +70,7 @@ object RetryAfterExtension {
       case (context, ForwardedResult(FailedResult(HttpRequestSender.SendRequest(request,
       data: HttpRequestSender.SendRequest, _, _), cause: FailedResponseException)))
         if cause.response.status == StatusCodes.TooManyRequests =>
-        val delay = delayForRetry(cause.response, minimumDelay)
+        val delay = delayForRetry(cause.response, config.minimumDelay)
         context.scheduleOnce(delay, context.self, data)
         context.log.info("Received status 429 for {} {}. Retrying after {}", request.method, request.uri, delay)
         Behaviors.same

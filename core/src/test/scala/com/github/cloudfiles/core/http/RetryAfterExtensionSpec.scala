@@ -139,7 +139,8 @@ class RetryAfterExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val probeReply = testKit.createTestProbe[HttpRequestSender.Result]()
     val request = createSendRequest(probeReply)
     val forwardedRequest = HttpRequestSender.SendRequest(request.request, request, request.replyTo)
-    val btk = BehaviorTestKit(RetryAfterExtension(probeRequest.ref, MinDelay))
+    val btk = BehaviorTestKit(RetryAfterExtension(probeRequest.ref,
+      RetryAfterExtension.RetryAfterConfig(MinDelay)))
 
     btk.run(HttpRequestSender.ForwardedResult(failedResult(forwardedRequest, StatusCodes.TooManyRequests)))
     btk.expectEffect(Scheduled(MinDelay, btk.ref, request))

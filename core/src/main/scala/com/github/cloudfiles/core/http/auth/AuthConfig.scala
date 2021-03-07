@@ -27,6 +27,12 @@ import com.github.cloudfiles.core.http.Secret
 sealed trait AuthConfig
 
 /**
+ * An object representing a dummy configuration for the case that no
+ * authentication is needed.
+ */
+case object NoAuthConfig extends AuthConfig
+
+/**
  * A data class that collects user credentials for accessing a server via basic
  * auth.
  *

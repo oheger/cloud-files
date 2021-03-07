@@ -16,6 +16,7 @@
 
 package com.github.cloudfiles.core.http.factory
 
+import akka.actor.typed.scaladsl.ActorContext
 import akka.{actor => classic}
 import akka.actor.typed.{ActorRef, Behavior, Props}
 import akka.actor.typed.scaladsl.adapter._
@@ -54,6 +55,24 @@ object Spawner {
    * @return the ''Spawner'' creating actors using this context
    */
   implicit def classicActorContextSpawner(context: classic.ActorContext): Spawner =
+    new Spawner {
+      override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
+        optName match {
+          case Some(name) =>
+            context.spawn(behavior, name, props)
+          case None =>
+            context.spawnAnonymous(behavior, props)
+        }
+    }
+
+  /**
+   * Implicit conversion function to create a ''Spawner'' from a typed actor
+   * context.
+   *
+   * @param context the actor context
+   * @return the ''Spawner'' creating actors using this context
+   */
+  implicit def typedActorContextSpawner(context: ActorContext[_]): Spawner =
     new Spawner {
       override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
         optName match {

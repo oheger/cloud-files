@@ -61,7 +61,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
         .withStatus(StatusCodes.Accepted.intValue)
         .withBodyFile("response.txt")))
     val probe = testKit.createTestProbe[HttpRequestSender.Result]()
-    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequestSender.SendRequest(HttpRequest(uri = Path), RequestData, probe.ref)
 
     actor ! request
@@ -79,7 +79,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
         .withStatus(StatusCodes.BadRequest.intValue)
         .withBodyFile("response.txt")))
     val probe = testKit.createTestProbe[HttpRequestSender.Result]()
-    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequestSender.SendRequest(HttpRequest(uri = Path), RequestData, probe.ref)
 
     actor ! request
@@ -102,7 +102,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
       .willReturn(aResponse()
         .withStatus(StatusCodes.OK.intValue)))
     val probe = testKit.createTestProbe[HttpRequestSender.Result]()
-    val actor = testKit.spawn(HttpRequestSender(serverUri(""), 64))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri, 64))
     val errRequest = HttpRequestSender.SendRequest(HttpRequest(uri = ErrorPath), RequestData, probe.ref)
     (1 to 32) foreach { _ => actor ! errRequest }
 
@@ -116,7 +116,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     stubFor(get(anyUrl())
       .willReturn(aResponse().withFault(Fault.RANDOM_DATA_THEN_CLOSE)))
     val probe = testKit.createTestProbe[HttpRequestSender.Result]()
-    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequestSender.SendRequest(HttpRequest(uri = Path), RequestData, probe.ref)
 
     actor ! request
@@ -127,7 +127,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
 
   it should "shutdown the request queue when it is stopped" in {
     val queue = mock[RequestQueue]
-    val actor = testKit.spawn(HttpRequestSender.create(serverUri(""), _ => queue))
+    val actor = testKit.spawn(HttpRequestSender.create(serverBaseUri, _ => queue))
 
     testKit stop actor
     Mockito.verify(queue).shutdown()
@@ -148,7 +148,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
       .willReturn(aResponse()
         .withStatus(StatusCodes.Accepted.intValue)
         .withBodyFile("response.txt")))
-    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
     val result = futureResult(HttpRequestSender.sendRequest(actor, request, RequestData))
@@ -202,7 +202,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
       .willReturn(aResponse()
         .withStatus(StatusCodes.Accepted.intValue)
         .withBodyFile("response.txt")))
-    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
     val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, RequestData))
@@ -223,7 +223,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     stubFor(get(urlPathEqualTo(Path))
       .willReturn(aResponse()
         .withStatus(StatusCodes.BadRequest.intValue)))
-    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
     val exception = expectFailedFuture[FailedResponseException](HttpRequestSender.sendRequestSuccess(actor,
@@ -238,7 +238,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
       .willReturn(aResponse()
         .withStatus(StatusCodes.BadRequest.intValue)
         .withBody(ErrorEntity)))
-    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = ErrorPath)
 
     val result = futureResult(HttpRequestSender.sendRequest(actor, request, RequestData, DiscardEntityMode.Never))
@@ -255,7 +255,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
       .willReturn(aResponse()
         .withStatus(StatusCodes.OK.intValue)
         .withBodyFile("response.txt")))
-    val actor = testKit.spawn(HttpRequestSender(serverUri("")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
     val futResults = (1 to 16) map { _ =>

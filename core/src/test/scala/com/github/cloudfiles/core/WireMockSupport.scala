@@ -183,6 +183,13 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
   protected def serverUri(path: String): String = WireMockSupport.serverUri(wireMockServer, path)
 
   /**
+   * Returns an absolute URI to the root path of the managed WireMock server.
+   *
+   * @return the absolute root URI of the managed WireMock server
+   */
+  protected def serverBaseUri: String = serverUri("")
+
+  /**
    * Adds a wildcard stubbing that accepts all requests with the proper
    * authorization header and returns a success response.
    *

@@ -545,7 +545,8 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     runWithNewServer { authServer =>
       val authConfig = OAuthConfig(tokenEndpoint = WireMockSupport.serverUri(authServer, TokenUri),
-        redirectUri = "https://some.redirect.org/uri", clientID = "someClient", clientSecret = Secret("foo"))
+        redirectUri = "https://some.redirect.org/uri", clientID = "someClient", clientSecret = Secret("foo"),
+        initTokenData = OAuthTokenData(ExpiredAccessToken, RefreshToken))
       authServer.stubFor(post(urlPathEqualTo(TokenUri))
         .willReturn(aJsonResponse(StatusCodes.OK)
           .withBody(TokenResponse)))
@@ -561,8 +562,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
             .withBodyFile("upload_complete_response.json")))
         val fs = new OneDriveFileSystem(config)
 
-        val sender = testKit.spawn(OneDriveFileSystem.createHttpSender(config, authConfig,
-          OAuthTokenData(ExpiredAccessToken, RefreshToken)))
+        val sender = testKit.spawn(OneDriveFileSystem.createHttpSender(config, authConfig))
         val opUpdate = fs.updateFileContent(ResolvedID, FileTestHelper.TestData.length, fileSource)
         futureResult(opUpdate.run(sender))
       }

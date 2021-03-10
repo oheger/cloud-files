@@ -47,19 +47,6 @@ import scala.util.{Failure, Success, Try}
  * can take additional actions, e.g. store a new access token for later reuse.
  */
 object OAuthExtension {
-  /**
-   * Definition of a function that is invoked with the outcome of a token
-   * refresh operation. Such a function can be passed to an actor instance to
-   * react on the availability of new tokens or failures to obtain them.
-   */
-  type TokenRefreshNotificationFunc = Try[OAuthTokenData] => Unit
-
-  /**
-   * A concrete ''TokenRefreshNotificationFunc'' which just ignores all
-   * notifications passed to the function.
-   */
-  final val IgnoreNotification: TokenRefreshNotificationFunc = _ => ()
-
   /** Parameter for the client ID. */
   private val ParamClientId = "client_id"
 
@@ -89,21 +76,17 @@ object OAuthExtension {
   /**
    * Creates a new actor instance with the parameters provided.
    *
-   * @param requestSender           the ''HttpRequestSender'' to decorate
-   * @param idpRequestSender        an ''HttpRequestSender'' to contact the IDP
-   * @param oauthConfig             the configuration of the IDP
-   * @param initTokenData           initial tokens to use
-   * @param refreshNotificationFunc a function to invoke when tokens are
-   *                                refreshed
+   * @param requestSender    the ''HttpRequestSender'' to decorate
+   * @param idpRequestSender an ''HttpRequestSender'' to contact the IDP
+   * @param oauthConfig      the configuration of the IDP
+   *                         refreshed
    * @return the behavior of the new actor instance
    */
   def apply(requestSender: ActorRef[HttpRequestSender.HttpCommand],
             idpRequestSender: ActorRef[HttpRequestSender.HttpCommand],
-            oauthConfig: OAuthConfig,
-            initTokenData: OAuthTokenData,
-            refreshNotificationFunc: TokenRefreshNotificationFunc = IgnoreNotification):
+            oauthConfig: OAuthConfig):
   Behavior[HttpRequestSender.HttpCommand] =
-    handleRequests(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, initTokenData)
+    handleRequests(requestSender, idpRequestSender, oauthConfig, oauthConfig.initTokenData)
 
   /**
    * The behavior function for normal request processing. It adds the current
@@ -111,18 +94,15 @@ object OAuthExtension {
    * requests can be served. On receiving an UNAUTHORIZED response, a token
    * refresh operation needs to be triggered.
    *
-   * @param requestSender           the ''HttpRequestSender'' to decorate
-   * @param idpRequestSender        an ''HttpRequestSender'' to contact the IDP
-   * @param oauthConfig             the configuration of the IDP
-   * @param refreshNotificationFunc a function to invoke when tokens are
-   *                                refreshed
-   * @param currentTokens           the current token data
+   * @param requestSender    the ''HttpRequestSender'' to decorate
+   * @param idpRequestSender an ''HttpRequestSender'' to contact the IDP
+   * @param oauthConfig      the configuration of the IDP
+   * @param currentTokens    the current token data
    * @return the behavior to handle requests in normal mode
    */
   private def handleRequests(requestSender: ActorRef[HttpRequestSender.HttpCommand],
                              idpRequestSender: ActorRef[HttpRequestSender.HttpCommand],
                              oauthConfig: OAuthConfig,
-                             refreshNotificationFunc: TokenRefreshNotificationFunc,
                              currentTokens: OAuthTokenData):
   Behavior[HttpRequestSender.HttpCommand] =
     Behaviors.receive { (context, message) =>
@@ -137,8 +117,7 @@ object OAuthExtension {
         data: SendRequest, _, _), exception: FailedResponseException))
           if exception.response.status == StatusCodes.Unauthorized =>
           if (usesCurrentToken(request, currentTokens.accessToken)) {
-            refreshing(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, currentTokens,
-              List(data))
+            refreshing(requestSender, idpRequestSender, oauthConfig, currentTokens, List(data))
           } else {
             context.self ! data
             Behaviors.same
@@ -156,19 +135,16 @@ object OAuthExtension {
    * Triggers a request to refresh the access token and returns a behavior that
    * handles the outcome of this operation.
    *
-   * @param requestSender           the ''HttpRequestSender'' to decorate
-   * @param idpRequestSender        an ''HttpRequestSender'' to contact the IDP
-   * @param oauthConfig             the configuration of the IDP
-   * @param refreshNotificationFunc a function to invoke when tokens are
-   *                                refreshed
-   * @param currentTokens           the current token data
-   * @param pendingRequests         a list with requests waiting for the new token
+   * @param requestSender    the ''HttpRequestSender'' to decorate
+   * @param idpRequestSender an ''HttpRequestSender'' to contact the IDP
+   * @param oauthConfig      the configuration of the IDP
+   * @param currentTokens    the current token data
+   * @param pendingRequests  a list with requests waiting for the new token
    * @return the behavior while refreshing the token
    */
   private def refreshing(requestSender: ActorRef[HttpRequestSender.HttpCommand],
                          idpRequestSender: ActorRef[HttpRequestSender.HttpCommand],
                          oauthConfig: OAuthConfig,
-                         refreshNotificationFunc: TokenRefreshNotificationFunc,
                          currentTokens: OAuthTokenData,
                          pendingRequests: List[SendRequest]): Behavior[HttpRequestSender.HttpCommand] =
     Behaviors.setup { context =>
@@ -176,34 +152,30 @@ object OAuthExtension {
       HttpRequestSender.forwardRequest(context, idpRequestSender,
         refreshTokenRequest(oauthConfig, currentTokens.refreshToken), null)
 
-      refreshBehavior(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, currentTokens,
-        pendingRequests)
+      refreshBehavior(requestSender, idpRequestSender, oauthConfig, currentTokens, pendingRequests)
     }
 
   /**
    * The behavior function to handle a token refresh operation. New incoming
    * requests are parked until the refresh operation is complete.
    *
-   * @param requestSender           the ''HttpRequestSender'' to decorate
-   * @param idpRequestSender        an ''HttpRequestSender'' to contact the IDP
-   * @param oauthConfig             the configuration of the IDP
-   * @param refreshNotificationFunc a function to invoke when tokens are
-   *                                refreshed
-   * @param currentTokens           the current token data
-   * @param pendingRequests         a list with requests waiting for the new token
+   * @param requestSender    the ''HttpRequestSender'' to decorate
+   * @param idpRequestSender an ''HttpRequestSender'' to contact the IDP
+   * @param oauthConfig      the configuration of the IDP
+   * @param currentTokens    the current token data
+   * @param pendingRequests  a list with requests waiting for the new token
    * @return the behavior while refreshing the token
    */
   private def refreshBehavior(requestSender: ActorRef[HttpRequestSender.HttpCommand],
                               idpRequestSender: ActorRef[HttpRequestSender.HttpCommand],
                               oauthConfig: OAuthConfig,
-                              refreshNotificationFunc: TokenRefreshNotificationFunc,
                               currentTokens: OAuthTokenData,
                               pendingRequests: List[SendRequest]): Behaviors.Receive[HttpRequestSender.HttpCommand] = {
     Behaviors.receive { (context, message) =>
       (message: @unchecked) match {
         case request: SendRequest =>
           context.log.info("Queuing request until token refresh is complete.")
-          refreshBehavior(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, currentTokens,
+          refreshBehavior(requestSender, idpRequestSender, oauthConfig, currentTokens,
             request :: pendingRequests)
 
         case HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_, null, _, _), response)) =>
@@ -211,27 +183,24 @@ object OAuthExtension {
 
         case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_, null, _, _), cause)) =>
           context.log.error("Got failed response for refresh token request.", cause)
-          handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc,
-            currentTokens, pendingRequests, cause)
+          handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, currentTokens, pendingRequests, cause)
 
         case HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_,
         tokens: ExtractTokenResult, _, _), _)) =>
           tokens.tokens match {
             case Failure(exception) =>
               context.log.error("Could not parse refresh token response from IDP.", exception)
-              handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc,
-                currentTokens, pendingRequests, exception)
+              handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, currentTokens, pendingRequests,
+                exception)
             case Success(newTokens) =>
               context.log.info("Successfully refreshed access token.")
-              updateTokens(context, requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc,
-                pendingRequests, newTokens)
+              updateTokens(context, requestSender, idpRequestSender, oauthConfig, pendingRequests, newTokens)
           }
 
         case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_,
         data: SendRequest, _, _), exception: FailedResponseException))
           if exception.response.status == StatusCodes.Unauthorized =>
-          refreshBehavior(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, currentTokens,
-            data :: pendingRequests)
+          refreshBehavior(requestSender, idpRequestSender, oauthConfig, currentTokens, data :: pendingRequests)
 
         case HttpRequestSender.ForwardedResult(result) =>
           propagateResult(result)
@@ -336,18 +305,30 @@ object OAuthExtension {
     Behaviors.same
   }
 
+  /**
+   * Performs all necessary steps to update the tokens after new ones have been
+   * received from the IDP. This includes invoking the notification function
+   * and dealing with requests waiting for the token update.
+   *
+   * @param context          the actor context
+   * @param requestSender    the request sender actor
+   * @param idpRequestSender an ''HttpRequestSender'' to contact the IDP
+   * @param oauthConfig      the configuration of the IDP
+   * @param pendingRequests  the list with pending requests
+   * @param newTokens        the object with updated token data
+   * @return the next behavior
+   */
   private def updateTokens(context: ActorContext[HttpRequestSender.HttpCommand],
                            requestSender: ActorRef[HttpRequestSender.HttpCommand],
                            idpRequestSender: ActorRef[HttpRequestSender.HttpCommand],
                            oauthConfig: OAuthConfig,
-                           refreshNotificationFunc: TokenRefreshNotificationFunc,
                            pendingRequests: List[SendRequest],
                            newTokens: OAuthTokenData): Behavior[HttpRequestSender.HttpCommand] = {
     pendingRequests foreach { pr =>
       context.self ! pr
     }
-    refreshNotificationFunc(Success(newTokens))
-    handleRequests(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, newTokens)
+    oauthConfig.refreshNotificationFunc(Success(newTokens))
+    handleRequests(requestSender, idpRequestSender, oauthConfig, newTokens)
   }
 
   /**
@@ -355,20 +336,17 @@ object OAuthExtension {
    * failure response, and the notification function is invoked. Then next
    * state is again the normal request handling behavior.
    *
-   * @param requestSender           the ''HttpRequestSender'' to decorate
-   * @param idpRequestSender        an ''HttpRequestSender'' to contact the IDP
-   * @param oauthConfig             the configuration of the IDP
-   * @param refreshNotificationFunc a function to invoke when tokens are
-   *                                refreshed
-   * @param currentTokens           the current token data
-   * @param pendingRequests         the list with pending requests
-   * @param cause                   the cause for the failure
+   * @param requestSender    the ''HttpRequestSender'' to decorate
+   * @param idpRequestSender an ''HttpRequestSender'' to contact the IDP
+   * @param oauthConfig      the configuration of the IDP
+   * @param currentTokens    the current token data
+   * @param pendingRequests  the list with pending requests
+   * @param cause            the cause for the failure
    * @return the next behavior
    */
   private def handleFailedTokenRefresh(requestSender: ActorRef[HttpRequestSender.HttpCommand],
                                        idpRequestSender: ActorRef[HttpRequestSender.HttpCommand],
                                        oauthConfig: OAuthConfig,
-                                       refreshNotificationFunc: TokenRefreshNotificationFunc,
                                        currentTokens: OAuthTokenData,
                                        pendingRequests: List[SendRequest],
                                        cause: Throwable): Behavior[HttpRequestSender.HttpCommand] = {
@@ -376,8 +354,8 @@ object OAuthExtension {
       val result = HttpRequestSender.FailedResult(pr, cause)
       pr.replyTo ! result
     }
-    refreshNotificationFunc(Failure(cause))
-    handleRequests(requestSender, idpRequestSender, oauthConfig, refreshNotificationFunc, currentTokens)
+    oauthConfig.refreshNotificationFunc(Failure(cause))
+    handleRequests(requestSender, idpRequestSender, oauthConfig, currentTokens)
   }
 
   /**

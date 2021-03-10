@@ -29,7 +29,7 @@ import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
-import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthExtension, OAuthTokenData}
+import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthExtension}
 import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, UriEncodingHelper}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 
@@ -62,12 +62,10 @@ object OneDriveFileSystem {
    *
    * @param config     the OneDrive configuration
    * @param authConfig the configuration of the OAuth provider
-   * @param tokenData  the object with token information
    * @return the behavior of an actor for sending HTTP requests on behalf of a
    *         OneDrive file system
    */
-  def createHttpSender(config: OneDriveConfig, authConfig: OAuthConfig, tokenData: OAuthTokenData):
-  Behavior[HttpRequestSender.HttpCommand] = {
+  def createHttpSender(config: OneDriveConfig, authConfig: OAuthConfig): Behavior[HttpRequestSender.HttpCommand] = {
     val serverUri = Uri(config.serverUri)
     val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize) => {
       def createSender(uri: Uri, requestQueueSize: Int = HttpRequestSender.DefaultQueueSize):
@@ -77,7 +75,7 @@ object OneDriveFileSystem {
       if (uri.authority == serverUri.authority) {
         val idpSender = createSender(authConfig.tokenEndpoint)
         val sender = createSender(uri, queueSize)
-        context.spawnAnonymous(OAuthExtension(sender, idpSender, authConfig, tokenData))
+        context.spawnAnonymous(OAuthExtension(sender, idpSender, authConfig))
       } else {
         createSender(uri, queueSize)
       }

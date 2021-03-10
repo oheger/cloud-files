@@ -43,16 +43,16 @@ object OAuthExtensionSpec {
   /** The string used as secret for the test OAuth client. */
   private val ClientSecret = "theSecretOfTheTestClient"
 
+  /** Test token data. */
+  private val TestTokens = OAuthTokenData(accessToken = "<access_token>", refreshToken = "<refresh_token>")
+
   /** OAuth configuration of the test client. */
   private val TestConfig = OAuthConfig(redirectUri = "https://redirect.uri.org/", clientID = "testClient",
-    tokenEndpoint = TokenUri, clientSecret = Secret(ClientSecret))
+    tokenEndpoint = TokenUri, clientSecret = Secret(ClientSecret), initTokenData = TestTokens)
 
   /** A test request used by the tests. */
   private val TestRequest = HttpRequest(method = HttpMethods.POST, uri = "http://test.org/foo",
     headers = List(`Content-Type`(ContentTypes.`text/xml(UTF-8)`)))
-
-  /** Test token data. */
-  private val TestTokens = OAuthTokenData(accessToken = "<access_token>", refreshToken = "<refresh_token>")
 
   /** Token data representing refreshed tokens. */
   private val RefreshedTokens = OAuthTokenData(accessToken = "<new_access>", refreshToken = "<new_refresh>")
@@ -503,7 +503,7 @@ class OAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
     val probeIdp = testKit.createTestProbe[HttpRequestSender.HttpCommand]()
     val probeDeadLetters = testKit.createDeadLetterProbe()
     val deadRequest = createSendRequest(testKit.createTestProbe[HttpRequestSender.Result]())
-    val actor = testKit.spawn(OAuthExtension(probeRequest.ref, probeIdp.ref, TestConfig, TestTokens))
+    val actor = testKit.spawn(OAuthExtension(probeRequest.ref, probeIdp.ref, TestConfig))
 
     actor ! HttpRequestSender.Stop
     probeRequest.expectMessage(HttpRequestSender.Stop)
@@ -590,8 +590,8 @@ class OAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
      * @return the test actor instance
      */
     private def createOAuthActor(): ActorRef[HttpRequestSender.HttpCommand] =
-      testKit.spawn(OAuthExtension(targetRequestActor, idpRequestActor, TestConfig, TestTokens,
-        recordRefreshNotification))
+      testKit.spawn(OAuthExtension(targetRequestActor, idpRequestActor,
+        TestConfig.copy(refreshNotificationFunc = recordRefreshNotification)))
   }
 
 }

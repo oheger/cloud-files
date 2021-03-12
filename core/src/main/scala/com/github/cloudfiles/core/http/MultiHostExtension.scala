@@ -50,6 +50,19 @@ object MultiHostExtension {
     (ActorContext[HttpRequestSender.HttpCommand], Uri, Int) => ActorRef[HttpRequestSender.HttpCommand]
 
   /**
+   * The default factory function for creating new request actors. This
+   * function spawns an anonymous, plain [[HttpRequestSender]] actor.
+   *
+   * @param context          the actor context
+   * @param uri              the URI of the current request
+   * @param requestQueueSize the size of the request queue
+   * @return a reference to the newly created actor
+   */
+  def defaultRequestActorFactory(context: ActorContext[HttpRequestSender.HttpCommand], uri: Uri,
+                                 requestQueueSize: Int): ActorRef[HttpRequestSender.HttpCommand] =
+    context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize))
+
+  /**
    * Creates a new instance of this actor class.
    *
    * @param requestQueueSize    the size of the request queue
@@ -91,17 +104,4 @@ object MultiHostExtension {
         // This also stops all the request actors created as children of this actor.
         Behaviors.stopped
     }
-
-  /**
-   * The default factory function for creating new request actors. This
-   * function spawns an anonymous, plain [[HttpRequestSender]] actor.
-   *
-   * @param context          the actor context
-   * @param uri              the URI of the current request
-   * @param requestQueueSize the size of the request queue
-   * @return a reference to the newly created actor
-   */
-  private def defaultRequestActorFactory(context: ActorContext[HttpRequestSender.HttpCommand], uri: Uri,
-                                         requestQueueSize: Int): ActorRef[HttpRequestSender.HttpCommand] =
-    context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize))
 }

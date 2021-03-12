@@ -18,7 +18,8 @@ package com.github.cloudfiles.core.http.factory
 
 import akka.actor.typed.ActorRef
 import akka.http.scaladsl.model.Uri
-import com.github.cloudfiles.core.http.{HttpRequestSender, RetryAfterExtension}
+import com.github.cloudfiles.core.http.MultiHostExtension.RequestActorFactory
+import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, RetryAfterExtension}
 import com.github.cloudfiles.core.http.auth.{BasicAuthConfig, BasicAuthExtension, NoAuthConfig, OAuthConfig, OAuthExtension}
 
 /**
@@ -41,6 +42,12 @@ object HttpRequestSenderFactoryImpl extends HttpRequestSenderFactory {
   ActorRef[HttpRequestSender.HttpCommand] =
     decorateRequestSender(spawner, spawner.spawn(HttpRequestSender(baseUri, config.queueSize), config.actorName),
       config)
+
+  override def createMultiHostRequestSender(spawner: Spawner, config: HttpRequestSenderConfig,
+                                            requestActorFactory: RequestActorFactory):
+  ActorRef[HttpRequestSender.HttpCommand] =
+    decorateRequestSender(spawner, spawner.spawn(MultiHostExtension(config.queueSize, requestActorFactory),
+      config.actorName), config)
 
   override def decorateRequestSender(spawner: Spawner, requestSender: ActorRef[HttpRequestSender.HttpCommand],
                                      config: HttpRequestSenderConfig): ActorRef[HttpRequestSender.HttpCommand] = {

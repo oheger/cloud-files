@@ -18,7 +18,8 @@ package com.github.cloudfiles.core.http.factory
 
 import akka.actor.typed.ActorRef
 import akka.http.scaladsl.model.Uri
-import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension}
+import com.github.cloudfiles.core.http.MultiHostExtension.RequestActorFactory
 
 /**
  * A trait to simplify the creation and configuration of actors for sending
@@ -50,6 +51,23 @@ trait HttpRequestSenderFactory {
    * @return a reference to the newly created actor
    */
   def createRequestSender(spawner: Spawner, baseUri: Uri, config: HttpRequestSenderConfig):
+  ActorRef[HttpRequestSender.HttpCommand]
+
+  /**
+   * Creates a new actor instance for sending HTTP requests to different hosts
+   * that satisfies the criteria defined by the given configuration. Note that
+   * the resulting actor is fully initialized; it is not necessary to call
+   * ''decorateRequestSender()'' manually.
+   *
+   * @param spawner             the object to create new actor instances
+   * @param config              the configuration of the request sender actor
+   * @param requestActorFactory a factory for creating new host-specific
+   *                            request sender actors
+   * @return a reference to the newly created actor
+   */
+  def createMultiHostRequestSender(spawner: Spawner, config: HttpRequestSenderConfig,
+                                   requestActorFactory: RequestActorFactory =
+                                   MultiHostExtension.defaultRequestActorFactory):
   ActorRef[HttpRequestSender.HttpCommand]
 
   /**

@@ -18,18 +18,20 @@ package com.github.cloudfiles.core.http.factory
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.typed.{ActorRef, Behavior, Props}
-import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
+import akka.http.scaladsl.model.{HttpRequest, StatusCodes, Uri}
 import akka.util.Timeout
 import com.github.cloudfiles.core.WireMockSupport.{BasicAuthFunc, TokenAuthFunc}
+import com.github.cloudfiles.core.http.MultiHostExtension.RequestActorFactory
 import com.github.cloudfiles.core.http.RetryAfterExtension.RetryAfterConfig
 import com.github.cloudfiles.core.http.auth.{BasicAuthConfig, OAuthConfig, OAuthTokenData}
-import com.github.cloudfiles.core.http.{HttpRequestSender, Secret}
+import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, Secret}
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
 import com.github.tomakehurst.wiremock.stubbing.Scenario
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration._
 
 object HttpRequestSenderFactoryImplITSpec {
@@ -76,16 +78,30 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
   }
 
   /**
-   * Checks request sending via a test actor based on the passed in
-   * configuration. Sends a test request and checks whether the expected
-   * response is received.
+   * Creates a new test actor instance based on the passed in configuration
+   * and tests whether it is correctly initialized. This is done by sending a
+   * test request and checking whether the expected response is received.
    *
    * @param config the configuration for the test actor
+   * @return the actor created for the test
    */
-  private def checkRequestSending(config: HttpRequestSenderConfig): Unit = {
+  private def checkCreationAndRequestSending(config: HttpRequestSenderConfig):
+  ActorRef[HttpRequestSender.HttpCommand] = {
     val actor = HttpRequestSenderFactoryImpl.createRequestSender(testSpawner(), serverBaseUri, config)
+    checkRequestSending(actor, Path)
+    actor
+  }
+
+  /**
+   * Checks whether the given actor can be used to send a test request to the
+   * URI provided. It is expected that this request returns the test response.
+   *
+   * @param actor the actor to test
+   * @param uri   the URI to invoke
+   */
+  private def checkRequestSending(actor: ActorRef[HttpRequestSender.HttpCommand], uri: Uri): Unit = {
     val probe = testKit.createTestProbe[HttpRequestSender.Result]()
-    val request = HttpRequestSender.SendRequest(HttpRequest(uri = Path), "testRequestData", probe.ref)
+    val request = HttpRequestSender.SendRequest(HttpRequest(uri = uri), "testRequestData", probe.ref)
     actor ! request
     val result = probe.expectMessageType[HttpRequestSender.SuccessResult]
     result.response.status should be(StatusCodes.Accepted)
@@ -99,7 +115,7 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
         .withStatus(StatusCodes.Accepted.intValue)
         .withBodyFile(ResponseFile)))
 
-    checkRequestSending(HttpRequestSenderConfig())
+    checkCreationAndRequestSending(HttpRequestSenderConfig())
   }
 
   it should "create a basic HTTP sender actor with a specific name" in {
@@ -118,7 +134,7 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
     val authConfig = BasicAuthConfig(WireMockSupport.UserId, Secret(WireMockSupport.Password))
     val config = HttpRequestSenderConfig(authConfig = authConfig)
 
-    checkRequestSending(config)
+    checkCreationAndRequestSending(config)
   }
 
   it should "derive a name for the Basic Auth actor" in {
@@ -145,7 +161,7 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
       Secret("someSecret"), OAuthTokenData(Token, "someRefreshToken"))
     val config = HttpRequestSenderConfig(authConfig = authConfig)
 
-    checkRequestSending(config)
+    checkCreationAndRequestSending(config)
   }
 
   it should "construct a correct request sender for the IDP to support token refresh operations" in {
@@ -182,7 +198,7 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
         .withBodyFile(ResponseFile)))
     val config = HttpRequestSenderConfig(retryAfterConfig = Some(RetryAfterConfig()))
 
-    checkRequestSending(config)
+    checkCreationAndRequestSending(config)
   }
 
   it should "derive a name for the retry after extension" in {
@@ -194,5 +210,39 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
 
     HttpRequestSenderFactoryImpl.createRequestSender(spawner, "https://test.example.org", config)
     namedActors.keys should contain only(BaseName, BaseName + HttpRequestSenderFactoryImpl.RetryAfterName)
+  }
+
+  it should "create an HTTP sender actor that supports multiple hosts" in {
+    stubFor(BasicAuthFunc(get(urlPathEqualTo(Path)))
+      .willReturn(aResponse()
+        .withStatus(StatusCodes.Accepted.intValue)
+        .withBodyFile(ResponseFile)))
+    val authConfig = BasicAuthConfig(WireMockSupport.UserId, Secret(WireMockSupport.Password))
+    val config = HttpRequestSenderConfig(authConfig = authConfig)
+    val createdSenderActors = new AtomicInteger
+    val factory: RequestActorFactory = (ctx, uri, size) => {
+      createdSenderActors.incrementAndGet()
+      MultiHostExtension.defaultRequestActorFactory(ctx, uri, size)
+    }
+
+    runWithNewServer { server =>
+      server.stubFor(BasicAuthFunc(get(urlPathEqualTo(Path)))
+        .willReturn(aResponse()
+          .withStatus(StatusCodes.Accepted.intValue)
+          .withBodyFile(ResponseFile)))
+
+      val sender = HttpRequestSenderFactoryImpl.createMultiHostRequestSender(testSpawner(), config, factory)
+      checkRequestSending(sender, serverUri(Path))
+      checkRequestSending(sender, WireMockSupport.serverUri(server, Path))
+      createdSenderActors.get() should be(2)
+    }
+  }
+
+  it should "create an HTTP sender actor that supports multiple hosts with a name" in {
+    val BaseName = "httpMultiHostSender"
+    val config = HttpRequestSenderConfig(actorName = Some(BaseName))
+
+    val sender = HttpRequestSenderFactoryImpl.createMultiHostRequestSender(testSpawner(), config)
+    sender.path.toString should endWith(BaseName)
   }
 }

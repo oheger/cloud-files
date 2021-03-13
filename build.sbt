@@ -17,8 +17,8 @@
 import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
 
 /** Definition of versions. */
-lazy val AkkaVersion = "2.6.12"
-lazy val AkkaHttpVersion = "10.2.3"
+lazy val AkkaVersion = "2.6.13"
+lazy val AkkaHttpVersion = "10.2.4"
 lazy val VersionScala213 = "2.13.5"
 lazy val VersionScala212 = "2.12.13"
 lazy val VersionScalaXml = "1.3.0"

@@ -19,12 +19,14 @@ package com.github.cloudfiles.core.http
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes, Uri}
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse, ResponseEntity, StatusCodes, Uri}
 import akka.util.Timeout
-import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
+import com.github.cloudfiles.core.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
 import com.github.cloudfiles.core.http.HttpRequestSenderSpec.TestExtension
+import org.mockito.Mockito.{never, verify}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
@@ -68,7 +70,7 @@ object HttpRequestSenderSpec {
  * Test class for ''HttpRequestSender''. This test class tests functionality,
  * which is not yet covered by the integration test.
  */
-class HttpRequestSenderSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers {
+class HttpRequestSenderSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar {
   "HttpRequestSender" should "forward a request to another request actor" in {
     val httpRequest = HttpRequest(uri = Uri("https://www.test.uri/test"))
     val response = HttpResponse(status = StatusCodes.Created)
@@ -98,5 +100,42 @@ class HttpRequestSenderSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLi
     val result = probeSender.expectMessageType[HttpRequestSender.FailedResult]
     result.request.request should be(httpRequest)
     result.cause shouldBe a[TimeoutException]
+  }
+
+  "FailedResult" should "discard the response entity for discard mode Never" in {
+    val entity = mock[ResponseEntity]
+    val response = HttpResponse(entity = entity)
+    val request = HttpRequestSender.SendRequest(HttpRequest(), null, null, DiscardEntityMode.Never)
+    val result = HttpRequestSender.FailedResult(request, FailedResponseException(response))
+
+    result.ensureResponseEntityDiscarded() should be(result)
+    verify(entity).discardBytes()
+  }
+
+  it should "discard nothing if no response is available" in {
+    val request = HttpRequestSender.SendRequest(HttpRequest(), null, null, DiscardEntityMode.Never)
+    val result = HttpRequestSender.FailedResult(request, new IllegalStateException("Crashed"))
+
+    result.ensureResponseEntityDiscarded() should be(result)
+  }
+
+  it should "not discard the response entity for discard mode Always" in {
+    val entity = mock[ResponseEntity]
+    val response = HttpResponse(entity = entity)
+    val request = HttpRequestSender.SendRequest(HttpRequest(), null, null, DiscardEntityMode.Always)
+    val result = HttpRequestSender.FailedResult(request, FailedResponseException(response))
+
+    result.ensureResponseEntityDiscarded() should be(result)
+    verify(entity, never()).discardBytes()
+  }
+
+  it should "not discard the response entity for discard mode OnFailure" in {
+    val entity = mock[ResponseEntity]
+    val response = HttpResponse(entity = entity)
+    val request = HttpRequestSender.SendRequest(HttpRequest(), null, null, DiscardEntityMode.OnFailure)
+    val result = HttpRequestSender.FailedResult(request, FailedResponseException(response))
+
+    result.ensureResponseEntityDiscarded() should be(result)
+    verify(entity, never()).discardBytes()
   }
 }

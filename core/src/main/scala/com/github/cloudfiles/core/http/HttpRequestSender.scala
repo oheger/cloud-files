@@ -21,6 +21,7 @@ import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
+import akka.stream.Materializer
 import akka.util.Timeout
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 
@@ -129,7 +130,27 @@ object HttpRequestSender {
    * @param request the original request
    * @param cause   the exception causing the request to fail
    */
-  final case class FailedResult(override val request: SendRequest, cause: Throwable) extends Result
+  final case class FailedResult(override val request: SendRequest, cause: Throwable) extends Result {
+    /**
+     * Discards the source of the response entity if this is necessary and
+     * possible. This function checks whether the ''cause'' of this failed
+     * result is a [[FailedResponseException]]. If this is the case and if the
+     * discard entity mode of the request is ''NEVER'', the entity is
+     * discarded. (For other discard modes, this should have been done already
+     * by the actor that produced this failed result.)
+     *
+     * @param mat the object to materialize streams
+     * @return this object
+     */
+    def ensureResponseEntityDiscarded()(implicit mat: Materializer): FailedResult = {
+      cause match {
+        case FailedResponseException(response) if request.discardEntityMode == DiscardEntityMode.Never =>
+          response.entity.discardBytes()
+        case _ => // nothing to do
+      }
+      this
+    }
+  }
 
   /**
    * An exception class indicating a response with a non-success status code.

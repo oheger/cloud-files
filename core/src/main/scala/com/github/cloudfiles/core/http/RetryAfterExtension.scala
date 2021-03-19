@@ -17,7 +17,7 @@
 package com.github.cloudfiles.core.http
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.http.scaladsl.model.headers.{RetryAfterDateTime, RetryAfterDuration, `Retry-After`}
 import akka.http.scaladsl.model.{DateTime, HttpResponse, StatusCodes}
 import com.github.cloudfiles.core.http.HttpRequestSender.{FailedResponseException, FailedResult, ForwardedResult}
@@ -64,12 +64,14 @@ object RetryAfterExtension {
             config: RetryAfterConfig = RetryAfterConfig()): Behavior[HttpRequestSender.HttpCommand] =
     Behaviors.receivePartial {
       case (context, request: HttpRequestSender.SendRequest) =>
-        HttpRequestSender.forwardRequest(context, requestSender, request.request, request)
+        HttpRequestSender.forwardRequest(context, requestSender, request.request, request, request.discardEntityMode)
         Behaviors.same
 
-      case (context, ForwardedResult(FailedResult(HttpRequestSender.SendRequest(request,
+      case (context, ForwardedResult(result@FailedResult(HttpRequestSender.SendRequest(request,
       data: HttpRequestSender.SendRequest, _, _), cause: FailedResponseException)))
         if cause.response.status == StatusCodes.TooManyRequests =>
+        implicit val mat: ActorSystem[Nothing] = context.system
+        result.ensureResponseEntityDiscarded()
         val delay = delayForRetry(cause.response, config.minimumDelay)
         context.scheduleOnce(delay, context.self, data)
         context.log.info("Received status 429 for {} {}. Retrying after {}", request.method, request.uri, delay)

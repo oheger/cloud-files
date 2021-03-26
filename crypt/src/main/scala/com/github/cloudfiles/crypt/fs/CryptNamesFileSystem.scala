@@ -70,9 +70,9 @@ object CryptNamesFileSystem {
  */
 class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]]
 (override val delegate: ExtensibleFileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
- algorithm: CryptAlgorithm,
- keyEncrypt: Key,
- keyDecrypt: Key)
+ val algorithm: CryptAlgorithm,
+ val keyEncrypt: Key,
+ val keyDecrypt: Key)
 (implicit secRandom: SecureRandom)
   extends DelegateFileSystem[ID, FILE, FOLDER] {
 

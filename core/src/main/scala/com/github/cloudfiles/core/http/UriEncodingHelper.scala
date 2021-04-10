@@ -30,7 +30,7 @@ import scala.annotation.tailrec
  */
 object UriEncodingHelper {
   /** Constant for the path separator character in URIs. */
-  val UriSeparator = "/"
+  final val UriSeparator = "/"
 
   /**
    * Constant for a plus character. This character is problematic because it
@@ -48,6 +48,9 @@ object UriEncodingHelper {
 
   /** Name of the charset to be used for encoding/decoding. */
   private val EncodeCharset = StandardCharsets.UTF_8.name()
+
+  /** The sequence indicating the end of the URI schema. */
+  private val SchemaPrefix = "://"
 
   /**
    * URL-encodes the specified string. This is very similar to what Java's
@@ -170,7 +173,9 @@ object UriEncodingHelper {
    * URI is split at this position, and both strings are returned. The
    * separator is not contained in any of these components, i.e. the parent
    * URI does not end with a separator nor does the name start with one. If
-   * the URI has no parent, the resulting parent string is empty.
+   * the URI has no parent, the resulting parent string is empty. If the URI
+   * just consists of the scheme and the authorization, it is returned in the
+   * parent string, and the name is empty.
    *
    * @param uri the URI to be split
    * @return a tuple with the parent URI and the name component
@@ -179,7 +184,7 @@ object UriEncodingHelper {
     val canonicalUri = removeTrailingSeparator(uri)
     val pos = findNameComponentPos(canonicalUri)
     if (pos >= 0) (canonicalUri.substring(0, pos), canonicalUri.substring(pos + 1))
-    else ("", canonicalUri)
+    else if (uri.contains(SchemaPrefix)) (canonicalUri, "") else ("", canonicalUri)
   }
 
   /**
@@ -286,6 +291,13 @@ object UriEncodingHelper {
    * @param uri the URI
    * @return the position of the name component or -1
    */
-  private def findNameComponentPos(uri: String): Int =
-    uri lastIndexOf UriSeparator
+  private def findNameComponentPos(uri: String): Int = {
+    val lastSeparatorPos = uri lastIndexOf UriSeparator
+
+    if (lastSeparatorPos >= 0) {
+      val schemaPos = uri.indexOf(SchemaPrefix)
+      if (schemaPos >= 0 && lastSeparatorPos - schemaPos <= SchemaPrefix.length) -1
+      else lastSeparatorPos
+    } else lastSeparatorPos
+  }
 }

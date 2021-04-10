@@ -170,6 +170,14 @@ class UriEncodingHelperSpec extends AnyFlatSpec with Matchers {
     n should be(Name)
   }
 
+  it should "handle a split operation if the URI starts with a scheme, but has no name" in {
+    val Parent = "https://a.test.uri"
+
+    val (p, n) = UriEncodingHelper splitParent Parent + "/"
+    n should be("")
+    p should be(Parent)
+  }
+
   it should "split a URI into its components" in {
     val uriComponents = Array("this", "is", "a", "uri")
     val uri = uriComponents.mkString(UriEncodingHelper.UriSeparator)

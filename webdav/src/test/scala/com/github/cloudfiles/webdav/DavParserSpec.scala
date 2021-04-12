@@ -67,7 +67,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     folder.description should be(null)
     folder.createdAt should be(toInstant("2018-08-27T18:38:25Z"))
     folder.lastModifiedAt should be(toInstant("2018-08-28T19:39:26Z"))
-    folder.name should be("subFolder(1)")
+    folder.name should be("subFolder (1)")
     folder.attributes.values(AttributeKey(NS_DAV, "getcontentlanguage")) should be("de")
     folder.attributes.values(AttributeKey(NS_DAV, "getetag")) should be("AAABZYIMQzwAAAFlggunMA")
     folder.attributes.values.keys should not contain AttributeKey(NS_DAV, "displayname")

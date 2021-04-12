@@ -21,6 +21,7 @@ import akka.http.scaladsl.model.Uri
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
 import com.github.cloudfiles.core.Model
+import com.github.cloudfiles.core.http.UriEncodingHelper
 import org.slf4j.LoggerFactory
 
 import java.io.ByteArrayInputStream
@@ -173,7 +174,7 @@ object DavParser {
       val propNode = (node \ ElemPropStat \ ElemProp).head
       val attributes = extractElementAttributes(propNode)
 
-      val name = attributes.getOrElse(AttrName, elemUri.path.reverse.head.toString)
+      val name = attributes.getOrElse(AttrName, nameFromUri(elemUri))
       val createdAt = parseTimeAttribute(attributes.getOrElse(AttrCreatedAt, UndefinedDate.toString))
       val lastModified = parseTimeAttribute(attributes.getOrElse(AttrModifiedAt, UndefinedDate.toString))
       val desc = (optDescriptionKey flatMap attributes.get).orNull
@@ -210,6 +211,21 @@ object DavParser {
                                          optDescriptionKey: Option[DavModel.AttributeKey]): DavModel.Attributes = {
     val stdAttributes = optDescriptionKey.map(StandardAttributes + _) getOrElse StandardAttributes
     DavModel.Attributes(attributes.filterNot(e => stdAttributes.contains(e._1)))
+  }
+
+  /**
+   * Extracts an element name from its URI. The name is the last component of
+   * this URI, even if it ends on a slash.
+   *
+   * @param uri the URI
+   * @return the element name from this URI
+   */
+  private def nameFromUri(uri: Uri): String = {
+    val name = UriEncodingHelper.decode(UriEncodingHelper.splitParent(uri.path.toString())._2)
+    if (name.isEmpty) {
+      throw new IllegalArgumentException(s"Cannot extract name from URI '$uri'.")
+    }
+    name
   }
 
   /**

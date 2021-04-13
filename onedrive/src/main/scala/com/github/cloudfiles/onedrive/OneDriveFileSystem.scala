@@ -169,7 +169,7 @@ object OneDriveFileSystem {
  *
  * @param config the configuration
  */
-class OneDriveFileSystem(config: OneDriveConfig)
+class OneDriveFileSystem(val config: OneDriveConfig)
   extends ExtensibleFileSystem[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder,
     Model.FolderContent[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder]] {
 

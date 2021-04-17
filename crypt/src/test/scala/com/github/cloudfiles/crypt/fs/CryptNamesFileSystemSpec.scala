@@ -21,73 +21,10 @@ import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, Model}
-import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
-import com.github.cloudfiles.crypt.service.CryptService
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
-
-import java.security.SecureRandom
-
-object CryptNamesFileSystemSpec {
-  /**
-   * Generates the ID of a test file based on the given index.
-   *
-   * @param idx the index
-   * @return the ID of this test file
-   */
-  private def fileID(idx: Int): String = "file_" + idx
-
-  /**
-   * Generates the name of a file based on the given index.
-   *
-   * @param idx the index
-   * @return the name of this test file
-   */
-  private def fileName(idx: Int): String = s"testFile$idx.txt"
-
-  /**
-   * Generates the ID of a test folder based on the given index.
-   *
-   * @param idx the index
-   * @return the ID of this test folder
-   */
-  private def folderID(idx: Int): String = "folder_" + idx
-
-  /**
-   * Generates the name of a test folder based on the given index.
-   *
-   * @param idx the index
-   * @return the name of this test folder
-   */
-  private def folderName(idx: Int): String = "testFolder" + idx
-
-  /**
-   * Initializes the given mock of a file system element to return the
-   * properties specified.
-   *
-   * @param elem the mock for an element
-   * @param id   the ID of this element
-   * @param name the name of this element
-   * @tparam A the type of the element
-   * @return the initialized mock
-   */
-  private def initMock[A <: Model.Element[String]](elem: A, id: String, name: String): A = {
-    when(elem.id).thenReturn(id)
-    when(elem.name).thenReturn(name)
-    elem
-  }
-
-  /**
-   * Returns the encrypted form of the given name using the test algorithm.
-   *
-   * @param name the name to encrypt
-   * @return the encrypted name
-   */
-  private def encryptName(name: String): String =
-    CryptService.encodeBase64(ShiftCryptAlgorithm.encrypt(ByteString(name)))
-}
 
 /**
  * Test class for ''CryptNamesFileSystem''.
@@ -96,7 +33,6 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
   with AsyncTestHelper {
 
   import CryptFileSystemTestHelper._
-  import com.github.cloudfiles.crypt.fs.CryptNamesFileSystemSpec._
 
   /**
    * Creates a new crypt file system instance for a test case.
@@ -105,9 +41,7 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
    */
   private def createCryptFileSystem(): CryptNamesFileSystem[String, FileType, FolderType] = {
     val delegate = mock[ExtensibleFileSystem[String, FileType, FolderType, ContentType]]
-    val config = CryptConfig(ShiftCryptAlgorithm, ShiftCryptAlgorithm.encryptKey, ShiftCryptAlgorithm.decryptKey,
-      new SecureRandom)
-    new CryptNamesFileSystem[String, FileType, FolderType](delegate, config)
+    new CryptNamesFileSystem[String, FileType, FolderType](delegate, DefaultCryptConfig)
   }
 
   /**

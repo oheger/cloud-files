@@ -31,8 +31,6 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
-import java.security.SecureRandom
-
 /**
  * Test class for ''CryptContentFileSystem''.
  */
@@ -48,9 +46,7 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
    */
   private def createCryptFileSystem(): CryptContentFileSystem[String, FileType, FolderType] = {
     val delegate = mock[ExtensibleFileSystem[String, FileType, FolderType, ContentType]]
-    val config = CryptConfig(ShiftCryptAlgorithm, ShiftCryptAlgorithm.encryptKey, ShiftCryptAlgorithm.decryptKey,
-      new SecureRandom)
-    new CryptContentFileSystem[String, FileType, FolderType](delegate, config)
+    new CryptContentFileSystem[String, FileType, FolderType](delegate, DefaultCryptConfig)
   }
 
   /**

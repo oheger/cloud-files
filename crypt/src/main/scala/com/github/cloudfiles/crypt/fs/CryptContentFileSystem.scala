@@ -26,7 +26,7 @@ import com.github.cloudfiles.core.delegate.{DelegateFileSystem, ElementPatchSpec
 import com.github.cloudfiles.crypt.alg.CryptAlgorithm
 import com.github.cloudfiles.crypt.service.CryptService
 
-import java.security.{Key, SecureRandom}
+import java.security.SecureRandom
 
 /**
  * A file system extension that adds support for encrypting the content of
@@ -38,21 +38,14 @@ import java.security.{Key, SecureRandom}
  * Analogously, on download of a file, the source returned by this file system
  * performs decryption transparently.
  *
- * @param delegate   the underlying file system
- * @param algorithm  the ''CryptAlgorithm'' to be used
- * @param keyEncrypt the key for encryption
- * @param keyDecrypt the key for decryption
- * @param secRandom  the random object
+ * @param delegate the underlying file system
+ * @param config   the cryptography-related configuration
  * @tparam ID     the type of element IDs
  * @tparam FILE   the type to represent a file
  * @tparam FOLDER the type to represent a folder
  */
 class CryptContentFileSystem[ID, FILE <: Model.File[ID], FOLDER](override val delegate: ExtensibleFileSystem[ID, FILE,
-  FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
-                                                                 val algorithm: CryptAlgorithm,
-                                                                 val keyEncrypt: Key,
-                                                                 val keyDecrypt: Key)
-                                                                (implicit secRandom: SecureRandom)
+  FOLDER, Model.FolderContent[ID, FILE, FOLDER]], val config: CryptConfig)
   extends DelegateFileSystem[ID, FILE, FOLDER] {
   /**
    * @inheritdoc This implementation makes sure that the correct size of the
@@ -78,7 +71,7 @@ class CryptContentFileSystem[ID, FILE <: Model.File[ID], FOLDER](override val de
    */
   override def downloadFile(fileID: ID)(implicit system: ActorSystem[_]): Operation[HttpEntity] =
     super.downloadFile(fileID) map { entity =>
-      HttpEntity(entity.contentType, CryptService.decryptSource(algorithm, keyDecrypt, entity.dataBytes))
+      HttpEntity(entity.contentType, CryptService.decryptSource(config.algorithm, config.keyDecrypt, entity.dataBytes))
     }
 
   /**
@@ -89,7 +82,7 @@ class CryptContentFileSystem[ID, FILE <: Model.File[ID], FOLDER](override val de
   override def createFile(parent: ID, file: Model.File[ID], content: Source[ByteString, Any])
                          (implicit system: ActorSystem[_]): Operation[ID] = {
     val patchedFile = patchEncryptFileSize(file)
-    val cryptSource = CryptService.encryptSource(algorithm, keyEncrypt, content)
+    val cryptSource = CryptService.encryptSource(config.algorithm, config.keyEncrypt, content)
     super.createFile(parent, patchedFile, cryptSource)
   }
 
@@ -100,8 +93,8 @@ class CryptContentFileSystem[ID, FILE <: Model.File[ID], FOLDER](override val de
    */
   override def updateFileContent(fileID: ID, size: Long, content: Source[ByteString, Any])
                                 (implicit system: ActorSystem[_]): Operation[Unit] = {
-    val cryptSize = algorithm.encryptedSize(size)
-    val cryptSource = CryptService.encryptSource(algorithm, keyEncrypt, content)
+    val cryptSize = config.algorithm.encryptedSize(size)
+    val cryptSource = CryptService.encryptSource(config.algorithm, config.keyEncrypt, content)
     super.updateFileContent(fileID, cryptSize, cryptSource)
   }
 
@@ -113,7 +106,7 @@ class CryptContentFileSystem[ID, FILE <: Model.File[ID], FOLDER](override val de
    * @return the file with the patched size
    */
   private def patchDecryptFileSize(file: FILE): FILE =
-    patchFileSize(file, algorithm.decryptedSize(file.size))
+    patchFileSize(file, config.algorithm.decryptedSize(file.size))
 
   /**
    * Patches the size of the given file to the correct size of the encrypted
@@ -123,7 +116,7 @@ class CryptContentFileSystem[ID, FILE <: Model.File[ID], FOLDER](override val de
    * @return the file with the patched size
    */
   private def patchEncryptFileSize(file: Model.File[ID]): FILE =
-    patchFileSize(file, algorithm.encryptedSize(file.size))
+    patchFileSize(file, config.algorithm.encryptedSize(file.size))
 
   /**
    * Invokes the delegate file system to created a patched file with the size
@@ -135,4 +128,11 @@ class CryptContentFileSystem[ID, FILE <: Model.File[ID], FOLDER](override val de
    */
   private def patchFileSize(file: Model.File[ID], newSize: Long): FILE =
     delegate.patchFile(file, ElementPatchSpec(patchSize = Some(newSize)))
+
+  /**
+   * Returns the source of randomness in implicit scope.
+   *
+   * @return the ''SecureRandom'' object
+   */
+  private implicit def secRandom: SecureRandom = config.secRandom
 }

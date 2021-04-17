@@ -26,7 +26,7 @@ import com.github.cloudfiles.core.http.UriEncodingHelper
 import com.github.cloudfiles.crypt.alg.CryptAlgorithm
 import com.github.cloudfiles.crypt.service.CryptService
 
-import java.security.{Key, SecureRandom}
+import java.security.SecureRandom
 import scala.concurrent.Future
 
 object CryptNamesFileSystem {
@@ -59,21 +59,15 @@ object CryptNamesFileSystem {
  * component can be resolved, the same operation has to be done for the next
  * path component until all components have been resolved.
  *
- * @param delegate   the underlying file system
- * @param algorithm  the ''CryptAlgorithm'' to be used
- * @param keyEncrypt the key for encryption
- * @param keyDecrypt the key for decryption
- * @param secRandom  the random object
+ * @param delegate the underlying file system
+ * @param config   the cryptography-related configuration
  * @tparam ID     the type of element IDs
  * @tparam FILE   the type to represent a file
  * @tparam FOLDER the type to represent a folder
  */
 class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]]
 (override val delegate: ExtensibleFileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
- val algorithm: CryptAlgorithm,
- val keyEncrypt: Key,
- val keyDecrypt: Key)
-(implicit secRandom: SecureRandom)
+ val config: CryptConfig)
   extends DelegateFileSystem[ID, FILE, FOLDER] {
 
   import CryptNamesFileSystem._
@@ -201,7 +195,7 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
    * @return the decrypted name of this element
    */
   private def decryptElementName(elem: Model.Element[ID]): String =
-    CryptService.decryptTextFromBase64(algorithm, keyDecrypt, elem.name)
+    CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, elem.name)
 
   /**
    * Returns the encrypted name of the passed in element.
@@ -210,7 +204,7 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
    * @return the encrypted name of this element
    */
   private def encryptElementName(elem: Model.Element[ID]): String =
-    CryptService.encryptTextToBase64(algorithm, keyEncrypt, elem.name)
+    CryptService.encryptTextToBase64(config.algorithm, config.keyEncrypt, elem.name)
 
   /**
    * Invokes the underlying file system to patch the name of a folder.
@@ -250,4 +244,11 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
    */
   private def fileWithDecryptedName(file: FILE): FILE =
     patchFile(file, decryptElementName(file))
+
+  /**
+   * Returns the source of randomness in implicit scope.
+   *
+   * @return the ''SecureRandom'' object
+   */
+  private implicit def secRandom: SecureRandom = config.secRandom
 }

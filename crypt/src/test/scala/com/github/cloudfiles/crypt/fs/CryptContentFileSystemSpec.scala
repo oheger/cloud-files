@@ -47,10 +47,10 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
    * @return the new file system test instance
    */
   private def createCryptFileSystem(): CryptContentFileSystem[String, FileType, FolderType] = {
-    implicit val secRandom: SecureRandom = new SecureRandom
     val delegate = mock[ExtensibleFileSystem[String, FileType, FolderType, ContentType]]
-    new CryptContentFileSystem[String, FileType, FolderType](delegate, ShiftCryptAlgorithm,
-      ShiftCryptAlgorithm.encryptKey, ShiftCryptAlgorithm.decryptKey)
+    val config = CryptConfig(ShiftCryptAlgorithm, ShiftCryptAlgorithm.encryptKey, ShiftCryptAlgorithm.decryptKey,
+      new SecureRandom)
+    new CryptContentFileSystem[String, FileType, FolderType](delegate, config)
   }
 
   /**

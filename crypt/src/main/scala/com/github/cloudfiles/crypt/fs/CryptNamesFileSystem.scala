@@ -24,10 +24,10 @@ import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{DelegateFileSystem, ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.UriEncodingHelper
 import com.github.cloudfiles.crypt.alg.CryptAlgorithm
+import com.github.cloudfiles.crypt.fs.resolver.{PathComponentsResolver, PathResolver}
 import com.github.cloudfiles.crypt.service.CryptService
 
 import java.security.SecureRandom
-import scala.concurrent.Future
 
 object CryptNamesFileSystem {
   /**
@@ -51,23 +51,24 @@ object CryptNamesFileSystem {
  * the names and content of files gets encrypted, which is a rather secure
  * storage form.
  *
- * This implementation assumes that encrypting a string twice does not
- * necessarily yield the same result. This makes the mechanism to resolve a
- * path harder because the single path components cannot be simply encrypted.
- * Rather, starting from the file system root, the contents of folders have to
- * be obtained, decrypted, and searched for the current path component. If the
- * component can be resolved, the same operation has to be done for the next
- * path component until all components have been resolved.
+ * For file systems with encrypted names, resolving a path becomes difficult,
+ * especially if encrypting a string twice with the algorithm in use does not
+ * necessarily yield the same result. To be flexible, such operations are
+ * delegated to a [[PathResolver]] object, which can be passed to the
+ * constructor. It is then possible to choose a specific resolver
+ * implementation that fits the usage scheme of the file system best.
  *
  * @param delegate the underlying file system
  * @param config   the cryptography-related configuration
+ * @param resolver the object that handles path resolve operations
  * @tparam ID     the type of element IDs
  * @tparam FILE   the type to represent a file
  * @tparam FOLDER the type to represent a folder
  */
 class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]]
 (override val delegate: ExtensibleFileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
- val config: CryptConfig)
+ val config: CryptConfig,
+ resolver: PathResolver[ID, FILE, FOLDER] = new PathComponentsResolver[ID, FILE, FOLDER])
   extends DelegateFileSystem[ID, FILE, FOLDER] {
 
   import CryptNamesFileSystem._
@@ -135,58 +136,8 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
    *             first, so that they can be matched against the path
    *             components in the given sequence.
    */
-  override def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[ID] = {
-    val root = delegate.rootID
-    if (components.isEmpty) root
-    else root flatMap (resolveNextPathComponent(_, components))
-  }
-
-  /**
-   * Tries to resolve a path component in the content of the folder with the
-   * given ID. This function is invoked recursively until all path components
-   * have been resolved or an unresolvable component is encountered. In the
-   * latter case, the resulting ''Future'' fails with an
-   * ''IllegalArgumentException'' exception whose message lists the components
-   * that could not be resolved.
-   *
-   * @param folderID   the ID of the current folder
-   * @param components the remaining components to be resolved
-   * @param system     the actor system
-   * @return an ''Operation'' with the ID of the resolved element
-   */
-  private def resolveNextPathComponent(folderID: ID, components: Seq[String])
-                                      (implicit system: ActorSystem[_]): Operation[ID] =
-    delegate.folderContent(folderID) flatMap { content =>
-      val optId = findPathComponent(content.folders, components.head)
-        .orElse(if (components.size == 1) findPathComponent(content.files, components.head) else None)
-      optId.fold(failedResolveOperation(components)) { id =>
-        if (components.size == 1) Operation(_ => Future.successful(id))
-        else resolveNextPathComponent(id, components.tail)
-      }
-    }
-
-  /**
-   * Returns an ''Operation'' to report a failure when resolving path
-   * components.
-   *
-   * @param components the components that could not be resolved
-   * @return the ''Operation'' producing a failed ''Future''
-   */
-  private def failedResolveOperation(components: Seq[String]): Operation[ID] = Operation { _ =>
-    Future.failed(
-      new IllegalArgumentException("Could not resolve all path components. Remaining components: " + components))
-  }
-
-  /**
-   * Looks up an element name in an encrypted map with folder content elements.
-   *
-   * @param elements the map with encrypted elements
-   * @param name     the name to be searched for
-   * @tparam A the element type of the map
-   * @return an ''Option'' with the ID of the element that was found
-   */
-  private def findPathComponent[A <: Model.Element[ID]](elements: Map[ID, A], name: String): Option[ID] =
-    elements.find(e => decryptElementName(e._2) == name) map (_._1)
+  override def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[ID] =
+    resolver.resolve(components, delegate, config)
 
   /**
    * Returns the decrypted name of the passed in element.

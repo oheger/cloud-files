@@ -23,7 +23,7 @@ import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, Model}
 import com.github.cloudfiles.crypt.fs.resolver.PathResolver
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
@@ -165,5 +165,13 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     when(resolver.resolve(components, fs.delegate, DefaultCryptConfig)).thenReturn(operation)
 
     fs.resolvePath(Path) should be(operation)
+  }
+
+  it should "close the resolver in its close() implementation" in {
+    val resolver = mock[PathResolver[String, FileType, FolderType]]
+    val fs = createCryptFileSystem(optResolver = Some(resolver))
+
+    fs.close()
+    verify(resolver).close()
   }
 }

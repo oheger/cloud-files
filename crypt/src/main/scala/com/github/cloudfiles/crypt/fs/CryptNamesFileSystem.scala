@@ -140,6 +140,14 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
     resolver.resolve(components, delegate, config)
 
   /**
+   * @inheritdoc This implementation invokes the ''close()'' function of the
+   *             [[PathResolver]] used by this instance.
+   */
+  override def close(): Unit = {
+    resolver.close()
+  }
+
+  /**
    * Returns the decrypted name of the passed in element.
    *
    * @param elem the element

@@ -23,7 +23,7 @@ import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.DelegateFileSystemSpec.{FileType, FolderContentType, FolderType}
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
@@ -215,5 +215,12 @@ class DelegateFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
     when(fs.delegate.patchFile(srcFile, spec)).thenReturn(patchedFile)
 
     fs.patchFile(srcFile, spec) should be(patchedFile)
+  }
+
+  it should "close the underlying FileSystem" in {
+    val fs = createDelegateFileSystem()
+
+    fs.close()
+    verify(fs.delegate).close()
   }
 }

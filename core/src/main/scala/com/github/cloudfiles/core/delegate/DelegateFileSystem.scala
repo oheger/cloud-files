@@ -90,4 +90,8 @@ trait DelegateFileSystem[ID, FILE, FOLDER]
 
   override def deleteFile(fileID: ID)(implicit system: ActorSystem[_]): Operation[Unit] =
     delegate.deleteFile(fileID)
+
+  override def close(): Unit = {
+    delegate.close()
+  }
 }

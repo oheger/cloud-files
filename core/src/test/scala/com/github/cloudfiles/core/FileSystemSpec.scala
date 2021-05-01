@@ -214,4 +214,11 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     val result = futureResult(op.run(requestActor))
     result should be(expectedPath)
   }
+
+  it should "provide an empty close() implementation" in {
+    // We can only check that no exception is thrown.
+    val fs = new FileSystemImpl
+
+    fs.close()
+  }
 }

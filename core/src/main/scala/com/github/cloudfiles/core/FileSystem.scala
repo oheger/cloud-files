@@ -65,12 +65,18 @@ object FileSystem {
  * result. This is indicated by the [[Operation]] result type. [[Operation]] is
  * a monad, so multiple operations can be composed.
  *
+ * This trait extends ''AutoClosable'' to support a mechanism to clean up
+ * resources in a safe way. It is, however, expected that most concrete
+ * implementations are stateless and thus do not require such a mechanism.
+ * Therefore, there is an empty default implementation of the ''close()''
+ * method.
+ *
  * @tparam ID             the type representing the ID of a file or folder
  * @tparam FILE           the type representing a file
  * @tparam FOLDER         the type representing a folder
  * @tparam FOLDER_CONTENT the type representing the content of a folder
  */
-trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
+trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] extends AutoCloseable {
   /**
    * Resolves the ID of an element (file or folder) that is specified by its
    * path. This function is analogous to ''resolvePathComponents()'', but the
@@ -277,6 +283,12 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] {
       rootId <- rootID
       content <- folderContent(rootId)
     } yield content
+
+  /**
+   * Frees up resources used by this object when it is no longer needed. This
+   * base implementation does nothing.
+   */
+  override def close(): Unit = {}
 
   /**
    * Helper function to obtain an implicit execution context from an implicit

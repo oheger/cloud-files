@@ -153,4 +153,11 @@ class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatS
       resolver.resolve(components, fs, DefaultCryptConfig)))
     ex.getMessage should include(components.tail.toString())
   }
+
+  it should "have an empty close() function" in {
+    val resolver = createResolver()
+
+    // We can only test that no exception is thrown.
+    resolver.close()
+  }
 }

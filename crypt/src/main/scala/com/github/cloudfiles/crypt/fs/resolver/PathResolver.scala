@@ -35,11 +35,17 @@ import com.github.cloudfiles.crypt.fs.CryptConfig
  * multiple implementations with different characteristics that support
  * concrete use cases better or worse.
  *
+ * If a concrete ''PathResolver'' implementation requires some state to be
+ * managed, e.g. when a kind of cache is used, it may be necessary to free
+ * resources when the resolver is no longer needed. To make this possible, this
+ * trait extends ''AutoClosable''. It also provides an empty default
+ * implementation of the ''close()'' method.
+ *
  * @tparam ID     the type of IDs used by the file system
  * @tparam FILE   the type of files
  * @tparam FOLDER the type of folders
  */
-trait PathResolver[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]] {
+trait PathResolver[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]] extends AutoCloseable {
   /**
    * Resolves a path (specified as a sequence of path components) against a
    * file system. If this operation is successful, a ''Future'' with the ID of
@@ -53,4 +59,10 @@ trait PathResolver[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]] {
    */
   def resolve(components: Seq[String], fs: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
               cryptConfig: CryptConfig)(implicit system: ActorSystem[_]): Operation[ID]
+
+  /**
+   * Frees up resources used by this object when it is no longer needed. This
+   * base implementation does nothing.
+   */
+  override def close(): Unit = {}
 }

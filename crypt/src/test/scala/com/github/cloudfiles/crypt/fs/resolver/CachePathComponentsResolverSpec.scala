@@ -17,11 +17,13 @@
 package com.github.cloudfiles.crypt.fs.resolver
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior, Props}
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.factory.Spawner
 import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, Model}
+import com.github.cloudfiles.crypt.fs.resolver.CachePathComponentsResolver.PathLookupCommand
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -47,6 +49,45 @@ object CachePathComponentsResolverSpec {
    */
   private def stubFutureOperation[R](result: Future[R]): Operation[R] =
     Operation { _ => result }
+
+  /**
+   * The base trait for commands related to death watch of actors.
+   */
+  private sealed trait WatchCommand
+
+  /**
+   * A command that triggers watching of another actor. When this other actor
+   * is terminated, the passed in actor is sent a '''true''' message.
+   *
+   * @param actor    the actor to watch
+   * @param notifier the actor to notify on termination of the watched actor
+   */
+  private case class StartWatching(actor: ActorRef[_], notifier: ActorRef[Boolean]) extends WatchCommand
+
+  /**
+   * A message that indicates that a watched actor has terminated.
+   *
+   * @param notifier the actor to notify on termination of the watched actor
+   */
+  private case class WatchTerminated(notifier: ActorRef[Boolean]) extends WatchCommand
+
+  /**
+   * Returns the behavior of an actor that sets a flag when it is triggered.
+   * This is used to implement death watch on other actors.
+   *
+   * @return the behavior to set a flag
+   */
+  private def watchActor(): Behavior[WatchCommand] = Behaviors.receivePartial {
+    case (ctx, StartWatching(actor, notifier)) =>
+      ctx.watchWith(actor, WatchTerminated(notifier))
+      ctx.log.info("Watching {} for termination.", actor)
+      Behaviors.same
+
+    case (ctx, WatchTerminated(notifier)) =>
+      ctx.log.info("Watched actor terminated.")
+      notifier ! true
+      Behaviors.stopped
+  }
 }
 
 /**
@@ -57,6 +98,9 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
   import CachePathComponentsResolverSpec._
   import com.github.cloudfiles.crypt.fs.CryptFileSystemTestHelper._
+
+  /** Type for a factory to create a test resolver. */
+  private type ResolverFactory = () => PathResolver[String, FileType, FolderType]
 
   /**
    * Creates a mock for a file with the given properties.
@@ -97,6 +141,45 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
       .toMap
     Model.FolderContent(id, files, folders)
   }
+
+  /**
+   * Checks whether the given actor terminates within the test timeout.
+   *
+   * @param actor the actor to check
+   */
+  private def expectTerminated(actor: ActorRef[_]): Unit = {
+    val probe = testKit.createTestProbe[Boolean]()
+    val watcher = testKit.spawn(watchActor())
+    watcher ! StartWatching(actor, probe.ref)
+
+    probe.expectMessage(true)
+  }
+
+  /**
+   * Creates a test resolver using a spawner.
+   *
+   * @return the test resolver instance
+   */
+  private def createResolverFromSpawner(): PathResolver[String, FileType, FolderType] = {
+    val ActorName = "MyTestResolverActor"
+    val spawner = new Spawner {
+      override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] = {
+        optName should be(Some(ActorName))
+        testKit.spawn(behavior)
+      }
+    }
+
+    CachePathComponentsResolver[String, FileType, FolderType](spawner, CacheSize, Some(ActorName))
+  }
+
+  /**
+   * Creates a test resolver using the given resolver actor.
+   *
+   * @param actor the resolver actor
+   * @return the test resolver instance
+   */
+  private def createResolverFromActor(actor: ActorRef[PathLookupCommand[String, FileType, FolderType]]):
+  ResolverFactory = () => CachePathComponentsResolver[String, FileType, FolderType](actor)
 
   "CachePathComponentsResolver" should "resolve an element in the root folder" in {
     val rootContent = createFolderContent(RootID)
@@ -235,10 +318,31 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
       .resolveAndExpect(components, fileID(10))
   }
 
+  it should "stop the resolver actor in its close() function in initialization phase" in {
+    val resolverActor =
+      testKit.spawn(CachePathComponentsResolver.pathResolverActor[String, FileType, FolderType](CacheSize))
+    val helper = new ResolverWithActorTestHelper(resolverActor)
+
+    helper.closeResolver()
+    expectTerminated(resolverActor)
+  }
+
+  it should "stop the resolver actor in its close() function in request processing phase" in {
+    val resolverActor =
+      testKit.spawn(CachePathComponentsResolver.pathResolverActor[String, FileType, FolderType](CacheSize))
+    val helper = new ResolverWithActorTestHelper(resolverActor)
+
+    helper.prepareRootID()
+      .prepareFolderContent(createFolderContent(RootID))
+      .resolveAndExpect(Seq(fileName(1)), fileID(1))
+      .closeResolver()
+    expectTerminated(resolverActor)
+  }
+
   /**
-   * A test helper class managing a resolver to test and its dependencies.
+   * A base test helper class managing a resolver to test and its dependencies.
    */
-  private class ResolverTestHelper {
+  private abstract class ResolverTestHelperBase(factory: ResolverFactory) {
     /** The file system mock. */
     private val fileSystem = createFileSystem()
 
@@ -250,7 +354,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
     private val httpActor = testKit.spawn(HttpRequestSender("https://not-used.example.org"))
 
     /** The resolver to be tested. */
-    private val resolver = createResolver()
+    private val resolver = factory()
 
     /**
      * Prepares the mock for the ''FileSystem'' to return an operation that
@@ -259,7 +363,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
      * @param futID the ''Future'' with the ID to return
      * @return this test helper
      */
-    def prepareRootID(futID: Future[String] = Future.successful(RootID)): ResolverTestHelper = {
+    def prepareRootID(futID: Future[String] = Future.successful(RootID)): ResolverTestHelperBase = {
       when(fileSystem.rootID).thenReturn(stubFutureOperation(futID))
       this
     }
@@ -272,7 +376,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
      * @param content the content to be returned
      * @return this test helper
      */
-    def prepareFolderContent(content: Model.FolderContent[String, FileType, FolderType]): ResolverTestHelper = {
+    def prepareFolderContent(content: Model.FolderContent[String, FileType, FolderType]): ResolverTestHelperBase = {
       when(fileSystem.folderContent(content.folderID)).thenReturn(stubOperation(content))
       this
     }
@@ -287,7 +391,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
      */
     def prepareFolderContentFuture(folderID: String,
                                    futContent: Future[Model.FolderContent[String, FileType, FolderType]]):
-    ResolverTestHelper = {
+    ResolverTestHelperBase = {
       when(fileSystem.folderContent(folderID)).thenReturn(stubFutureOperation(futContent))
       this
     }
@@ -309,7 +413,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
      * @param expID      the expected resulting ID
      * @return this test helper
      */
-    def resolveAndExpect(components: Seq[String], expID: String): ResolverTestHelper = {
+    def resolveAndExpect(components: Seq[String], expID: String): ResolverTestHelperBase = {
       val id = futureResult(resolve(components))
       id should be(expID)
       this
@@ -322,8 +426,18 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
      * @param folderID the folder ID
      * @return this test helper
      */
-    def verifyFolderRequestedOnce(folderID: String): ResolverTestHelper = {
+    def verifyFolderRequestedOnce(folderID: String): ResolverTestHelperBase = {
       verify(fileSystem).folderContent(folderID)
+      this
+    }
+
+    /**
+     * Invokes the ''close()'' function on the test resolver instance.
+     *
+     * @return this test helper
+     */
+    def closeResolver(): ResolverTestHelperBase = {
+      resolver.close()
       this
     }
 
@@ -336,22 +450,19 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
       Model.FolderContent[String, FileType, FolderType]] = {
       mock[FileSystem[String, FileType, FolderType, Model.FolderContent[String, FileType, FolderType]]]
     }
-
-    /**
-     * Creates the resolver to be tested.
-     *
-     * @return the test resolver instance
-     */
-    private def createResolver(): PathResolver[String, FileType, FolderType] = {
-      val ActorName = "MyTestResolverActor"
-      val spawner = new Spawner {
-        override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] = {
-          optName should be(Some(ActorName))
-          testKit.spawn(behavior)
-        }
-      }
-
-      CachePathComponentsResolver[String, FileType, FolderType](spawner, CacheSize, Some(ActorName))
-    }
   }
+
+  /**
+   * A test helper class for testing a resolver instance created via a spawner.
+   */
+  private class ResolverTestHelper extends ResolverTestHelperBase(createResolverFromSpawner)
+
+  /**
+   * A test helper class for testing a resolver instance created via an
+   * existing actor.
+   *
+   * @param actor the actor to be used
+   */
+  private class ResolverWithActorTestHelper(actor: ActorRef[PathLookupCommand[String, FileType, FolderType]])
+    extends ResolverTestHelperBase(createResolverFromActor(actor))
 }

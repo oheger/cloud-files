@@ -132,6 +132,18 @@ object CachePathComponentsResolver {
     extends PathLookupCommand[ID, FILE, FOLDER]
 
   /**
+   * Internally used message class that tells the path resolver actor to stop
+   * itself. This message is sent to the actor from the ''close()'' function of
+   * the resolver.
+   *
+   * @tparam ID     the ID type
+   * @tparam FILE   the type of files
+   * @tparam FOLDER the type of folders
+   */
+  private case class StopActor[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]]()
+    extends PathLookupCommand[ID, FILE, FOLDER]
+
+  /**
    * The base type for commands processed by the actor to decrypt the content
    * of a folder.
    *
@@ -316,6 +328,10 @@ object CachePathComponentsResolver {
         _.resultFuture
       }
     }
+
+    override def close(): Unit = {
+      resolverActor ! StopActor()
+    }
   }
 
   /**
@@ -331,6 +347,21 @@ object CachePathComponentsResolver {
   def pathResolverActor[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](cacheSize: Int): Behavior[PathLookupCommand[ID, FILE, FOLDER]] =
     handleInitialPathResolveRequest(cacheSize, Nil)
+
+  /**
+   * Stops the given path resolver actor. This function is normally not called
+   * by an application, as the resolver actor is stopped automatically by the
+   * resolver when its ''close()'' function is called.
+   *
+   * @param actor the actor to be stopped
+   * @tparam ID     the ID type
+   * @tparam FILE   the type of files
+   * @tparam FOLDER the type of folders
+   */
+  def stopPathResolverActor[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](actor: ActorRef[PathLookupCommand[ID, FILE, FOLDER]]): Unit = {
+    actor ! StopActor()
+  }
 
   /**
    * Handler function of the path resolver actor that mainly wait for the
@@ -373,6 +404,9 @@ object CachePathComponentsResolver {
         req.client ! PathLookupErrorResult(exception)
       }
       handleInitialPathResolveRequest(cacheSize, Nil)
+
+    case (ctx, StopActor()) =>
+      stopResolverActor(ctx)
   }
 
   /**
@@ -427,6 +461,9 @@ object CachePathComponentsResolver {
         progress.request.client ! errResult
       }
       handlePathResolveRequests(rootID, cache, pendingRequests - result.request.folderID)
+
+    case (ctx, StopActor()) =>
+      stopResolverActor(ctx)
   }
 
   /**
@@ -594,5 +631,21 @@ object CachePathComponentsResolver {
       }
 
     nextComponentToResolve(progress.path, Nil, step.nextCache)
+  }
+
+  /**
+   * Stops a path resolver actor after logging an info message.
+   *
+   * @param ctx the actor context
+   * @tparam ID     the ID type
+   * @tparam FILE   the type of files
+   * @tparam FOLDER the type of folders
+   * @return the stopped behavior
+   */
+  private def stopResolverActor[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](ctx: ActorContext[PathLookupCommand[ID, FILE, FOLDER]]):
+  Behavior[PathLookupCommand[ID, FILE, FOLDER]] = {
+    ctx.log.info("Stopping PathResolverActor.")
+    Behaviors.stopped
   }
 }

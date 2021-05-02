@@ -169,7 +169,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
       }
     }
 
-    CachePathComponentsResolver[String, FileType, FolderType](spawner, CacheSize, Some(ActorName))
+    CachePathComponentsResolver[String, FileType, FolderType](spawner, CacheSize, optActorName = Some(ActorName))
   }
 
   /**
@@ -332,7 +332,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
   it should "stop the resolver actor in its close() function in initialization phase" in {
     val resolverActor =
-      testKit.spawn(CachePathComponentsResolver.pathResolverActor[String, FileType, FolderType](CacheSize))
+      testKit.spawn(CachePathComponentsResolver.pathResolverActor[String, FileType, FolderType](CacheSize, 0))
     val helper = new ResolverWithActorTestHelper(resolverActor)
 
     helper.closeResolver()
@@ -341,7 +341,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
   it should "stop the resolver actor in its close() function in request processing phase" in {
     val resolverActor =
-      testKit.spawn(CachePathComponentsResolver.pathResolverActor[String, FileType, FolderType](CacheSize))
+      testKit.spawn(CachePathComponentsResolver.pathResolverActor[String, FileType, FolderType](CacheSize, 0))
     val helper = new ResolverWithActorTestHelper(resolverActor)
 
     helper.prepareRootID()
@@ -349,6 +349,28 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
       .resolveAndExpect(Seq(fileName(1)), fileID(1))
       .closeResolver()
     expectTerminated(resolverActor)
+  }
+
+  it should "support a chunk size for decrypt operations" in {
+    val resolverActor =
+      testKit.spawn(CachePathComponentsResolver.pathResolverActor[String, FileType, FolderType](CacheSize,
+        CacheSize / 2))
+    val helper = new ResolverWithActorTestHelper(resolverActor)
+
+    helper.prepareRootID()
+      .prepareFolderContent(createFolderContent(RootID))
+      .resolveAndExpect(Seq(fileName(1)), fileID(1))
+  }
+
+  it should "handle a chunk size that is larger than the cache size" in {
+    val resolverActor =
+      testKit.spawn(CachePathComponentsResolver.pathResolverActor[String, FileType, FolderType](CacheSize,
+        CacheSize * 2))
+    val helper = new ResolverWithActorTestHelper(resolverActor)
+
+    helper.prepareRootID()
+      .prepareFolderContent(createFolderContent(RootID, fileCount = 3 * CacheSize))
+      .resolveAndExpect(Seq(fileName(1)), fileID(1))
   }
 
   /**

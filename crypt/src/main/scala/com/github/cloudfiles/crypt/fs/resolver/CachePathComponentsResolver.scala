@@ -307,22 +307,31 @@ object CachePathComponentsResolver {
 
   /**
    * Creates a new instance of ''CachePathComponentsResolver'' with the given
-   * cache size. This function creates an actor to resolve paths and manage the
-   * cache with already resolved paths via the spawner provided.
+   * parameters. This function creates an actor to resolve paths and manage the
+   * cache with already resolved paths via the spawner provided. It is also
+   * possible to configure a chunk size for decrypt operations. If the chunk
+   * size is negative (which is the default), the names of all elements in a
+   * folder are decrypted at once, and then this result is processed further.
+   * For chunk sizes greater than 0, results are already processed when this
+   * number of names has been decrypted; this allows for some more parallelism,
+   * and a request may be answered earlier when the required piece of
+   * information becomes available.
    *
-   * @param spawner      the ''Spawner'' to create the resolver actor
-   * @param cacheSize    the size of the cache
-   * @param optActorName the optional actor name
+   * @param spawner          the ''Spawner'' to create the resolver actor
+   * @param cacheSize        the size of the cache
+   * @param optActorName     the optional actor name
+   * @param decryptChunkSize the chunk size for decrypt operations
    * @tparam ID     the ID type
    * @tparam FILE   the type of files
    * @tparam FOLDER the type of folders
    * @return the new resolver instance
    */
   def apply[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]](spawner: Spawner, cacheSize: Int,
+                                                                    decryptChunkSize: Int = -1,
                                                                     optActorName: Option[String] = None)
                                                                    (implicit timeout: Timeout):
   PathResolver[ID, FILE, FOLDER] =
-    apply(spawner.spawn(pathResolverActor[ID, FILE, FOLDER](cacheSize), optActorName))
+    apply(spawner.spawn(pathResolverActor[ID, FILE, FOLDER](cacheSize, decryptChunkSize), optActorName))
 
   /**
    * Creates a new instance of ''CachePathComponentsResolver'' that uses the
@@ -359,15 +368,16 @@ object CachePathComponentsResolver {
    * Returns the behavior of a resolver actor that manages a cache with
    * resolved paths of the given size.
    *
-   * @param cacheSize the cache size
+   * @param cacheSize        the cache size
+   * @param decryptChunkSize the chunk size for decrypt operations
    * @tparam ID     the ID type
    * @tparam FILE   the type of files
    * @tparam FOLDER the type of folders
    * @return the behavior of the resolver actor
    */
   def pathResolverActor[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID]](cacheSize: Int): Behavior[PathLookupCommand[ID, FILE, FOLDER]] =
-    handleInitialPathResolveRequest(cacheSize, Nil)
+    FOLDER <: Model.Folder[ID]](cacheSize: Int, decryptChunkSize: Int): Behavior[PathLookupCommand[ID, FILE, FOLDER]] =
+    handleInitialPathResolveRequest(cacheSize, decryptChunkSize, Nil)
 
   /**
    * Stops the given path resolver actor. This function is normally not called
@@ -393,16 +403,18 @@ object CachePathComponentsResolver {
    * a request arrives. This implementation expects that always the same file
    * system is used in requests.
    *
-   * @param cacheSize       the cache size
-   * @param pendingRequests stores pending requests that can only be handled
-   *                        when the root folder ID is available
+   * @param cacheSize        the cache size
+   * @param pendingRequests  stores pending requests that can only be handled
+   *                         when the root folder ID is available
+   * @param decryptChunkSize the chunk size for decrypt operations
    * @tparam ID     the ID type
    * @tparam FILE   the type of files
    * @tparam FOLDER the type of folders
    * @return the behavior to handle the initial request
    */
   private def handleInitialPathResolveRequest[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID]](cacheSize: Int, pendingRequests: List[PathLookupRequest[ID, FILE, FOLDER]]):
+    FOLDER <: Model.Folder[ID]](cacheSize: Int, decryptChunkSize: Int,
+                                pendingRequests: List[PathLookupRequest[ID, FILE, FOLDER]]):
   Behavior[PathLookupCommand[ID, FILE, FOLDER]] = Behaviors.receivePartial {
     case (ctx, request: PathLookupRequest[ID, FILE, FOLDER]) =>
       if (pendingRequests.isEmpty) {
@@ -412,19 +424,23 @@ object CachePathComponentsResolver {
           GotRootID(request, _)
         }
       }
-      handleInitialPathResolveRequest(cacheSize, request :: pendingRequests)
+      handleInitialPathResolveRequest(cacheSize, decryptChunkSize, request :: pendingRequests)
 
     case (ctx, GotRootID(_, Success(rootID))) =>
       ctx.log.info("Resolved file system root ID to {}.", rootID)
       pendingRequests foreach (ctx.self ! _)
-      handlePathResolveRequests(rootID, LRUCache(cacheSize), Map.empty)
+      val chunkSize = math.min(cacheSize, if (decryptChunkSize <= 0) cacheSize else decryptChunkSize)
+      if (decryptChunkSize > cacheSize) {
+        ctx.log.warn("cryptChunkSize exceeds cache size. Setting it to {}.", chunkSize)
+      }
+      handlePathResolveRequests(rootID, chunkSize, LRUCache(cacheSize), Map.empty)
 
     case (ctx, GotRootID(_, Failure(exception))) =>
       ctx.log.error("Could not resolve ID of root folder.", exception)
       pendingRequests.foreach { req =>
         req.client ! PathLookupErrorResult(exception)
       }
-      handleInitialPathResolveRequest(cacheSize, Nil)
+      handleInitialPathResolveRequest(cacheSize, decryptChunkSize, Nil)
 
     case (ctx, StopActor()) =>
       stopResolverActor(ctx)
@@ -438,24 +454,25 @@ object CachePathComponentsResolver {
    * decrypt its names. When the result of this operation arrives, processing
    * of the request can continue.
    *
-   * @param rootID          the ID of the root folder
-   * @param cache           the cache for already resolved paths
-   * @param pendingRequests stores requests waiting for folder results
+   * @param rootID           the ID of the root folder
+   * @param decryptChunkSize the chunk size for decrypt operations
+   * @param cache            the cache for already resolved paths
+   * @param pendingRequests  stores requests waiting for folder results
    * @tparam ID     the ID type
    * @tparam FILE   the type of files
    * @tparam FOLDER the type of folders
    * @return the default request processing behavior
    */
   private def handlePathResolveRequests[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID]](rootID: ID, cache: LRUCache[String, ID],
+    FOLDER <: Model.Folder[ID]](rootID: ID, decryptChunkSize: Int, cache: LRUCache[String, ID],
                                 pendingRequests: Map[ID, List[RequestProgress[ID, FILE, FOLDER]]]):
   Behavior[PathLookupCommand[ID, FILE, FOLDER]] = Behaviors.receivePartial {
     case (ctx, request: PathLookupRequest[ID, FILE, FOLDER]) =>
       ctx.log.debug("PathLookupRequest for path {}.", request.pathComponents.mkString("/"))
       val progress = RequestProgress(request, UriEncodingHelper.fromComponentsWithEncode(request.pathComponents),
         rootID, Nil)
-      val nextStep = handleStep(rootID, List(progress), cache, pendingRequests, ctx)
-      handlePathResolveRequests(rootID, nextStep.nextCache, nextStep.nextProgress)
+      val nextStep = handleStep(rootID, List(progress), decryptChunkSize, cache, pendingRequests, ctx)
+      handlePathResolveRequests(rootID, decryptChunkSize, nextStep.nextCache, nextStep.nextProgress)
 
     case (ctx, result: ResolveFolderResult[ID, FILE, FOLDER]) =>
       val prefix = UriEncodingHelper.withTrailingSeparator(result.request.prefix)
@@ -466,15 +483,15 @@ object CachePathComponentsResolver {
       }
 
       val updatedPending = pendingRequests + (result.request.folderID -> remaining)
-      val nextStep = handleStep(rootID, success, updatedCache, updatedPending, ctx)
-      handlePathResolveRequests(rootID, nextStep.nextCache, nextStep.nextProgress)
+      val nextStep = handleStep(rootID, success, decryptChunkSize, updatedCache, updatedPending, ctx)
+      handlePathResolveRequests(rootID, decryptChunkSize, nextStep.nextCache, nextStep.nextProgress)
 
     case (_, result: ResolveFolderError[ID, FILE, FOLDER]) =>
       val errResult = PathLookupErrorResult[ID](result.exception)
       pendingRequests.getOrElse(result.request.folderID, Nil) foreach { progress =>
         progress.request.client ! errResult
       }
-      handlePathResolveRequests(rootID, cache, pendingRequests - result.request.folderID)
+      handlePathResolveRequests(rootID, decryptChunkSize, cache, pendingRequests - result.request.folderID)
 
     case (_, ResolveFolderDone(request)) =>
       val failed = pendingRequests.getOrElse(request.folderID, Nil)
@@ -484,7 +501,7 @@ object CachePathComponentsResolver {
             progress.remainingComponents.map(UriEncodingHelper.decode).mkString(","))
         progress.request.client ! PathLookupErrorResult(exception)
       }
-      handlePathResolveRequests(rootID, cache, pendingRequests - request.folderID)
+      handlePathResolveRequests(rootID, decryptChunkSize, cache, pendingRequests - request.folderID)
 
     case (ctx, StopActor()) =>
       stopResolverActor(ctx)
@@ -566,11 +583,12 @@ object CachePathComponentsResolver {
    * answered. For the others, the next resolve step is prepared, i.e. they are
    * added to the pending map, and requests to resolve folders are triggered.
    *
-   * @param rootID       the ID of the root folder
-   * @param progressList the list with ''RequestProgress'' objects to handle
-   * @param cache        the current cache
-   * @param pending      the current map with pending folder requests
-   * @param ctx          the context of this actor
+   * @param rootID           the ID of the root folder
+   * @param progressList     the list with ''RequestProgress'' objects to handle
+   * @param decryptChunkSize the chunk size for decrypt operations
+   * @param cache            the current cache
+   * @param pending          the current map with pending folder requests
+   * @param ctx              the context of this actor
    * @tparam ID     the ID type
    * @tparam FILE   the type of files
    * @tparam FOLDER the type of folders
@@ -578,13 +596,13 @@ object CachePathComponentsResolver {
    */
   private def handleStep[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](rootID: ID, progressList: List[RequestProgress[ID, FILE, FOLDER]],
-                                cache: LRUCache[String, ID],
+                                decryptChunkSize: Int, cache: LRUCache[String, ID],
                                 pending: Map[ID, List[RequestProgress[ID, FILE, FOLDER]]],
                                 ctx: ActorContext[PathLookupCommand[ID, FILE, FOLDER]]):
   ResolveStep[ID, FILE, FOLDER] = {
     val initStep = ResolveStep(cache, pending, Nil)
     val nextStep = progressList.foldLeft(initStep) { (step, progress) =>
-      val (updatedProgress, updatedStep) = updateProgress(rootID, progress, step, ctx)
+      val (updatedProgress, updatedStep) = updateProgress(rootID, progress, step, decryptChunkSize, ctx)
       if (updatedProgress.isComplete) {
         updatedProgress.request.client ! PathLookupSuccessResult(updatedProgress.resolvedID)
       }
@@ -605,10 +623,11 @@ object CachePathComponentsResolver {
    * available. Otherwise, the function determines the next path component to
    * resolve and updates the resolve step accordingly.
    *
-   * @param rootID   the ID of the root folder
-   * @param progress the ''RequestProgress'' to update
-   * @param step     the current step
-   * @param ctx      the context of this actor
+   * @param rootID           the ID of the root folder
+   * @param progress         the ''RequestProgress'' to update
+   * @param step             the current step
+   * @param decryptChunkSize the chunk size for decrypt operations
+   * @param ctx              the context of this actor
    * @tparam ID     the ID type
    * @tparam FILE   the type of files
    * @tparam FOLDER the type of folders
@@ -616,18 +635,16 @@ object CachePathComponentsResolver {
    */
   private def updateProgress[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](rootID: ID, progress: RequestProgress[ID, FILE, FOLDER],
-                                step: ResolveStep[ID, FILE, FOLDER],
+                                step: ResolveStep[ID, FILE, FOLDER], decryptChunkSize: Int,
                                 ctx: ActorContext[PathLookupCommand[ID, FILE, FOLDER]]):
   (RequestProgress[ID, FILE, FOLDER], ResolveStep[ID, FILE, FOLDER]) = {
-    val chunkSize = step.nextCache.capacity
-
     @tailrec
     def nextComponentToResolve(path: String, remaining: List[String], cache: LRUCache[String, ID]):
     (RequestProgress[ID, FILE, FOLDER], ResolveStep[ID, FILE, FOLDER]) =
       if (path.isEmpty) {
         val nextProgress = progress.copy(resolvedID = rootID, remainingComponents = remaining)
         val nextStep = step.copy(nextCache = cache)
-          .addProgress(nextProgress, UriEncodingHelper.UriSeparator, chunkSize, ctx)
+          .addProgress(nextProgress, UriEncodingHelper.UriSeparator, decryptChunkSize, ctx)
         (nextProgress, nextStep)
       } else {
         val (optID, nextCache) = cache.getLRU(path)
@@ -635,7 +652,7 @@ object CachePathComponentsResolver {
           case Some(id) =>
             val nextProgress = progress.copy(resolvedID = id, remainingComponents = remaining)
             val nextStep = step.copy(nextCache = nextCache)
-              .addProgress(nextProgress, UriEncodingHelper.withTrailingSeparator(path), chunkSize, ctx)
+              .addProgress(nextProgress, UriEncodingHelper.withTrailingSeparator(path), decryptChunkSize, ctx)
             (nextProgress, nextStep)
 
           case None =>

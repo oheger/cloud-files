@@ -86,8 +86,8 @@ object CachePathComponentsResolver {
   /**
    * Internally used message class that reports a bunch of resolved file system
    * elements to the cache management actor. A message of this class is sent to
-   * the actor when a folder has been loaded and the names of elements it
-   * contains have been decrypted.
+   * the actor when a folder has been loaded and a chunk of the element names
+   * it contains has been decrypted.
    *
    * @param request    the original request to resolve the folder
    * @param elementIDs a map with decrypted names and their IDs
@@ -98,6 +98,19 @@ object CachePathComponentsResolver {
   private case class ResolveFolderResult[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](request: ResolveFolderRequest[ID, FILE, FOLDER],
                                 elementIDs: Map[String, ID])
+    extends PathLookupCommand[ID, FILE, FOLDER]
+
+  /**
+   * Internally used message class that is sent by the folder resolver actor
+   * when all folder elements have been decrypted.
+   *
+   * @param request the original request to resolve the folder
+   * @tparam ID     the ID type
+   * @tparam FILE   the type of files
+   * @tparam FOLDER the type of folders
+   */
+  private case class ResolveFolderDone[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](request: ResolveFolderRequest[ID, FILE, FOLDER])
     extends PathLookupCommand[ID, FILE, FOLDER]
 
   /**
@@ -155,9 +168,13 @@ object CachePathComponentsResolver {
 
   /**
    * Internally used message class that triggers a resolve operation on a given
-   * folder.
+   * folder. This message is processed by the folder resolver actor. It loads
+   * the folder referenced by this message and decrypts the names of all
+   * elements it contains.[[ResolveFolderResult]] messages are sent whenever a
+   * chunk of the given size has been processed.
    *
    * @param folderID    the ID of the folder in question
+   * @param chunkSize   the chunk size for decrypt operations
    * @param pathRequest the ''PathLookupRequest'' that triggers this request
    * @param prefix      the prefix path of the folder
    * @param client      the actor receiving results
@@ -167,6 +184,7 @@ object CachePathComponentsResolver {
    */
   private case class ResolveFolderRequest[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](folderID: ID,
+                                chunkSize: Int,
                                 pathRequest: PathLookupRequest[ID, FILE, FOLDER],
                                 prefix: String,
                                 client: ActorRef[PathLookupCommand[ID, FILE, FOLDER]])
@@ -269,16 +287,19 @@ object CachePathComponentsResolver {
      * is not yet complete, it must be added to the requests in progress; if
      * necessary, a folder request must be created, too.
      *
-     * @param progress the ''RequestProgress''
+     * @param progress  the ''RequestProgress''
+     * @param prefix    the path prefix for the current resolve operation
+     * @param chunkSize the chunk size for decrypt operations
+     * @param ctx       the context of the client actor
      * @return an instance updated with this ''RequestProgress''
      */
-    def addProgress(progress: RequestProgress[ID, FILE, FOLDER], prefix: String,
+    def addProgress(progress: RequestProgress[ID, FILE, FOLDER], prefix: String, chunkSize: Int,
                     ctx: ActorContext[PathLookupCommand[ID, FILE, FOLDER]]): ResolveStep[ID, FILE, FOLDER] =
       if (progress.isComplete) this
       else {
         val requestsInProgress = nextProgress.getOrElse(progress.resolvedID, Nil)
         val nextFolderRequests = if (requestsInProgress.nonEmpty) folderRequests
-        else ResolveFolderRequest(progress.resolvedID, progress.request, prefix, ctx.self) :: folderRequests
+        else ResolveFolderRequest(progress.resolvedID, chunkSize, progress.request, prefix, ctx.self) :: folderRequests
         copy(nextProgress = nextProgress + (progress.resolvedID -> (progress :: requestsInProgress)),
           folderRequests = nextFolderRequests)
       }
@@ -440,18 +461,11 @@ object CachePathComponentsResolver {
       val prefix = UriEncodingHelper.withTrailingSeparator(result.request.prefix)
       val encodedElementIDs = result.elementIDs.map(e => (UriEncodingHelper.encode(e._1), e._2))
       val updatedCache = addToCache(cache, encodedElementIDs, prefix)
-      val (success, failed) = pendingRequests.getOrElse(result.request.folderID, Nil) partition { progress =>
+      val (success, remaining) = pendingRequests.getOrElse(result.request.folderID, Nil) partition { progress =>
         encodedElementIDs.contains(progress.remainingComponents.head)
       }
 
-      failed foreach { progress =>
-        val exception =
-          new IllegalArgumentException("Could not resolve all path components. Remaining components: " +
-            progress.remainingComponents.map(UriEncodingHelper.decode).mkString(","))
-        progress.request.client ! PathLookupErrorResult(exception)
-      }
-
-      val updatedPending = pendingRequests - result.request.folderID
+      val updatedPending = pendingRequests + (result.request.folderID -> remaining)
       val nextStep = handleStep(rootID, success, updatedCache, updatedPending, ctx)
       handlePathResolveRequests(rootID, nextStep.nextCache, nextStep.nextProgress)
 
@@ -461,6 +475,16 @@ object CachePathComponentsResolver {
         progress.request.client ! errResult
       }
       handlePathResolveRequests(rootID, cache, pendingRequests - result.request.folderID)
+
+    case (_, ResolveFolderDone(request)) =>
+      val failed = pendingRequests.getOrElse(request.folderID, Nil)
+      failed foreach { progress =>
+        val exception =
+          new IllegalArgumentException("Could not resolve all path components. Remaining components: " +
+            progress.remainingComponents.map(UriEncodingHelper.decode).mkString(","))
+        progress.request.client ! PathLookupErrorResult(exception)
+      }
+      handlePathResolveRequests(rootID, cache, pendingRequests - request.folderID)
 
     case (ctx, StopActor()) =>
       stopResolverActor(ctx)
@@ -491,8 +515,11 @@ object CachePathComponentsResolver {
 
       case (ctx, GotFolderContent(request, Success(content))) =>
         ctx.log.info("Decrypting element names of folder {}.", request.folderID)
-        val result = ResolveFolderResult(request, decryptFolderContent(request.pathRequest.cryptConfig, content))
-        request.client ! result
+        (content.folders ++ content.files).grouped(request.chunkSize) foreach { chunk =>
+          val result = ResolveFolderResult(request, decryptElementNames(request.pathRequest.cryptConfig, chunk))
+          request.client ! result
+        }
+        request.client ! ResolveFolderDone(request)
         Behaviors.stopped
 
       case (ctx, GotFolderContent(request, Failure(exception))) =>
@@ -501,22 +528,6 @@ object CachePathComponentsResolver {
         request.client ! result
         Behaviors.stopped
     }
-
-  /**
-   * Returns a map with the IDs and the decrypted names of all the elements
-   * referenced by the passed in ''FolderContent''.
-   *
-   * @param cryptConfig the configuration for decryption
-   * @param content     the content to process
-   * @tparam ID     the ID type
-   * @tparam FILE   the type of files
-   * @tparam FOLDER the type of folders
-   * @return the resulting map with decrypted names
-   */
-  private def decryptFolderContent[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID]](cryptConfig: CryptConfig, content: Model.FolderContent[ID, FILE, FOLDER]):
-  Map[String, ID] =
-    decryptElementNames(cryptConfig, content.files) ++ decryptElementNames(cryptConfig, content.folders)
 
   /**
    * Returns a map with the IDs and the decrypted names of the given folder
@@ -608,12 +619,15 @@ object CachePathComponentsResolver {
                                 step: ResolveStep[ID, FILE, FOLDER],
                                 ctx: ActorContext[PathLookupCommand[ID, FILE, FOLDER]]):
   (RequestProgress[ID, FILE, FOLDER], ResolveStep[ID, FILE, FOLDER]) = {
+    val chunkSize = step.nextCache.capacity
+
     @tailrec
     def nextComponentToResolve(path: String, remaining: List[String], cache: LRUCache[String, ID]):
     (RequestProgress[ID, FILE, FOLDER], ResolveStep[ID, FILE, FOLDER]) =
       if (path.isEmpty) {
         val nextProgress = progress.copy(resolvedID = rootID, remainingComponents = remaining)
-        val nextStep = step.copy(nextCache = cache).addProgress(nextProgress, UriEncodingHelper.UriSeparator, ctx)
+        val nextStep = step.copy(nextCache = cache)
+          .addProgress(nextProgress, UriEncodingHelper.UriSeparator, chunkSize, ctx)
         (nextProgress, nextStep)
       } else {
         val (optID, nextCache) = cache.getLRU(path)
@@ -621,7 +635,7 @@ object CachePathComponentsResolver {
           case Some(id) =>
             val nextProgress = progress.copy(resolvedID = id, remainingComponents = remaining)
             val nextStep = step.copy(nextCache = nextCache)
-              .addProgress(nextProgress, UriEncodingHelper.withTrailingSeparator(path), ctx)
+              .addProgress(nextProgress, UriEncodingHelper.withTrailingSeparator(path), chunkSize, ctx)
             (nextProgress, nextStep)
 
           case None =>

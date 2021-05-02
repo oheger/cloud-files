@@ -131,7 +131,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
    * @param folderCount the number of folders
    * @return the ''FolderContent'' object with this content
    */
-  def createFolderContent(id: String, fileIdx: Int = 1, folderIdx: Int = 1, fileCount: Int = 4, folderCount: Int = 2):
+  private def createFolderContent(id: String, fileIdx: Int = 1, folderIdx: Int = 1, fileCount: Int = 4, folderCount: Int = 2):
   Model.FolderContent[String, FileType, FolderType] = {
     val files = (fileIdx until (fileIdx + fileCount))
       .map { idx => (fileID(idx), createFileMock(idx, encryptName(fileName(idx)))) }
@@ -316,6 +316,18 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
       .prepareFolderContent(subContent)
       .prepareFolderContent(subSubContent)
       .resolveAndExpect(components, fileID(10))
+  }
+
+  it should "handle a folder that is larger than the cache size" in {
+    val content = createFolderContent(RootID, folderCount = CacheSize, fileCount = 2 * CacheSize)
+    val components1 = Seq(fileName(1))
+    val components2 = Seq(fileName(2 * CacheSize))
+    val helper = new ResolverTestHelper
+
+    helper.prepareRootID()
+      .prepareFolderContent(content)
+      .resolveAndExpect(components1, fileID(1))
+      .resolveAndExpect(components2, fileID(2 * CacheSize))
   }
 
   it should "stop the resolver actor in its close() function in initialization phase" in {

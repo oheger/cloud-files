@@ -146,7 +146,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     result.folders.keys should contain only subFolderUri
     val folder = result.folders(subFolderUri)
     folder.id should be(subFolderUri)
-    folder.name should be("subFolder(1)")
+    folder.name should be("subFolder (1)")
     result.files should have size 3
     val fileUri3 = Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3")
     val file3 = result.files(fileUri3)

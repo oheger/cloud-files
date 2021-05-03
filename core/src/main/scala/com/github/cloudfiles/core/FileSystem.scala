@@ -38,7 +38,7 @@ object FileSystem {
    * @param run the function to execute this operation
    * @tparam A the result type of this operation
    */
-  case class Operation[A](run: ActorRef[HttpRequestSender.HttpCommand] => Future[A]) {
+  case class Operation[+A](run: ActorRef[HttpRequestSender.HttpCommand] => Future[A]) {
     def flatMap[B](f: A => Operation[B])(implicit ec: ExecutionContext): Operation[B] = Operation(actor =>
       run(actor) flatMap { a => f(a).run(actor) }
     )

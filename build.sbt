@@ -62,6 +62,31 @@ ThisBuild / homepage := Some(url("https://github.com/oheger/cloud-files"))
 ThisBuild / scalaVersion := VersionScala213
 ThisBuild / version := "0.1-SNAPSHOT"
 ThisBuild / licenses := Seq(("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0.html")))
+ThisBuild / scmInfo := Some(
+  ScmInfo(
+    url("https://github.com/oheger/cloud-files.git"),
+    "scm:git:git@github.com:oheger/cloud-files.git"
+  )
+)
+ThisBuild / developers := List(
+  Developer(
+    id = "oheger",
+    name = "Oliver Heger",
+    email = "oheger@apache.org",
+    url = url("https://github.com/oheger")
+  )
+)
+
+// Settings to publish artifacts
+ThisBuild / publishMavenStyle := true
+ThisBuild / pomIncludeRepository := { _ => false }
+ThisBuild / publishTo := {
+  val nexus = "https://oss.sonatype.org/"
+  if (isSnapshot.value)
+    Some("snapshots" at nexus + "content/repositories/snapshots")
+  else
+    Some("releases" at nexus + "service/local/staging/deploy/maven2")
+}
 
 def itFilter(name: String): Boolean = name endsWith "ITSpec"
 def unitFilter(name: String): Boolean = (name endsWith "Spec") && !itFilter(name)
@@ -72,20 +97,7 @@ lazy val CloudFiles = (project in file("."))
     name := "cloud-files",
     description := "A library for accessing files stored on various server types",
     crossScalaVersions := Nil,
-    scmInfo := Some(
-      ScmInfo(
-        url("https://github.com/oheger/cloud-files.git"),
-        "scm:git:git@github.com:oheger/cloud-files.git"
-      )
-    ),
-    developers := List(
-      Developer(
-        id = "oheger",
-        name = "Oliver Heger",
-        email = "oheger@apache.org",
-        url = url("https://github.com/oheger")
-      )
-    )
+    publish := {}
   ) aggregate(core, webDav, oneDrive, crypt, cryptAlgAES)
 
 /**

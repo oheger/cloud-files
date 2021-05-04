@@ -17,21 +17,19 @@
 import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
 
 /** Definition of versions. */
-lazy val AkkaVersion = "2.6.13"
+lazy val AkkaVersion = "2.6.14"
 lazy val AkkaHttpVersion = "10.2.4"
 lazy val VersionScala213 = "2.13.5"
 lazy val VersionScala212 = "2.12.13"
 lazy val VersionScalaXml = "1.3.0"
 lazy val VersionSlf4j = "1.7.30"
-lazy val VersionScalaTest = "3.2.0"
+lazy val VersionScalaTest = "3.2.7"
 lazy val VersionWireMock = "2.27.2"
 lazy val VersionMockito = "1.9.5"
 lazy val VersionScalaTestMockito = "1.0.0-M2"
 lazy val VersionJunit = "4.13" // needed by mockito
 
 lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
-
-scalacOptions ++= Seq("-deprecation", "-feature")
 
 lazy val ITest = config("integrationTest") extend Test
 
@@ -57,6 +55,7 @@ lazy val projectOsgiSettings = osgiSettings ++ Seq(
   OsgiKeys.requireCapability := "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version>=1.8))\""
 )
 
+ThisBuild / scalacOptions ++= Seq("-deprecation", "-feature")
 ThisBuild / organization := "com.github.oheger"
 ThisBuild / homepage := Some(url("https://github.com/oheger/cloud-files"))
 ThisBuild / scalaVersion := VersionScala213

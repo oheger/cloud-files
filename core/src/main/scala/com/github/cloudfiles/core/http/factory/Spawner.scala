@@ -21,6 +21,8 @@ import akka.{actor => classic}
 import akka.actor.typed.{ActorRef, Behavior, Props}
 import akka.actor.typed.scaladsl.adapter._
 
+import scala.language.implicitConversions
+
 /**
  * An object implementing helper functionality related to concrete
  * implementations of the [[Spawner]] trait.

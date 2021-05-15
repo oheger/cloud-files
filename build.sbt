@@ -59,7 +59,7 @@ ThisBuild / scalacOptions ++= Seq("-deprecation", "-feature")
 ThisBuild / organization := "com.github.oheger"
 ThisBuild / homepage := Some(url("https://github.com/oheger/cloud-files"))
 ThisBuild / scalaVersion := VersionScala213
-ThisBuild / version := "0.1"
+ThisBuild / version := "0.2-SNAPSHOT"
 ThisBuild / licenses := Seq(("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0.html")))
 ThisBuild / scmInfo := Some(
   ScmInfo(

@@ -18,9 +18,11 @@ package com.github.cloudfiles.core.http
 
 import akka.actor.typed.ActorSystem
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
-import akka.http.scaladsl.{Http, HttpExt}
+import akka.http.scaladsl.settings.ConnectionPoolSettings
+import akka.http.scaladsl.{ClientTransport, Http, HttpExt}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source, SourceQueueWithComplete}
 import akka.stream.{OverflowStrategy, QueueOfferResult}
+import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, ProxySpec}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
@@ -53,18 +55,50 @@ private object RequestQueue {
    * given URI. From the URI host and port are extracted. Whether the flow is
    * for sending HTTP or HTTPS requests is determined from the URI's scheme.
    *
-   * @param uri the URI
+   * @param uri    the URI
+   * @param proxy  the function to select a proxy
+   * @param ext    the Akka HTTP extension main entry point
+   * @param system the actor system
    * @tparam T the type of objects passed to the flow
    * @return the flow for sending HTTP requests to this URI
    */
-  def createPoolClientFlow[T](uri: Uri, ext: HttpExt): Flow[(HttpRequest, T),
+  def createPoolClientFlow[T](uri: Uri, proxy: ProxySelectorFunc, ext: HttpExt)
+                             (implicit system: ActorSystem[_]): Flow[(HttpRequest, T),
     (Try[HttpResponse], T), Http.HostConnectionPool] = {
     val host = uri.authority.host.toString()
     val port = extractPort(uri)
+    val settings = fetchSettings(uri, proxy)
     if (SchemeHttps == uri.scheme)
-      ext.cachedHostConnectionPoolHttps(host, port)
-    else ext.cachedHostConnectionPool(host, port)
+      ext.cachedHostConnectionPoolHttps(host, port, settings = settings)
+    else ext.cachedHostConnectionPool(host, port, settings = settings)
   }
+
+  /**
+   * Obtains the setting for the HTTP flow. If configured, a special transport
+   * for a proxy will be used.
+   *
+   * @param uri    the target URI of the flow
+   * @param proxy  the proxy selector function
+   * @param system the actor system
+   * @return settings for the connection pool
+   */
+  private def fetchSettings(uri: Uri, proxy: ProxySelectorFunc)
+                           (implicit system: ActorSystem[_]): ConnectionPoolSettings =
+    ConnectionPoolSettings(system).withTransport(fetchClientTransport(proxy(uri)))
+
+  /**
+   * Returns a ''ClientTransport'' object depending on the availability of a
+   * proxy definition.
+   *
+   * @param proxySettings an ''Option'' with parameters for a proxy
+   * @return a ''ClientTransport'' to be used for the current setup
+   */
+  private def fetchClientTransport(proxySettings: Option[ProxySpec]): ClientTransport =
+    proxySettings map { spec =>
+      spec.credentials.fold(ClientTransport.httpsProxy(spec.address)) { credentials =>
+        ClientTransport.httpsProxy(spec.address, credentials)
+      }
+    } getOrElse ClientTransport.TCP
 
   /**
    * Determines the port to be used for an URI based on its scheme.
@@ -84,16 +118,17 @@ private object RequestQueue {
  *
  * @param uri       the URI requests are to be sent to
  * @param queueSize the size of the request queue
+ * @param proxy     a function to select the proxy
  * @param system    the actor system
  */
-private class RequestQueue(uri: Uri, queueSize: Int = 2)(implicit system: ActorSystem[_]) {
+private class RequestQueue(uri: Uri, queueSize: Int, proxy: ProxySelectorFunc)(implicit system: ActorSystem[_]) {
 
   import RequestQueue._
 
   /** The flow for generating HTTP requests. */
   val poolClientFlow: Flow[(HttpRequest, Promise[HttpResponse]),
     (Try[HttpResponse], Promise[HttpResponse]), Http.HostConnectionPool] =
-    createPoolClientFlow[Promise[HttpResponse]](uri, Http())
+    createPoolClientFlow[Promise[HttpResponse]](uri, proxy, Http())
 
   /** The queue acting as source for the stream of requests and a kill switch. */
   val queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])] =

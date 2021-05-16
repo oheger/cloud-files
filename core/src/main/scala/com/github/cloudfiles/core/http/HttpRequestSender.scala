@@ -24,6 +24,7 @@ import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import akka.stream.Materializer
 import akka.util.Timeout
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
+import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemProxy}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -186,10 +187,12 @@ object HttpRequestSender {
    *
    * @param uri       the URI defining the target host
    * @param queueSize the size of the request queue
+   * @param proxy     a function to select the proxy for requests
    * @return the behavior of the actor
    */
-  def apply(uri: Uri, queueSize: Int = DefaultQueueSize): Behavior[HttpCommand] =
-    create(uri, system => new RequestQueue(uri, queueSize)(system))
+  def apply(uri: Uri, queueSize: Int = DefaultQueueSize, proxy: ProxySelectorFunc = SystemProxy):
+  Behavior[HttpCommand] =
+    create(uri, system => new RequestQueue(uri, queueSize, proxy)(system))
 
   /**
    * Forwards a request to another request actor using the ''ask'' pattern. The

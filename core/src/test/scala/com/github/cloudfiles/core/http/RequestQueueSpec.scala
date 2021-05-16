@@ -20,6 +20,7 @@ import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import akka.http.scaladsl.{Http, HttpExt}
 import akka.stream.scaladsl.Flow
+import org.mockito.Matchers.{any, eq => eqArg}
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -74,9 +75,9 @@ class RequestQueueSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike wi
     val flow = createRequestFlow()
     val uri = Uri(authority = Uri.Authority(Uri.Host(Host)), scheme = "http",
       path = Uri.Path("/somePath"))
-    when(httpExt.cachedHostConnectionPool[Any](Host, 80)).thenReturn(flow)
+    when(httpExt.cachedHostConnectionPool[Any](eqArg(Host), eqArg(80), any(), any())).thenReturn(flow)
 
-    RequestQueue.createPoolClientFlow(uri, httpExt) should be(flow)
+    RequestQueue.createPoolClientFlow(uri, ProxySupport.NoProxy, httpExt) should be(flow)
   }
 
   it should "create an HTTPS request flow to a host" in {
@@ -84,9 +85,10 @@ class RequestQueueSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike wi
     val flow = createRequestFlow()
     val uri = Uri(authority = Uri.Authority(Uri.Host(Host)), scheme = "https",
       path = Uri.Path("/securePath"))
-    when(httpExt.cachedHostConnectionPoolHttps[Any](Host, 443)).thenReturn(flow)
+    when(httpExt.cachedHostConnectionPoolHttps[Any](eqArg(Host), eqArg(443), any(), any(), any()))
+      .thenReturn(flow)
 
-    RequestQueue.createPoolClientFlow(uri, httpExt) should be(flow)
+    RequestQueue.createPoolClientFlow(uri, ProxySupport.NoProxy, httpExt) should be(flow)
   }
 
   it should "create an HTTP request flow with a non-standard port to a host" in {
@@ -94,8 +96,8 @@ class RequestQueueSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike wi
     val httpExt = mock[HttpExt]
     val flow = createRequestFlow()
     val uri = Uri(authority = Uri.Authority(Uri.Host(Host), port = Port), scheme = "http")
-    when(httpExt.cachedHostConnectionPool[Any](Host, Port)).thenReturn(flow)
+    when(httpExt.cachedHostConnectionPool[Any](eqArg(Host), eqArg(Port), any(), any())).thenReturn(flow)
 
-    RequestQueue.createPoolClientFlow(uri, httpExt) should be(flow)
+    RequestQueue.createPoolClientFlow(uri, ProxySupport.NoProxy, httpExt) should be(flow)
   }
 }

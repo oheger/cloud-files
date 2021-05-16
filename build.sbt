@@ -112,6 +112,7 @@ lazy val core = (project in file("core"))
     inConfig(ITest)(Defaults.testTasks),
     libraryDependencies ++= akkaDependencies,
     libraryDependencies ++= testDependencies,
+    libraryDependencies += "org.littleshoot" % "littleproxy" % "1.1.2" % Test,
     name := "cloud-files-core",
     description := "The core module of the cloud-files library",
     crossScalaVersions := supportedScalaVersions,

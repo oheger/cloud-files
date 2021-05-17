@@ -79,7 +79,7 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val RequestQueueSize = 53
     val authConfig = BasicAuthConfig(WireMockSupport.UserId, Secret(WireMockSupport.Password))
     val Path = "/data/call"
-    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize) => {
+    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize, _) => {
       queueSize should be(RequestQueueSize)
       val requestActor = context.spawnAnonymous(HttpRequestSender(uri))
       context.spawnAnonymous(BasicAuthExtension(requestActor, authConfig))
@@ -87,7 +87,7 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     stubFor(WireMockSupport.BasicAuthFunc(get(urlPathEqualTo(Path))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
         .withBody(FileTestHelper.TestData))))
-    val multiSender = testKit.spawn(MultiHostExtension(RequestQueueSize, factory))
+    val multiSender = testKit.spawn(MultiHostExtension(RequestQueueSize, requestActorFactory = factory))
 
     val result = futureResult(HttpRequestSender.sendRequestSuccess(multiSender, HttpRequest(uri = serverUri(Path)),
       null))

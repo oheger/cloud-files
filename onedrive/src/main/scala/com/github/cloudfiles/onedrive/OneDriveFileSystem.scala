@@ -67,7 +67,8 @@ object OneDriveFileSystem {
    */
   def createHttpSender(config: OneDriveConfig, authConfig: OAuthConfig): Behavior[HttpRequestSender.HttpCommand] = {
     val serverUri = Uri(config.serverUri)
-    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize) => {
+    // TODO Handle the proxy.
+    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize, _) => {
       def createSender(uri: Uri, requestQueueSize: Int = HttpRequestSender.DefaultQueueSize):
       ActorRef[HttpRequestSender.HttpCommand] =
         context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize))

@@ -19,6 +19,7 @@ package com.github.cloudfiles.core.http
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.Uri
+import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemProxy}
 
 /**
  * An actor implementation that can send HTTP requests to multiple hosts.
@@ -43,11 +44,11 @@ object MultiHostExtension {
    * multi-host extension when it encounters a new host for the first time to
    * create the request actor for this host. The function is passed the context
    * of this actor (that can be used to spawn a new child actor), the URI of
-   * the current request, and the configured size of the request queue. It must
-   * return a new request actor.
+   * the current request, the configured size of the request queue, and the
+   * configured ''ProxySelectorFunc''. It must return a new request actor.
    */
-  type RequestActorFactory =
-    (ActorContext[HttpRequestSender.HttpCommand], Uri, Int) => ActorRef[HttpRequestSender.HttpCommand]
+  type RequestActorFactory = (ActorContext[HttpRequestSender.HttpCommand], Uri, Int, ProxySelectorFunc) =>
+    ActorRef[HttpRequestSender.HttpCommand]
 
   /**
    * The default factory function for creating new request actors. This
@@ -56,23 +57,26 @@ object MultiHostExtension {
    * @param context          the actor context
    * @param uri              the URI of the current request
    * @param requestQueueSize the size of the request queue
+   * @param proxy            the function to select a proxy
    * @return a reference to the newly created actor
    */
   def defaultRequestActorFactory(context: ActorContext[HttpRequestSender.HttpCommand], uri: Uri,
-                                 requestQueueSize: Int): ActorRef[HttpRequestSender.HttpCommand] =
-    context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize))
+                                 requestQueueSize: Int, proxy: ProxySelectorFunc):
+  ActorRef[HttpRequestSender.HttpCommand] =
+    context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize, proxy))
 
   /**
    * Creates a new instance of this actor class.
    *
    * @param requestQueueSize    the size of the request queue
    * @param requestActorFactory the function to create new request actors
+   * @param proxy               a function to select the proxy for requests
    * @return the initial behavior of the new actor instance
    */
-  def apply(requestQueueSize: Int = HttpRequestSender.DefaultQueueSize,
+  def apply(requestQueueSize: Int = HttpRequestSender.DefaultQueueSize, proxy: ProxySelectorFunc = SystemProxy,
             requestActorFactory: RequestActorFactory = defaultRequestActorFactory):
   Behavior[HttpRequestSender.HttpCommand] =
-    handleRequests(Map.empty, requestQueueSize, requestActorFactory)
+    handleRequests(Map.empty, requestQueueSize, proxy, requestActorFactory)
 
   /**
    * Returns the behavior for request handling. The map passed in contains the
@@ -81,24 +85,25 @@ object MultiHostExtension {
    *
    * @param requestActors       the map with the current request actors
    * @param requestQueueSize    the size of the request queue
+   * @param proxy               a function to select the proxy for requests
    * @param requestActorFactory the function to create new request actors
    * @return the behavior to handle requests
    */
   private def handleRequests(requestActors: Map[Uri.Authority, ActorRef[HttpRequestSender.HttpCommand]],
-                             requestQueueSize: Int, requestActorFactory: RequestActorFactory):
-  Behavior[HttpRequestSender.HttpCommand] =
+                             requestQueueSize: Int, proxy: ProxySelectorFunc,
+                             requestActorFactory: RequestActorFactory): Behavior[HttpRequestSender.HttpCommand] =
     Behaviors.receivePartial {
       case (context, request: HttpRequestSender.SendRequest) =>
         val authority = request.request.uri.authority
         val nextRequestActors = if (requestActors.contains(authority)) requestActors
         else {
           context.log.info("Creating request actor for authority {}.", authority)
-          val requestActor = requestActorFactory(context, request.request.uri, requestQueueSize)
+          val requestActor = requestActorFactory(context, request.request.uri, requestQueueSize, proxy)
           requestActors + (authority -> requestActor)
         }
 
         nextRequestActors(authority) ! request
-        handleRequests(nextRequestActors, requestQueueSize, requestActorFactory)
+        handleRequests(nextRequestActors, requestQueueSize, proxy, requestActorFactory)
 
       case (_, HttpRequestSender.Stop) =>
         // This also stops all the request actors created as children of this actor.

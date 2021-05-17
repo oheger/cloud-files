@@ -157,4 +157,18 @@ class ProxyITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Ma
     request should not be null
     request.headers().get(HeaderProxyAuthorization) should be(CredentialsBase64)
   }
+
+  "MultiHostExtension" should "use a configured proxy" in {
+    stubTestRequest()
+    val ref = runWithProxy { proxySpec =>
+      val actor = testKit.spawn(MultiHostExtension(proxy = ProxySupport.withProxy(proxySpec)))
+      val request = HttpRequest(uri = serverUri(Path))
+
+      val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, null,
+        DiscardEntityMode.Always))
+      result.response.status should be(StatusCodes.Accepted)
+    }
+
+    ref.get() should not be null
+  }
 }

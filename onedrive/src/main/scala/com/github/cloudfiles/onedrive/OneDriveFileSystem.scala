@@ -29,6 +29,7 @@ import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
+import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemProxy}
 import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthExtension}
 import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, UriEncodingHelper}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
@@ -60,18 +61,21 @@ object OneDriveFileSystem {
    *    hosts for uploading and downloading files; requests to these hosts
    *    should not have an ''Authorization'' header.)
    *
-   * @param config     the OneDrive configuration
-   * @param authConfig the configuration of the OAuth provider
+   * @param config           the OneDrive configuration
+   * @param authConfig       the configuration of the OAuth provider
+   * @param requestQueueSize the size of the request queue
+   * @param proxy            the function to select the proxy
    * @return the behavior of an actor for sending HTTP requests on behalf of a
    *         OneDrive file system
    */
-  def createHttpSender(config: OneDriveConfig, authConfig: OAuthConfig): Behavior[HttpRequestSender.HttpCommand] = {
+  def createHttpSender(config: OneDriveConfig, authConfig: OAuthConfig,
+                       requestQueueSize: Int = HttpRequestSender.DefaultQueueSize,
+                       proxy: ProxySelectorFunc = SystemProxy): Behavior[HttpRequestSender.HttpCommand] = {
     val serverUri = Uri(config.serverUri)
-    // TODO Handle the proxy.
-    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize, _) => {
+    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize, proxy) => {
       def createSender(uri: Uri, requestQueueSize: Int = HttpRequestSender.DefaultQueueSize):
       ActorRef[HttpRequestSender.HttpCommand] =
-        context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize))
+        context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize, proxy))
 
       if (uri.authority == serverUri.authority) {
         val idpSender = createSender(authConfig.tokenEndpoint)
@@ -82,7 +86,7 @@ object OneDriveFileSystem {
       }
     }
 
-    MultiHostExtension(requestActorFactory = factory)
+    MultiHostExtension(requestActorFactory = factory, requestQueueSize = requestQueueSize, proxy = proxy)
   }
 
   /** The headers to use for an upload session request. */

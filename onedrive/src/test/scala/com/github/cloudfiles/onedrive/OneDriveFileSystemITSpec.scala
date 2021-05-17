@@ -22,7 +22,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
 import com.github.cloudfiles.core._
 import com.github.cloudfiles.core.delegate.ElementPatchSpec
-import com.github.cloudfiles.core.http.{MultiHostExtension, Secret}
+import com.github.cloudfiles.core.http.{MultiHostExtension, ProxyITSpec, ProxySupport, Secret}
 import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthTokenData}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol.WritableFileSystemInfo
 import com.github.tomakehurst.wiremock.WireMockServer
@@ -543,30 +543,36 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .withHeader("Authorization", equalTo("Bearer " + ExpiredAccessToken))
       .willReturn(aResponse().withStatus(StatusCodes.Unauthorized.intValue)))
 
-    runWithNewServer { authServer =>
-      val authConfig = OAuthConfig(tokenEndpoint = WireMockSupport.serverUri(authServer, TokenUri),
-        redirectUri = "https://some.redirect.org/uri", clientID = "someClient", clientSecret = Secret("foo"),
-        initTokenData = OAuthTokenData(ExpiredAccessToken, RefreshToken))
-      authServer.stubFor(post(urlPathEqualTo(TokenUri))
-        .willReturn(aJsonResponse(StatusCodes.OK)
-          .withBody(TokenResponse)))
+    val queue = ProxyITSpec.runWithProxy { proxySpec =>
+      runWithNewServer { authServer =>
+        val authConfig = OAuthConfig(tokenEndpoint = WireMockSupport.serverUri(authServer, TokenUri),
+          redirectUri = "https://some.redirect.org/uri", clientID = "someClient", clientSecret = Secret("foo"),
+          initTokenData = OAuthTokenData(ExpiredAccessToken, RefreshToken))
+        authServer.stubFor(post(urlPathEqualTo(TokenUri))
+          .willReturn(aJsonResponse(StatusCodes.OK)
+            .withBody(TokenResponse)))
 
-      runWithNewServer { uploadServer =>
-        stubFor(post(urlPathEqualTo(SourceUri))
-          .withHeader("Authorization", equalTo("Bearer " + AccessToken))
-          .willReturn(aJsonResponse()
-            .withBody(uploadSessionResponse(uploadServer))))
-        uploadServer.stubFor(put(urlPathEqualTo(UploadUri))
-          .withHeader("Authorization", AbsentPattern.ABSENT)
-          .willReturn(aJsonResponse(StatusCodes.Created)
-            .withBodyFile("upload_complete_response.json")))
-        val fs = new OneDriveFileSystem(config)
+        runWithNewServer { uploadServer =>
+          stubFor(post(urlPathEqualTo(SourceUri))
+            .withHeader("Authorization", equalTo("Bearer " + AccessToken))
+            .willReturn(aJsonResponse()
+              .withBody(uploadSessionResponse(uploadServer))))
+          uploadServer.stubFor(put(urlPathEqualTo(UploadUri))
+            .withHeader("Authorization", AbsentPattern.ABSENT)
+            .willReturn(aJsonResponse(StatusCodes.Created)
+              .withBodyFile("upload_complete_response.json")))
+          val proxy = ProxySupport.withProxy(proxySpec)
+          val fs = new OneDriveFileSystem(config)
 
-        val sender = testKit.spawn(OneDriveFileSystem.createHttpSender(config, authConfig))
-        val opUpdate = fs.updateFileContent(ResolvedID, FileTestHelper.TestData.length, fileSource)
-        futureResult(opUpdate.run(sender))
+          val sender = testKit.spawn(OneDriveFileSystem.createHttpSender(config, authConfig, proxy = proxy))
+          val opUpdate = fs.updateFileContent(ResolvedID, FileTestHelper.TestData.length, fileSource)
+          futureResult(opUpdate.run(sender))
+        }
       }
     }
+
+    ProxyITSpec.nextRequest(queue) // Request to get the token
+    ProxyITSpec.nextRequest(queue) // The actual request.
   }
 
   it should "patch a folder against an empty patch spec" in {

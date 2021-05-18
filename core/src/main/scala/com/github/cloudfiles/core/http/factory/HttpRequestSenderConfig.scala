@@ -17,6 +17,7 @@
 package com.github.cloudfiles.core.http.factory
 
 import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemProxy}
 import com.github.cloudfiles.core.http.RetryAfterExtension.RetryAfterConfig
 import com.github.cloudfiles.core.http.auth.{AuthConfig, NoAuthConfig}
 
@@ -37,10 +38,12 @@ import com.github.cloudfiles.core.http.auth.{AuthConfig, NoAuthConfig}
  * @param authConfig       the configuration for the authentication mechanism
  *                         to be used
  * @param queueSize        the size of the request queue
+ * @param proxy            the function to select the proxy
  * @param retryAfterConfig an optional configuration for a ''RetryAfter''
  *                         extension; if present, such an extension is created
  */
 case class HttpRequestSenderConfig(actorName: Option[String] = None,
                                    authConfig: AuthConfig = NoAuthConfig,
                                    queueSize: Int = HttpRequestSender.DefaultQueueSize,
+                                   proxy: ProxySelectorFunc = SystemProxy,
                                    retryAfterConfig: Option[RetryAfterConfig] = None)

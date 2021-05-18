@@ -17,11 +17,13 @@
 package com.github.cloudfiles.core.http
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import akka.actor.typed.{ActorRef, Behavior, Props}
 import akka.http.scaladsl.model.headers.BasicHttpCredentials
 import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
 import akka.util.Timeout
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.ProxySupport.ProxySpec
+import com.github.cloudfiles.core.http.factory.{HttpRequestSenderConfig, HttpRequestSenderFactoryImpl, Spawner}
 import com.github.cloudfiles.core.{AsyncTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
 import io.netty.channel.ChannelHandlerContext
@@ -175,6 +177,46 @@ class ProxyITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Ma
     stubTestRequest()
     val queue = runWithProxy { proxySpec =>
       val actor = testKit.spawn(MultiHostExtension(proxy = ProxySupport.withProxy(proxySpec)))
+      val request = HttpRequest(uri = serverUri(Path))
+
+      val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, null,
+        DiscardEntityMode.Always))
+      result.response.status should be(StatusCodes.Accepted)
+    }
+
+    nextRequest(queue)
+  }
+
+  /**
+   * Creates a ''Spawner'' implementation based on the current test kit.
+   *
+   * @return the ''Spawner''
+   */
+  private def spawner(): Spawner = new Spawner {
+    override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
+      testKit.spawn(behavior)
+  }
+
+  "HttRequestSenderFactoryImpl" should "use a configured proxy for a plain request actor" in {
+    stubTestRequest()
+    val queue = runWithProxy { proxySpec =>
+      val config = HttpRequestSenderConfig(proxy = ProxySupport.withProxy(proxySpec))
+      val actor = HttpRequestSenderFactoryImpl.createRequestSender(spawner(), serverBaseUri, config)
+      val request = HttpRequest(uri = Path)
+
+      val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, null,
+        DiscardEntityMode.Always))
+      result.response.status should be(StatusCodes.Accepted)
+    }
+
+    nextRequest(queue)
+  }
+
+  it should "use a configured proxy for a multi-request actor" in {
+    stubTestRequest()
+    val queue = runWithProxy { proxySpec =>
+      val config = HttpRequestSenderConfig(proxy = ProxySupport.withProxy(proxySpec))
+      val actor = HttpRequestSenderFactoryImpl.createMultiHostRequestSender(spawner(), config)
       val request = HttpRequest(uri = serverUri(Path))
 
       val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, null,

@@ -40,13 +40,13 @@ object HttpRequestSenderFactoryImpl extends HttpRequestSenderFactory {
 
   override def createRequestSender(spawner: Spawner, baseUri: Uri, config: HttpRequestSenderConfig):
   ActorRef[HttpRequestSender.HttpCommand] =
-    decorateRequestSender(spawner, spawner.spawn(HttpRequestSender(baseUri, config.queueSize), config.actorName),
-      config)
+    decorateRequestSender(spawner, spawner.spawn(HttpRequestSender(baseUri, config.queueSize, config.proxy),
+      config.actorName), config)
 
   override def createMultiHostRequestSender(spawner: Spawner, config: HttpRequestSenderConfig,
                                             requestActorFactory: RequestActorFactory):
   ActorRef[HttpRequestSender.HttpCommand] =
-    decorateRequestSender(spawner, spawner.spawn(MultiHostExtension(config.queueSize,
+    decorateRequestSender(spawner, spawner.spawn(MultiHostExtension(config.queueSize, proxy = config.proxy,
       requestActorFactory = requestActorFactory), config.actorName), config)
 
   override def decorateRequestSender(spawner: Spawner, requestSender: ActorRef[HttpRequestSender.HttpCommand],

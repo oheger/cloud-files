@@ -167,6 +167,24 @@ lazy val oneDrive = (project in file("onedrive"))
   ) dependsOn (core % "compile->compile;test->test")
 
 /**
+ * This project provides a FileSystem implementation based on the local file
+ * system, e.g. the machine's hard drive.
+ */
+lazy val localFs = (project in file("localfs"))
+  .enablePlugins(SbtOsgi)
+  .settings(projectOsgiSettings)
+  .settings(
+    libraryDependencies ++= akkaDependencies,
+    libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
+    libraryDependencies ++= testDependencies,
+    name := "cloud-files-localfs",
+    description := "A file system implementation for the local file system",
+    crossScalaVersions := supportedScalaVersions,
+    OsgiKeys.exportPackage := Seq("com.github.cloudfiles.localfs.*"),
+    OsgiKeys.privatePackage := Seq.empty
+  ) dependsOn (core % "compile->compile;test->test")
+
+/**
  * This project provides extension file systems that support encrypted file
  * content and file names.
  */

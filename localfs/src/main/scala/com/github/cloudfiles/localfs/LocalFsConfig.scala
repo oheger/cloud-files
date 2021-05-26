@@ -23,7 +23,15 @@ import scala.concurrent.ExecutionContext
  * The configuration class for the local file system implementation.
  *
  * The most important property is the base path of the local file system.
- * Relative paths are resolved against this root folder.
+ * Relative paths are resolved against this root folder. As the ''FileSystem''
+ * API accepts arbitrary paths, it is possible to manipulate elements that are
+ * not in the sub tree spawned by the base path. Depending on the context of an
+ * application, this may be a security issue. To prevent this, this
+ * configuration supports an option to enable a mode in which paths are
+ * sanitized; this option is '''true''' per default. In this mode, all paths
+ * passed to the file system are normalized, and it is checked whether they are
+ * actually sub paths of the base path. If this check fails, the operation
+ * fails with an exception.
  *
  * As the file system implementation typically uses blocking operations, a
  * dedicated ''ExecutionContext'' has to be provided. This is to force the user
@@ -34,7 +42,10 @@ import scala.concurrent.ExecutionContext
  *                         absolute path
  * @param executionContext the execution context
  * @param linkOptions      options for dealing with links
+ * @param sanitizePaths    flag whether paths should be checked against the
+ *                         base path
  */
 case class LocalFsConfig(basePath: Path,
                          executionContext: ExecutionContext,
-                         linkOptions: Seq[LinkOption] = Nil)
+                         linkOptions: Seq[LinkOption] = Nil,
+                         sanitizePaths: Boolean = true)

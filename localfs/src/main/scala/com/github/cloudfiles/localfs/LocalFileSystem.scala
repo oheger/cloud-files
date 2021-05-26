@@ -60,7 +60,7 @@ class LocalFileSystem(val config: LocalFsConfig)
 
   override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[Path] = Operation { _ =>
     Future {
-      config.basePath.resolve(UriEncodingHelper.removeLeadingSeparator(path))
+      checkPath(config.basePath.resolve(UriEncodingHelper.removeLeadingSeparator(path)))
     }
   }
 
@@ -70,7 +70,7 @@ class LocalFileSystem(val config: LocalFsConfig)
 
   override def resolveFile(id: Path)(implicit system: ActorSystem[_]): Operation[LocalFile] = Operation { _ =>
     Future {
-      if (!Files.isRegularFile(id, config.linkOptions: _*))
+      if (!Files.isRegularFile(checkPath(id), config.linkOptions: _*))
         throw new FileSystemException(id.toString, null, "This path does not point to a file.")
 
       createLocalFile(id)
@@ -79,7 +79,7 @@ class LocalFileSystem(val config: LocalFsConfig)
 
   override def resolveFolder(id: Path)(implicit system: ActorSystem[_]): Operation[LocalFolder] = Operation { _ =>
     Future {
-      if (!Files.isDirectory(id, config.linkOptions: _*))
+      if (!Files.isDirectory(checkPath(id), config.linkOptions: _*))
         throw new NotDirectoryException(id.toString)
 
       createLocalFolder(id)
@@ -89,7 +89,7 @@ class LocalFileSystem(val config: LocalFsConfig)
   override def folderContent(id: Path)(implicit system: ActorSystem[_]):
   Operation[Model.FolderContent[Path, LocalFile, LocalFolder]] = Operation { _ =>
     Future {
-      val childPaths = readFolder(id)
+      val childPaths = readFolder(checkPath(id))
       val elements =
         childPaths.foldLeft((Map.empty[Path, LocalFile], Map.empty[Path, LocalFolder])) { (maps, path) =>
           if (Files.isDirectory(path, config.linkOptions: _*))
@@ -105,14 +105,14 @@ class LocalFileSystem(val config: LocalFsConfig)
   override def createFolder(parent: Path, folder: Model.Folder[Path])(implicit system: ActorSystem[_]):
   Operation[Path] = Operation { _ =>
     Future {
-      updateProperties(Files.createDirectory(parent.resolve(folder.name)), folder)
+      updateProperties(Files.createDirectory(checkPath(parent.resolve(folder.name))), folder)
     }
   }
 
   override def updateFolder(folder: Model.Folder[Path])(implicit system: ActorSystem[_]): Operation[Unit] =
     Operation { _ =>
       Future {
-        updateProperties(folder.id, folder)
+        updateProperties(checkPath(folder.id), folder)
       }
     }
 
@@ -127,7 +127,7 @@ class LocalFileSystem(val config: LocalFsConfig)
 
   override def updateFile(file: Model.File[Path])(implicit system: ActorSystem[_]): Operation[Unit] = Operation { _ =>
     Future {
-      updateProperties(file.id, file)
+      updateProperties(checkPath(file.id), file)
     }
   }
 
@@ -138,7 +138,7 @@ class LocalFileSystem(val config: LocalFsConfig)
 
   override def downloadFile(fileID: Path)(implicit system: ActorSystem[_]): Operation[HttpEntity] = Operation { _ =>
     Future {
-      HttpEntity(ContentTypes.`application/octet-stream`, FileIO.fromPath(fileID))
+      HttpEntity(ContentTypes.`application/octet-stream`, FileIO.fromPath(checkPath(fileID)))
     }
   }
 
@@ -149,6 +149,20 @@ class LocalFileSystem(val config: LocalFsConfig)
    *             file system's configuration.
    */
   override protected implicit def ec(implicit system: ActorSystem[_]): ExecutionContext = config.executionContext
+
+  /**
+   * Executes a check whether the given path is in the sub tree of the base
+   * path of this file system if this check is enabled. If the check fails, an
+   * exception is thrown.
+   *
+   * @param path the path to check
+   * @return the checked path
+   */
+  private def checkPath(path: Path): Path = {
+    if (config.sanitizePaths && !path.normalize().startsWith(config.basePath))
+      throw new FileSystemException(path.toString, null, s"not a sub path of '${config.basePath}'.")
+    path
+  }
 
   /**
    * Returns the basic attributes of the file or folder referenced by the given
@@ -186,7 +200,7 @@ class LocalFileSystem(val config: LocalFsConfig)
 
   private def deleteElement(path: Path)(implicit system: ActorSystem[_]): Operation[Unit] = Operation { _ =>
     Future {
-      Files delete path
+      Files delete checkPath(path)
     }
   }
 
@@ -219,9 +233,11 @@ class LocalFileSystem(val config: LocalFsConfig)
    * @param system  the actor system
    * @return a ''Future'' with the result of the operation
    */
-  private def writeFileContent(target: Path, content: Source[ByteString, Any])
-                              (implicit system: ActorSystem[_]): Future[IOResult] = {
-    val sink = FileIO.toPath(target)
+  private def writeFileContent(target: Path, content: Source[ByteString, Any])(implicit system: ActorSystem[_]):
+  Future[IOResult] = Future {
+    checkPath(target)
+  } flatMap { path =>
+    val sink = FileIO.toPath(path)
     content.runWith(sink)
   }
 

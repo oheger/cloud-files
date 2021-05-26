@@ -30,9 +30,8 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
-import java.io.IOException
 import java.nio.file.attribute.FileTime
-import java.nio.file.{Files, Path}
+import java.nio.file.{FileSystemException, Files, Path}
 import java.time.Instant
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -89,11 +88,22 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   private def run[A](op: Operation[A]): A = futureResult(op.run(null))
 
   /**
-   * Creates a file system to be used by tests.
+   * Executes the given operation and expects it to fail with a
+   * ''FileSystemException''.
    *
+   * @param op the operation
+   * @return the exception thrown by the operation
+   */
+  private def failedRun(op: Operation[_]): FileSystemException =
+    expectFailedFuture[FileSystemException](op.run(null))
+
+  /**
+   * Creates a file system with the given config to be used by tests.
+   *
+   * @param config the configuration to use
    * @return the test file system
    */
-  private def createFileSystem(): LocalFileSystem = new LocalFileSystem(createConfig())
+  private def createFileSystem(config: LocalFsConfig = createConfig()): LocalFileSystem = new LocalFileSystem(config)
 
   "LocalFileSystem" should "return the root ID" in {
     val fs = createFileSystem()
@@ -166,7 +176,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val fs = createFileSystem()
     val path = writeFileContent(rootPath.resolve("plainFile.txt"), "not a folder")
 
-    val exception = expectFailedFuture[IOException](fs.resolveFolder(path).run(null))
+    val exception = failedRun(fs.resolveFolder(path))
     exception.getMessage should include(path.toString)
   }
 
@@ -174,7 +184,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val fs = createFileSystem()
     val path = Files.createDirectory(rootPath.resolve("aFolder"))
 
-    val exception = expectFailedFuture[IOException](fs.resolveFile(path).run(null))
+    val exception = failedRun(fs.resolveFile(path))
     exception.getMessage should include(path.toString)
   }
 
@@ -374,5 +384,112 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     file.size should be(16)
     content.files(file2).name should be("another file.doc")
     content.folders(subSubPath).name should be("subSub")
+  }
+
+  it should "fail to resolve a path outside of the directory structure" in {
+    val fs = createFileSystem()
+    val InvalidPath = "../sibling"
+
+    val exception = failedRun(fs.resolvePath(InvalidPath))
+    exception.getMessage should include(s"not a sub path of '${fs.config.basePath}'.")
+    exception.getMessage should include("sibling")
+  }
+
+  it should "fail to resolve a folder outside of the directory structure" in {
+    val fs = createFileSystem()
+
+    failedRun(fs.resolveFolder(testDirectory))
+  }
+
+  it should "normalize paths when checking them" in {
+    val fs = createFileSystem()
+    val invalidPath = rootPath.resolve("../")
+
+    failedRun(fs.resolveFolder(invalidPath))
+  }
+
+  it should "fail to resolve a file outside of the directory structure" in {
+    val fileOutside = createDataFile("outside")
+    val fs = createFileSystem()
+
+    failedRun(fs.resolveFile(fileOutside))
+  }
+
+  it should "fail to read the content of a folder outside of the directory structure" in {
+    val fs = createFileSystem()
+
+    failedRun(fs.folderContent(testDirectory))
+  }
+
+  it should "fail to create a folder outside of the directory structure" in {
+    val fs = createFileSystem()
+
+    failedRun(fs.createFolder(rootPath, LocalFsModel.newFolder("../out")))
+  }
+
+  it should "fail to update a folder outside of the directory structure" in {
+    val fs = createFileSystem()
+
+    failedRun(fs.updateFolder(LocalFsModel.updateFolder(testDirectory)))
+  }
+
+  it should "fail to delete a folder outside of the directory structure" in {
+    val fs = createFileSystem()
+    val invalidPath = Files.createDirectory(testDirectory.resolve("outside"))
+
+    failedRun(fs.deleteFolder(invalidPath))
+    Files.exists(invalidPath) shouldBe true
+  }
+
+  it should "fail to delete a file outside of the directory structure" in {
+    val fs = createFileSystem()
+    val invalidFile = createDataFile("must not be deleted")
+
+    failedRun(fs.deleteFile(invalidFile))
+    Files.exists(invalidFile) shouldBe true
+  }
+
+  it should "fail to create a file outside the directory structure" in {
+    val fs = createFileSystem()
+    val invalidFile = LocalFsModel.newFile("../outside.txt")
+
+    failedRun(fs.createFile(rootPath, invalidFile, fileContentSource))
+    Files.exists(testDirectory.resolve("outside.txt")) shouldBe false
+  }
+
+  it should "fail to update the content of a file outside the directory structure" in {
+    val Content = "must not be overwritten"
+    val fs = createFileSystem()
+    val invalidFile = createDataFile(Content)
+
+    failedRun(fs.updateFileContent(invalidFile, 0, fileContentSource))
+    readDataFile(invalidFile) should be(Content)
+  }
+
+  it should "fail to update a file's properties outside of the directory structure" in {
+    val fs = createFileSystem()
+    val invalidFile = createDataFile("no properties change")
+    val modifiedTime = Files.getLastModifiedTime(invalidFile)
+    val updateFile = LocalFsModel.updateFile(invalidFile,
+      lastModifiedAt = Some(Instant.parse("2021-05-25T20:16:04.000Z")))
+
+    failedRun(fs.updateFile(updateFile))
+    Files.getLastModifiedTime(invalidFile) should be(modifiedTime)
+  }
+
+  it should "fail to download a file outside of the directory structure" in {
+    val fs = createFileSystem()
+    val invalidFile = createDataFile("not downloaded")
+
+    failedRun(fs.downloadFile(invalidFile))
+  }
+
+  it should "support disabling path checks" in {
+    val config = createConfig().copy(sanitizePaths = false)
+    val fs = createFileSystem(config)
+    val outsideFile = createDataFile("should be deleted")
+
+    run(fs.deleteFile(outsideFile))
+    Files.exists(outsideFile) shouldBe false
   }
 }

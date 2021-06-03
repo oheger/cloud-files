@@ -47,7 +47,19 @@ object DavParser {
   final val UndefinedSize = -1L
 
   /** The namespace URI for elements belonging to the core DAV namespace. */
-  private val NS_DAV = "DAV:"
+  final val NS_DAV = "DAV:"
+
+  /** Standard attribute for the creation date. */
+  final val AttrCreatedAt = davAttribute("creationdate")
+
+  /** Standard attribute for the last modification date. */
+  final val AttrModifiedAt = davAttribute("getlastmodified")
+
+  /** Standard attribute for the (file) size. */
+  final val AttrSize = davAttribute("getcontentlength")
+
+  /** Standard attribute for the name attribute. */
+  final val AttrName = davAttribute("displayname")
 
   /** Name of the XML response element. */
   private val ElemResponse = "response"
@@ -67,18 +79,6 @@ object DavParser {
   /** Name of the XML is collection element. */
   private val ElemCollection = "collection"
 
-  /** Standard attribute for the creation date. */
-  private val AttrCreatedAt = davAttribute("creationdate")
-
-  /** Standard attribute for the last modification date. */
-  private val AttrModifiedAt = davAttribute("getlastmodified")
-
-  /** Standard attribute for the (file) size. */
-  private val AttrSize = davAttribute("getcontentlength")
-
-  /** Standard attribute for the name attribute. */
-  private val AttrName = davAttribute("displayname")
-
   /**
    * A set with element attributes that are directly accessible from properties
    * of a folder or file. These are filtered out from the object with
@@ -88,6 +88,20 @@ object DavParser {
 
   /** The logger. */
   private val log = LoggerFactory.getLogger(classOf[DavParser])
+
+  /**
+   * Parses a date in string form to a corresponding ''Instant''. The date is
+   * expected to be in the format defined by RFC 1123, but this function tries
+   * to be more tolerant and accepts also ISO timestamps. If parsing of the
+   * date fails, result is the ''DateUndefined'' constant.
+   *
+   * @param strDate the date as string
+   * @return the resulting ''Instant''
+   */
+  def parseTimeAttribute(strDate: String): Instant = Try {
+    val query: TemporalQuery[Instant] = Instant.from _
+    DateTimeFormatter.RFC_1123_DATE_TIME.parse(strDate, query)
+  } orElse Try(Instant.parse(strDate)) getOrElse UndefinedDate
 
   /**
    * Extracts the content of a folder from the given XML string.
@@ -227,20 +241,6 @@ object DavParser {
     }
     name
   }
-
-  /**
-   * Parses a date in string form to a corresponding ''Instant''. The date is
-   * expected to be in the format defined by RFC 1123, but this function tries
-   * to be more tolerant and accepts also ISO timestamps. If parsing of the
-   * date fails, result is the ''DateUndefined'' constant.
-   *
-   * @param strDate the date as string
-   * @return the resulting ''Instant''
-   */
-  private def parseTimeAttribute(strDate: String): Instant = Try {
-    val query: TemporalQuery[Instant] = Instant.from _
-    DateTimeFormatter.RFC_1123_DATE_TIME.parse(strDate, query)
-  } orElse Try(Instant.parse(strDate)) getOrElse UndefinedDate
 
   /**
    * Parses the attribute with the file size.

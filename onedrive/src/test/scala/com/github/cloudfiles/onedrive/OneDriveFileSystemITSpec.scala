@@ -293,8 +293,8 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("resolve_folder_response.json")))
     val fsInfo =
       OneDriveJsonProtocol.WritableFileSystemInfo(createdDateTime = Some(Instant.parse("2021-01-23T20:07:10.113Z")))
-    val folder = OneDriveModel.newFolder("cloud-files", "This is the description of the test folder.",
-      Some(fsInfo))
+    val folder = OneDriveModel.newFolder("cloud-files", info = Some(fsInfo),
+      description = "This is the description of the test folder.")
     val fs = new OneDriveFileSystem(createConfig())
 
     val folderId = futureResult(runOp(fs.createFolder(ParentId, folder)))
@@ -322,7 +322,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .withRequestBody(equalToJson(expBody))
       .willReturn(aJsonResponse(StatusCodes.OK)
         .withBodyFile("resolve_folder_response.json")))
-    val folder = OneDriveModel.updateFolder(ResolvedID, "cloud-files",
+    val folder = OneDriveModel.newFolder(id = ResolvedID, name = "cloud-files",
       info = Some(OneDriveJsonProtocol.WritableFileSystemInfo()))
     val fs = new OneDriveFileSystem(createConfig())
 
@@ -340,7 +340,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fsInfo = OneDriveJsonProtocol.WritableFileSystemInfo(
       lastModifiedDateTime = Some(Instant.parse("2021-01-30T15:54:20.224Z")),
       lastAccessedDateTime = Some(Instant.parse("2021-01-30T15:54:48.448Z")))
-    val file = OneDriveModel.updateFile(ResolvedID, name = "cloudFiles.adoc", info = Some(fsInfo), size = 2048)
+    val file = OneDriveModel.newFile(id = ResolvedID, name = "cloudFiles.adoc", info = Some(fsInfo), size = 2048)
     val fs = new OneDriveFileSystem(createConfig())
 
     futureResult(runOp(fs.updateFile(file)))
@@ -582,7 +582,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     when(folder.id).thenReturn(ResolvedID)
     when(folder.name).thenReturn(FolderName)
     when(folder.description).thenReturn(FolderDesc)
-    val expFolder = OneDriveModel.updateFolder(ResolvedID, FolderName, FolderDesc)
+    val expFolder = OneDriveModel.newFolder(id = ResolvedID, name = FolderName, description = FolderDesc)
     val fs = new OneDriveFileSystem(createConfig())
 
     fs.patchFolder(folder, ElementPatchSpec()) should be(expFolder)
@@ -595,8 +595,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val lastModifiedAt = Instant.parse("2021-02-13T16:08:16.587Z")
     val fileInfo = Some(WritableFileSystemInfo(createdDateTime = Some(createdAt),
       lastModifiedDateTime = Some(lastModifiedAt)))
-    val folder = OneDriveModel.updateFolder(ResolvedID, "someName", info = fileInfo)
-    val expFolder = OneDriveModel.updateFolder(ResolvedID, PatchedName, PatchedDescription, fileInfo)
+    val folder = OneDriveModel.newFolder(id = ResolvedID, name = "someName", info = fileInfo)
+    val expFolder = OneDriveModel.newFolder(id = ResolvedID, name = PatchedName, description = PatchedDescription,
+      info = fileInfo)
     val spec = ElementPatchSpec(patchName = Some(PatchedName), patchDescription = Some(PatchedDescription))
     val fs = new OneDriveFileSystem(createConfig())
 
@@ -605,7 +606,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
   it should "patch a file against an empty patch spec" in {
     val fileInfo = WritableFileSystemInfo(createdDateTime = Some(Instant.parse("2021-02-13T20:03:43.587Z")))
-    val file = OneDriveModel.updateFile(ResolvedID, 20210213210435L, info = Some(fileInfo))
+    val file = OneDriveModel.newFile(name = ResolvedID, size = 20210213210435L, info = Some(fileInfo))
     val fs = new OneDriveFileSystem(createConfig())
 
     fs.patchFile(file, ElementPatchSpec()) should be(file)
@@ -620,7 +621,8 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     when(file.name).thenReturn("originalName.txt")
     when(file.description).thenReturn(FileDescription)
     when(file.size).thenReturn(42L)
-    val expFile = OneDriveModel.updateFile(ResolvedID, PatchedSize, PatchedName, FileDescription)
+    val expFile = OneDriveModel.newFile(id = ResolvedID, size = PatchedSize, name = PatchedName,
+      description = FileDescription)
     expFile.size should be(PatchedSize)
     val spec = ElementPatchSpec(patchName = Some(PatchedName), patchSize = Some(PatchedSize))
     val fs = new OneDriveFileSystem(createConfig())

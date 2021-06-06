@@ -112,69 +112,39 @@ object OneDriveModel {
   }
 
   /**
-   * Constructs a ''OneDriveFolder'' object for creating a folder on the
-   * server. As only a small number of a folder's properties are writable,
-   * creating such an object manually and passing in all the dummy values is
-   * cumbersome. Therefore, this utility function can be used, which deals only
-   * with relevant properties and sets defaults for all others.
+   * Constructs a ''OneDriveFolder'' object for creating or updating a folder
+   * on the server. As only a small number of a folder's properties are
+   * writable, creating such an object manually and passing in all the dummy
+   * values is cumbersome. Therefore, this utility function can be used, which
+   * deals only with relevant properties and sets defaults for all others.
    *
-   * @param name        the name of the folder or '''null''' for undefined
+   * @param name        the name of the folder
+   * @param id          the ID of the folder or '''null''' for undefined
    * @param description the description or '''null''' for undefined
    * @param info        optional object with local file system information
    * @return the newly created ''OneDriveFolder'' object
    */
-  def newFolder(name: String = null, description: String = null,
+  def newFolder(name: String, id: String = null, description: String = null,
                 info: Option[WritableFileSystemInfo] = None): OneDriveFolder =
-    OneDriveFolder(itemForFolder(null, name, description, info))
-
-  /**
-   * Constructs a ''OneDriveFolder'' object that can be used to update an
-   * existing folder on the server. Like ''newFolder()'', this function takes
-   * only the writable properties into account.
-   *
-   * @param id          the ID of the folder to update; this is mandatory
-   * @param name        the name of the folder or '''null''' for undefined
-   * @param description the description or '''null''' for undefined
-   * @param info        optional object with local file system information
-   * @return the newly created ''OneDriveFolder'' object for the update
-   */
-  def updateFolder(id: String, name: String = null, description: String = null,
-                   info: Option[WritableFileSystemInfo] = None): OneDriveFolder =
     OneDriveFolder(itemForFolder(id, name, description, info))
 
   /**
-   * Constructs a ''OneDriveFile'' object for creating a file on the server. As
-   * only a small number of a file's properties are writable, creating such an
-   * object manually and passing in all the dummy values is cumbersome.
-   * Therefore, this utility function can be used, which deals only with
-   * relevant properties and sets defaults for all others. Note that the size
-   * of the file is required for a correct upload.
+   * Constructs a ''OneDriveFile'' object for creating or updating a file on
+   * the server. As only a small number of a file's properties are writable,
+   * creating such an object manually and passing in all the dummy values is
+   * cumbersome. Therefore, this utility function can be used, which deals only
+   * with relevant properties and sets defaults for all others. Note that the
+   * size of the file is required for a correct upload.
    *
    * @param size        the size of the file (in bytes)
+   * @param id          the ID of the file or '''null''' for undefined
    * @param name        the name of the file or '''null''' for undefined
    * @param description the description or '''null''' for undefined
    * @param info        optional object with local file system information
    * @return the newly created ''OneDriveFile'' object
    */
-  def newFile(size: Long, name: String = null, description: String = null,
+  def newFile(size: Long, name: String, id: String = null, description: String = null,
               info: Option[WritableFileSystemInfo] = None): OneDriveFile =
-    OneDriveFile(itemForFile(null, name, description, size, info))
-
-  /**
-   * Constructs a ''OneDriveFile'' object that can be used to update an
-   * existing file on the server. Like ''newFile()'', this function takes only
-   * the writable properties into account. Note that the size of the file is
-   * required for a correct upload.
-   *
-   * @param id          the ID of the file to update; this is mandatory
-   * @param size        the size of the file (in bytes)
-   * @param name        the name of the file or '''null''' if undefined
-   * @param description the description or '''null''' if undefined
-   * @param info        optional object with local file system information
-   * @return the newly created ''OneDriveFile'' object for the update
-   */
-  def updateFile(id: String, size: Long, name: String = null, description: String = null,
-                 info: Option[WritableFileSystemInfo] = None): OneDriveFile =
     OneDriveFile(itemForFile(id, name, description, size, info))
 
   /**

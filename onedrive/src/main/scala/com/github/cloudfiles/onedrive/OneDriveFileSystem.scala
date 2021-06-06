@@ -133,8 +133,10 @@ object OneDriveFileSystem {
   private def itemFor(element: Model.Element[String]): DriveItem =
     element match {
       case e: OneDriveModel.OneDriveElement => e.item
-      case folder: Model.Folder[String] => OneDriveModel.updateFolder(folder.id, folder.name, folder.description).item
-      case file: Model.File[String] => OneDriveModel.updateFile(file.id, file.size, file.name, file.description).item
+      case folder: Model.Folder[String] => OneDriveModel.newFolder(id = folder.id, name = folder.name,
+        description = folder.description).item
+      case file: Model.File[String] => OneDriveModel.newFile(id = file.id, size = file.size, name = file.name,
+        description = file.description).item
     }
 
   /**

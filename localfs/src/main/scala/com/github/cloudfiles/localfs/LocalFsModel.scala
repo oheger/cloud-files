@@ -100,57 +100,35 @@ object LocalFsModel {
   }
 
   /**
-   * Constructs a ''LocalFolder'' object that can be used to create a new
+   * Constructs a ''LocalFolder'' object that can be used to create or update a
    * folder. This is a convenience function that takes only the attributes into
-   * account that are relevant for the creation of the folder; read-only
+   * account that are relevant for a manipulation of the folder; read-only
    * properties are ignored.
    *
-   * @param name           the name of the new folder
+   * @param path           the optional path of the folder
+   * @param name           the name of the folder; if undefined, it is derived
+   *                       from the path if present
    * @param lastModifiedAt an optional last modified time to set
    * @return the ''LocalFolder'' object to create a new folder
    */
-  def newFolder(name: String, lastModifiedAt: Option[Instant] = None): LocalFolder =
-    LocalFolder(id = null, name = name, createdAt = TimeUndefined, lastModifiedAt = TimeUndefined,
+  def newFolder(path: Path = null, name: String = null, lastModifiedAt: Option[Instant] = None): LocalFolder =
+    LocalFolder(id = path, name = calcName(path, name), createdAt = TimeUndefined, lastModifiedAt = TimeUndefined,
       lastModifiedUpdate = lastModifiedAt)
 
   /**
-   * Constructs a ''LocalFolder'' object that can be used to update an existing
-   * folder. This is a convenience function that takes only the attributes into
-   * account that are relevant for the operation and can be updated.
+   * Constructs a ''LocalFile'' object that can be used to create or update a
+   * file. This is a convenience function that takes only the attributes into
+   * account that are relevant for a modification of the file; read-only
+   * properties are ignored.
    *
-   * @param path           the path to the folder in question (not '''null''')
-   * @param lastModifiedAt an optional last modified time to set
-   * @return the ''LocalFolder'' object to update a folder
-   */
-  def updateFolder(path: Path, lastModifiedAt: Option[Instant] = None): LocalFolder =
-    LocalFolder(id = path, name = nameFromPath(path), createdAt = TimeUndefined, lastModifiedAt = TimeUndefined,
-      lastModifiedUpdate = lastModifiedAt)
-
-  /**
-   * Constructs a ''LocalFile'' object that can be used to create a new file.
-   * This is a convenience function that takes only the attributes into account
-   * that are relevant for the creation of the file; read-only properties are
-   * ignored.
-   *
-   * @param name           the name of the new file
+   * @param path           the optional path of the file
+   * @param name           the name of the file; if undefined, it is derived
+   *                       from the path if present
    * @param lastModifiedAt an optional last modified time to set
    * @return the ''LocalFile'' object to create a new file
    */
-  def newFile(name: String, lastModifiedAt: Option[Instant] = None): LocalFile =
-    LocalFile(id = null, name = name, createdAt = TimeUndefined, lastModifiedAt = TimeUndefined, size = 0,
-      lastModifiedUpdate = lastModifiedAt)
-
-  /**
-   * Constructs a ''LocalFile'' object that can be used to update an existing
-   * file. This is a convenience function that takes only the attributes into
-   * account that are relevant for the operation and can be updated.
-   *
-   * @param path           the path to the file (not '''null''')
-   * @param lastModifiedAt an optional last modified time to set
-   * @return the ''LocalFile'' to update a file
-   */
-  def updateFile(path: Path, lastModifiedAt: Option[Instant] = None): LocalFile =
-    LocalFile(id = path, name = nameFromPath(path), createdAt = TimeUndefined, lastModifiedAt = TimeUndefined,
+  def newFile(path: Path = null, name: String = null, lastModifiedAt: Option[Instant] = None): LocalFile =
+    LocalFile(id = path, name = calcName(path, name), createdAt = TimeUndefined, lastModifiedAt = TimeUndefined,
       size = 0, lastModifiedUpdate = lastModifiedAt)
 
   /**
@@ -163,5 +141,20 @@ object LocalFsModel {
   private def nameFromPath(path: Path): String = {
     val namePath = path.getFileName
     if (namePath == null) null else namePath.toString
+  }
+
+  /**
+   * Calculates the name of an element from the given parameters. If a name is
+   * provided explicitly, it is used. Otherwise, if a path is available, the
+   * name is derived from the path's file name.
+   *
+   * @param path the path (can be '''null''')
+   * @param name the name (can be '''null''')
+   * @return the resulting element name
+   */
+  private def calcName(path: Path, name: String): String = {
+    if (name != null) name
+    else if (path != null) nameFromPath(path)
+    else null
   }
 }

@@ -24,11 +24,12 @@ import java.time.Instant
 
 class LocalFsModelSpec extends AnyFlatSpec with Matchers {
   "LocalFsModel" should "create a folder object for a create operation" in {
+    val path = Paths.get("test/folder/path")
     val Name = "newFolder"
     val LastModified = Instant.parse("2021-05-22T09:38:42.000Z")
 
-    val folder = LocalFsModel.newFolder(Name, lastModifiedAt = Some(LastModified))
-    folder.id should be(null)
+    val folder = LocalFsModel.newFolder(name = Name, path = path, lastModifiedAt = Some(LastModified))
+    folder.id should be(path)
     folder.name should be(Name)
     folder.description should be(null)
     folder.createdAt should be(LocalFsModel.TimeUndefined)
@@ -36,31 +37,38 @@ class LocalFsModelSpec extends AnyFlatSpec with Matchers {
     folder.lastModifiedUpdate should be(Some(LastModified))
   }
 
-  it should "create a folder for an update operation" in {
-    val TestPath = Paths.get("the", "test", "path")
-    val LastModified = Instant.parse("2021-05-22T09:45:28.000Z")
+  it should "create a folder with default properties" in {
+    val folder = LocalFsModel.newFolder()
 
-    val folder = LocalFsModel.updateFolder(TestPath, Some(LastModified))
-    folder.id should be(TestPath)
-    folder.name should be("path")
+    folder.id should be(null)
+    folder.name should be(null)
     folder.description should be(null)
     folder.createdAt should be(LocalFsModel.TimeUndefined)
     folder.lastModifiedAt should be(LocalFsModel.TimeUndefined)
-    folder.lastModifiedUpdate should be(Some(LastModified))
+    folder.lastModifiedUpdate should be(None)
   }
 
-  it should "handle an empty path when constructing an update folder" in {
-    val folder = LocalFsModel.updateFolder(Paths.get("/"))
+  it should "derive the name from the path when creating a folder" in {
+    val path = Paths.get("test/folder/path")
+
+    val folder = LocalFsModel.newFolder(path)
+    folder.id should be(path)
+    folder.name should be("path")
+  }
+
+  it should "handle an empty path when constructing a folder" in {
+    val folder = LocalFsModel.newFolder(Paths.get("/"))
 
     folder.name should be(null)
   }
 
   it should "create a file object for a create operation" in {
+    val path = Paths.get("/some/test/file.txt")
     val Name = "newFile"
     val LastModified = Instant.parse("2021-05-22T14:39:38.000Z")
 
-    val file = LocalFsModel.newFile(Name, Some(LastModified))
-    file.id should be(null)
+    val file = LocalFsModel.newFile(path, Name, Some(LastModified))
+    file.id should be(path)
     file.name should be(Name)
     file.description should be(null)
     file.createdAt should be(LocalFsModel.TimeUndefined)
@@ -69,12 +77,24 @@ class LocalFsModelSpec extends AnyFlatSpec with Matchers {
     file.lastModifiedUpdate should be(Some(LastModified))
   }
 
-  it should "create a file object for an update operation" in {
+  it should "create a file object with default properties" in {
+    val file = LocalFsModel.newFile()
+
+    file.id should be(null)
+    file.name should be(null)
+    file.description should be(null)
+    file.createdAt should be(LocalFsModel.TimeUndefined)
+    file.lastModifiedAt should be(LocalFsModel.TimeUndefined)
+    file.size should be(0)
+    file.lastModifiedUpdate should be(None)
+  }
+
+  it should "derive the file name from the path" in {
     val Name = "newFile.txt"
     val TestPath = Paths.get("path", "to", "file", Name)
     val LastModified = Instant.parse("2021-05-22T14:47:39.000Z")
 
-    val file = LocalFsModel.updateFile(TestPath, Some(LastModified))
+    val file = LocalFsModel.newFile(TestPath, lastModifiedAt = Some(LastModified))
     file.id should be(TestPath)
     file.name should be(Name)
     file.description should be(null)

@@ -202,7 +202,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "create a new folder" in {
     val FolderName = "newFolder"
     val fs = createFileSystem()
-    val folder = LocalFsModel.newFolder(FolderName)
+    val folder = LocalFsModel.newFolder(name = FolderName)
 
     val path = run(fs.createFolder(rootPath, folder))
     path should be(rootPath.resolve(FolderName))
@@ -213,7 +213,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val FolderName = "newFolderWithModifiedDate"
     val ModifiedAt = Instant.parse("2021-05-23T16:25:43.000Z")
     val fs = createFileSystem()
-    val folder = LocalFsModel.newFolder(FolderName, Some(ModifiedAt))
+    val folder = LocalFsModel.newFolder(name = FolderName, lastModifiedAt = Some(ModifiedAt))
 
     val path = run(fs.createFolder(rootPath, folder))
     Files.getLastModifiedTime(path).toInstant should be(ModifiedAt)
@@ -234,7 +234,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val ModifiedAt = Instant.parse("2021-05-23T18:33:20.000Z")
     val fs = createFileSystem()
     val folderPath = Files.createDirectory(rootPath.resolve("updateFolder"))
-    val folder = LocalFsModel.updateFolder(folderPath, Some(ModifiedAt))
+    val folder = LocalFsModel.newFolder(folderPath, lastModifiedAt = Some(ModifiedAt))
 
     run(fs.updateFolder(folder))
     Files.getLastModifiedTime(folderPath).toInstant should be(ModifiedAt)
@@ -252,7 +252,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "create a new file" in {
     val FileName = "newFile.dat"
     val fs = createFileSystem()
-    val file = LocalFsModel.newFile(FileName)
+    val file = LocalFsModel.newFile(name = FileName)
 
     val path = run(fs.createFile(rootPath, file, fileContentSource))
     path.getFileName.toString should be(FileName)
@@ -264,7 +264,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val FileName = "newFileWithProperties.dat"
     val ModifiedAt = Instant.parse("2021-05-23T18:49:32.000Z")
     val fs = createFileSystem()
-    val file = LocalFsModel.newFile(FileName, Some(ModifiedAt))
+    val file = LocalFsModel.newFile(name = FileName, lastModifiedAt = Some(ModifiedAt))
 
     val path = run(fs.createFile(rootPath, file, fileContentSource))
     Files.getLastModifiedTime(path).toInstant should be(ModifiedAt)
@@ -275,7 +275,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val ModifiedAt = Instant.parse("2021-05-23T18:56:05.000Z")
     val fs = createFileSystem()
     val filePath = writeFileContent(rootPath.resolve("updateFile.txt"), Content)
-    val file = LocalFsModel.updateFile(filePath, Some(ModifiedAt))
+    val file = LocalFsModel.newFile(filePath, lastModifiedAt = Some(ModifiedAt))
 
     run(fs.updateFile(file))
     Files.getLastModifiedTime(filePath).toInstant should be(ModifiedAt)
@@ -424,13 +424,13 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "fail to create a folder outside of the directory structure" in {
     val fs = createFileSystem()
 
-    failedRun(fs.createFolder(rootPath, LocalFsModel.newFolder("../out")))
+    failedRun(fs.createFolder(rootPath, LocalFsModel.newFolder(name = "../out")))
   }
 
   it should "fail to update a folder outside of the directory structure" in {
     val fs = createFileSystem()
 
-    failedRun(fs.updateFolder(LocalFsModel.updateFolder(testDirectory)))
+    failedRun(fs.updateFolder(LocalFsModel.newFolder(testDirectory)))
   }
 
   it should "fail to delete a folder outside of the directory structure" in {
@@ -451,7 +451,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
 
   it should "fail to create a file outside the directory structure" in {
     val fs = createFileSystem()
-    val invalidFile = LocalFsModel.newFile("../outside.txt")
+    val invalidFile = LocalFsModel.newFile(name = "../outside.txt")
 
     failedRun(fs.createFile(rootPath, invalidFile, fileContentSource))
     Files.exists(testDirectory.resolve("outside.txt")) shouldBe false
@@ -470,7 +470,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val fs = createFileSystem()
     val invalidFile = createDataFile("no properties change")
     val modifiedTime = Files.getLastModifiedTime(invalidFile)
-    val updateFile = LocalFsModel.updateFile(invalidFile,
+    val updateFile = LocalFsModel.newFile(invalidFile,
       lastModifiedAt = Some(Instant.parse("2021-05-25T20:16:04.000Z")))
 
     failedRun(fs.updateFile(updateFile))

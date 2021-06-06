@@ -16,6 +16,7 @@
 
 package com.github.cloudfiles.webdav
 
+import akka.http.scaladsl.model.Uri
 import com.github.cloudfiles.webdav.DavModel.{AttributeKey, Attributes}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -53,12 +54,14 @@ class DavModelSpec extends AnyFlatSpec with Matchers {
 
   it should "create a new folder with all properties" in {
     val FolderName = "MyNewFolder"
+    val FolderUri = Uri("https://test.example.org/test/folder")
     val FolderDesc = "This is my new folder. Indeed."
     val FolderAttrs = DavModel.Attributes(Map(DavModel.AttributeKey("ns", "attr") -> "someValue"))
-    val ExpFolder = DavModel.DavFolder(id = null, createdAt = null, lastModifiedAt = null, name = FolderName,
+    val ExpFolder = DavModel.DavFolder(id = FolderUri, createdAt = null, lastModifiedAt = null, name = FolderName,
       description = FolderDesc, attributes = FolderAttrs)
 
-    val folder = DavModel.newFolder(FolderName, FolderDesc, FolderAttrs)
+    val folder = DavModel.newFolder(name = FolderName, description = FolderDesc, id = FolderUri,
+      attributes = FolderAttrs)
     folder should be(ExpFolder)
   }
 
@@ -73,13 +76,14 @@ class DavModelSpec extends AnyFlatSpec with Matchers {
 
   it should "create a new file with all properties" in {
     val FileName = "MyNewFile"
+    val FileUri = Uri("https://test.example.org/test/data/newFile.txt")
     val FileSize = 20210110
     val FileDesc = "A new test file"
     val FileAttrs = DavModel.Attributes(Map(DavModel.AttributeKey("ns", "attr") -> "someFileValue"))
-    val ExpFile = DavModel.DavFile(id = null, createdAt = null, lastModifiedAt = null, name = FileName,
+    val ExpFile = DavModel.DavFile(id = FileUri, createdAt = null, lastModifiedAt = null, name = FileName,
       description = FileDesc, size = FileSize, attributes = FileAttrs)
 
-    val file = DavModel.newFile(FileName, FileSize, FileDesc, FileAttrs)
+    val file = DavModel.newFile(FileName, FileSize, description = FileDesc, attributes = FileAttrs, id = FileUri)
     file should be(ExpFile)
   }
 

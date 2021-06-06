@@ -442,7 +442,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     when(folder.id).thenReturn(FolderID)
     when(folder.name).thenReturn(FolderName)
     when(folder.description).thenReturn(FolderDesc)
-    val expFolder = DavModel.newFolder(FolderName, FolderDesc).copy(id = FolderID)
+    val expFolder = DavModel.newFolder(FolderName, description = FolderDesc, id = FolderID)
     val fs = new DavFileSystem(createConfig())
 
     fs.patchFolder(folder, ElementPatchSpec()) should be(expFolder)
@@ -451,10 +451,11 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "patch a folder against a defined patch spec" in {
     val attributes = DavModel.Attributes(Map(AttributeKey("foo", "key1") -> "value1",
       AttributeKey("bar", "key2") -> "value2"))
-    val folder = DavModel.newFolder("originalName", "original description", attributes)
+    val folder = DavModel.newFolder("originalName", description = "original description",
+      attributes = attributes)
     val PatchedName = "newFolderName"
     val PatchDescription = "This is the patched description of the folder"
-    val expFolder = DavModel.newFolder(PatchedName, PatchDescription, attributes)
+    val expFolder = DavModel.newFolder(name = PatchedName, description = PatchDescription, attributes = attributes)
     val spec = ElementPatchSpec(patchName = Some(PatchedName), patchDescription = Some(PatchDescription),
       patchSize = Some(42))
     val fs = new DavFileSystem(createConfig())
@@ -469,7 +470,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val FileSize = 20210213164214L
     val attributes = DavModel.Attributes(Map(AttributeKey("foo", "key1") -> "value1",
       AttributeKey("bar", "key2") -> "value2"))
-    val file = DavModel.newFile(FileName, FileSize, FileDesc, attributes).copy(id = FileID)
+    val file = DavModel.newFile(FileName, FileSize, description = FileDesc, attributes = attributes, id = FileID)
     val fs = new DavFileSystem(createConfig())
 
     fs.patchFile(file, ElementPatchSpec()) should be(file)
@@ -484,7 +485,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     when(file.id).thenReturn(FileID)
     when(file.name).thenReturn("original.name")
     when(file.size).thenReturn(11)
-    val expFile = DavModel.newFile(PatchedName, PatchedSize, PatchedDescription).copy(id = FileID)
+    val expFile = DavModel.newFile(PatchedName, PatchedSize, description = PatchedDescription, id = FileID)
     val spec = ElementPatchSpec(patchDescription = Some(PatchedDescription),
       patchName = Some(PatchedName), patchSize = Some(PatchedSize))
     val fs = new DavFileSystem(createConfig())

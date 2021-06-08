@@ -97,7 +97,7 @@ lazy val CloudFiles = (project in file("."))
     description := "A library for accessing files stored on various server types",
     crossScalaVersions := Nil,
     publish := {}
-  ) aggregate(core, webDav, oneDrive, crypt, cryptAlgAES)
+  ) aggregate(core, webDav, oneDrive, localFs, crypt, cryptAlgAES)
 
 /**
  * The core project. This project defines the API for interacting with

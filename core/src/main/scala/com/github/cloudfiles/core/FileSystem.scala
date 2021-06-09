@@ -285,6 +285,27 @@ trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT] extends AutoCloseable {
     } yield content
 
   /**
+   * Combines an operation to update the content of a file with an operation to
+   * update its metadata properties. This base implementation delegates to the
+   * corresponding functions (''updateFileContent()'' and ''updateFile()'') in
+   * series. Implementations that can combine these updates in a single
+   * operation should override this function. Depending on the concrete
+   * underlying file system, it may be necessary to specify the new file size
+   * in the passed in file object.
+   *
+   * @param file    a data object with the properties of the file to update
+   * @param content a source with the new content of the file
+   * @param system  the actor system
+   * @return the ''Operation'' that does the combined update
+   */
+  def updateFileAndContent(file: Model.File[ID], content: Source[ByteString, Any])
+                          (implicit system: ActorSystem[_]): Operation[Unit] =
+    for {
+      _ <- updateFileContent(file.id, file.size, content)
+      _ <- updateFile(file)
+    } yield ()
+
+  /**
    * Frees up resources used by this object when it is no longer needed. This
    * base implementation does nothing.
    */

@@ -23,10 +23,12 @@ import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.http.HttpRequestSender
+import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.Future
 
 object FileSystemSpec {
@@ -220,5 +222,38 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     val fs = new FileSystemImpl
 
     fs.close()
+  }
+
+  it should "update both a file's properties and content" in {
+    val source = Source.single(ByteString("updated file content"))
+    val FileID = "theTestFile"
+    val FileSize = 20210609
+    val file = mock[Model.File[String]]
+    when(file.id).thenReturn(FileID)
+    when(file.size).thenReturn(FileSize)
+    val requestActor = mock[ActorRef[HttpRequestSender.HttpCommand]]
+    val count = new AtomicInteger
+    val fs = new FileSystemImpl {
+      override def updateFile(updateFile: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
+        checkActorOp(requestActor) { _ =>
+          count.getAndIncrement() should be(1)
+          updateFile should be(file)
+          Future.successful(())
+        }
+
+      override def updateFileContent(fileID: String, size: Long, content: Source[ByteString, Any])
+                                    (implicit system: ActorSystem[_]): Operation[Unit] =
+        checkActorOp(requestActor) { _ =>
+          count.getAndIncrement() should be(0)
+          fileID should be(FileID)
+          size should be(FileSize)
+          content should be(source)
+          Future.successful(())
+        }
+    }
+
+    val op = fs.updateFileAndContent(file, source)
+    futureResult(op.run(requestActor))
+    count.get() should be(2)
   }
 }

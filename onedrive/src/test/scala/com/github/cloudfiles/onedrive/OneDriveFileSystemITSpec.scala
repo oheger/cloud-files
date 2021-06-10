@@ -490,6 +490,35 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
   it should "update the content of a file" in {
     val SourceUri = drivePath(s"/items/$ResolvedID/createUploadSession")
+    val uploadSessionRequest = readDataFile(resourceFile("/createUploadSession.json"))
+    val fileSource = Source(FileTestHelper.TestData.grouped(64).toList).map(ByteString(_))
+    val fsInfo = OneDriveJsonProtocol.WritableFileSystemInfo(
+      lastModifiedDateTime = Some(Instant.parse("2021-01-31T21:21:50.987Z")),
+      createdDateTime = Some(Instant.parse("2021-01-31T21:21:10.123Z")))
+    val file = OneDriveModel.newFile(id = ResolvedID, name = "new File.txt", info = Some(fsInfo),
+      size = FileTestHelper.TestData.length, description = "Upload test file description")
+
+    runWithNewServer { server =>
+      stubFor(post(urlPathEqualTo(SourceUri))
+        .withHeader("Accept", equalTo("application/json"))
+        .withRequestBody(equalToJson(uploadSessionRequest))
+        .willReturn(aJsonResponse()
+          .withBody(uploadSessionResponse(server))))
+      val range = s"bytes 0-${FileTestHelper.TestData.length - 1}/${FileTestHelper.TestData.length()}"
+      server.stubFor(put(urlPathEqualTo(UploadUri))
+        .withHeader("Content-Range", equalTo(range))
+        .withRequestBody(equalTo(FileTestHelper.TestData))
+        .willReturn(aJsonResponse(StatusCodes.Created)
+          .withBodyFile("upload_complete_response.json")))
+      val fs = new OneDriveFileSystem(createConfig())
+
+      futureResult(runOp(fs.updateFileAndContent(file, fileSource)))
+      server.verify(putRequestedFor(urlPathEqualTo(UploadUri)))
+    }
+  }
+
+  it should "update the content and metadata of a file" in {
+    val SourceUri = drivePath(s"/items/$ResolvedID/createUploadSession")
     val fileSource = Source(FileTestHelper.TestData.grouped(64).toList).map(ByteString(_))
 
     runWithNewServer { server =>

@@ -44,6 +44,9 @@ object OneDriveFileSystem {
   /** The suffix to select the children of a drive item. */
   private val ChildrenSuffix = "/children"
 
+  /** The suffix to request an upload session for a file. */
+  private val UploadSessionSuffix = "/createUploadSession"
+
   /** A query parameter to select only the ID field of a drive item. */
   private val SelectIDParam = "select=id"
 
@@ -233,17 +236,9 @@ class OneDriveFileSystem(val config: OneDriveConfig)
     deleteItem(folderID)
 
   override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])
-                         (implicit system: ActorSystem[_]): Operation[String] = Operation {
-    httpSender =>
-      val uri = s"${itemUri(parent)}:/${UriEncodingHelper.encode(file.name)}:/createUploadSession"
-      val item = toWritableItem(itemFor(file))
-      for {
-        entity <- prepareJsonRequestEntity(UploadSessionRequest(item))
-        uploadSessionRequest = HttpRequest(method = HttpMethods.POST, uri = uri, entity = entity,
-          headers = UploadSessionHeaders)
-        result <- uploadFile(uploadSessionRequest, file.size, content, httpSender)
-      } yield result
-  }
+                         (implicit system: ActorSystem[_]): Operation[String] =
+    uploadFileWithProperties(s"${itemUri(parent)}:/${UriEncodingHelper.encode(file.name)}:$UploadSessionSuffix",
+      file, content)
 
   override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
     updateElement(file)
@@ -251,10 +246,14 @@ class OneDriveFileSystem(val config: OneDriveConfig)
   override def updateFileContent(fileID: String, size: Long, content: Source[ByteString, Any])
                                 (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
     httpSender =>
-      val uri = s"${itemUri(fileID)}/createUploadSession"
+      val uri = s"${itemUri(fileID)}$UploadSessionSuffix"
       val uploadSessionRequest = HttpRequest(uri = uri, method = HttpMethods.POST, headers = UploadSessionHeaders)
       uploadFile(uploadSessionRequest, size, content, httpSender) map (_ => ())
   }
+
+  override def updateFileAndContent(file: Model.File[String], content: Source[ByteString, Any])
+                                   (implicit system: ActorSystem[_]): Operation[Unit] =
+    uploadFileWithProperties(s"${itemUri(file.id)}$UploadSessionSuffix", file, content) map (_ => ())
 
   override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): Operation[HttpEntity] = Operation {
     httpSender =>
@@ -422,6 +421,30 @@ class OneDriveFileSystem(val config: OneDriveConfig)
           new IllegalStateException(s"Request for download URI to ${downloadUriResponse.request.request.uri} " +
             "does not contain a Location header."))
     }
+  }
+
+  /**
+   * Returns an ''Operation'' to upload a file via an upload session and
+   * setting properties for the file. In contrast to a plain upload operation,
+   * the request for the upload session has a body with the properties to
+   * update for the file.
+   *
+   * @param uploadUri the URI to request the upload session
+   * @param file      the file to upload
+   * @param content   the content of the file to upload
+   * @param system    the actor system
+   * @return the ''Operation'' to upload the file returning the file ID
+   */
+  private def uploadFileWithProperties(uploadUri: String, file: Model.File[String], content: Source[ByteString, Any])
+                                      (implicit system: ActorSystem[_]): Operation[String] = Operation {
+    httpSender =>
+      val item = toWritableItem(itemFor(file))
+      for {
+        entity <- prepareJsonRequestEntity(UploadSessionRequest(item))
+        uploadSessionRequest = HttpRequest(method = HttpMethods.POST, uri = uploadUri, entity = entity,
+          headers = UploadSessionHeaders)
+        result <- uploadFile(uploadSessionRequest, file.size, content, httpSender)
+      } yield result
   }
 
   /**

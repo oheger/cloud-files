@@ -126,7 +126,8 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
    *             ''resolvePathComponents()''.
    */
   override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[ID] =
-    resolvePathComponents(UriEncodingHelper.splitAndDecodeComponents(path))
+    if (path.isEmpty) delegate.rootID
+    else resolvePathComponents(UriEncodingHelper.splitAndDecodeComponents(path))
 
   /**
    * @inheritdoc This implementation tries to identify the single components in

@@ -22,7 +22,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.Model.Folder
 import com.github.cloudfiles.core.delegate.ElementPatchSpec
-import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.cloudfiles.core._
 import com.github.cloudfiles.webdav.DavModel.AttributeKey
@@ -55,13 +55,17 @@ object DavFileSystemITSpec {
    * @param status       the status code to return from the request
    * @param depth        the value for the Depth header
    * @param optDelay     an optional delay for this request
+   * @param withSlash    flag whether a slash should be added to the URI
    */
   private def stubFolderRequest(uri: String, responseFile: String,
                                 status: Int = StatusCodes.OK.intValue,
                                 depth: String = "1",
-                                optDelay: Option[FiniteDuration] = None): Unit = {
+                                optDelay: Option[FiniteDuration] = None,
+                                withSlash: Boolean = true): Unit = {
     val delay = optDelay.map(_.toMillis.toInt).getOrElse(0)
-    stubFor(request("PROPFIND", urlPathEqualTo(uri))
+    val requestUri = if (withSlash) UriEncodingHelper withTrailingSeparator uri
+    else uri
+    stubFor(request("PROPFIND", urlPathEqualTo(requestUri))
       .withHeader("Accept", equalTo("text/xml"))
       .withHeader("Depth", equalTo(depth))
       .willReturn(aResponse()
@@ -136,12 +140,16 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     rootUri should be(config.rootUri)
   }
 
-  it should "return the content of a folder" in {
-    val FolderUri = Uri(RootPath + "/test")
-    stubFolderRequest(FolderUri.path.toString(), "folder.xml")
+  /**
+   * Checks whether the content of a folder can be queried correctly.
+   *
+   * @param folderUri the URI of the folder
+   */
+  private def checkFolderContent(folderUri: Uri): Unit = {
+    stubFolderRequest(folderUri.path.toString(), "folder.xml")
     val fs = new DavFileSystem(createConfig())
 
-    val result = futureResult(runOp(fs.folderContent(FolderUri)))
+    val result = futureResult(runOp(fs.folderContent(folderUri)))
     val subFolderUri = Uri("/test%20data/subFolder%20%281%29/")
     result.folders.keys should contain only subFolderUri
     val folder = result.folders(subFolderUri)
@@ -157,6 +165,14 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     file3.description should be("A test description")
   }
 
+  it should "return the content of a folder" in {
+    checkFolderContent(Uri(RootPath + "/test/"))
+  }
+
+  it should "add a trailing slash when querying the content of a folder" in {
+    checkFolderContent(Uri(RootPath + "/test"))
+  }
+
   it should "handle a failed request for the content of a folder" in {
     stubFor(request("PROPFIND", anyUrl())
       .willReturn(aResponse().withStatus(StatusCodes.NotFound.intValue)))
@@ -168,7 +184,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
 
   it should "resolve a file by its ID" in {
     val FileUri = Uri(RootPath + "/sub/data.dat")
-    stubFolderRequest(FileUri.path.toString(), "element_file.xml", depth = "0")
+    stubFolderRequest(FileUri.path.toString(), "element_file.xml", depth = "0", withSlash = false)
     val fs = new DavFileSystem(createConfig())
 
     val file = futureResult(runOp(fs.resolveFile(FileUri)))
@@ -186,15 +202,27 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     exception.getMessage should include(FileUri.toString())
   }
 
-  it should "resolve a folder by its ID" in {
-    val FolderUri = Uri(RootPath + "/sub/folder/")
-    stubFolderRequest(FolderUri.path.toString(), "empty_folder.xml", depth = "0")
+  /**
+   * Checks whether a folder can be resolved by its URI.
+   *
+   * @param folderUri the folder URI
+   */
+  private def checkResolveFolder(folderUri: Uri): Unit = {
+    stubFolderRequest(folderUri.path.toString(), "empty_folder.xml", depth = "0")
     val fs = new DavFileSystem(createConfig())
 
-    val folder = futureResult(runOp(fs.resolveFolder(FolderUri)))
+    val folder = futureResult(runOp(fs.resolveFolder(folderUri)))
     folder.name should be("test")
     folder.lastModifiedAt should be(Instant.parse("2018-08-30T20:07:40Z"))
     folder.attributes.values(DavModel.AttributeKey("DAV:", "getcontenttype")) should be("httpd/unix-directory")
+  }
+
+  it should "resolve a folder by its ID" in {
+    checkResolveFolder(Uri(RootPath + "/sub/folder/"))
+  }
+
+  it should "resolve a folder by its ID if it misses the trailing slash" in {
+    checkResolveFolder(Uri(RootPath + "/sub/folder"))
   }
 
   it should "handle a request to resolve a folder that yields a file" in {
@@ -204,15 +232,6 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
 
     val exception = expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFolder(FolderUri)))
     exception.getMessage should include(FolderUri.toString())
-  }
-
-  it should "append a slash to a URI pointing to a folder" in {
-    val FolderUri = Uri(RootPath + "/sub/folder")
-    stubFolderRequest(FolderUri.path.toString() + "/", "empty_folder.xml", depth = "0")
-    val fs = new DavFileSystem(createConfig())
-
-    val folder = futureResult(runOp(fs.resolveFolder(FolderUri)))
-    folder.name should be("test")
   }
 
   it should "delete a folder" in {
@@ -428,7 +447,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "apply the timeout from the configuration" in {
     val FileUri = Uri(RootPath + "/file/timeout.ex")
     stubFolderRequest(FileUri.path.toString(), "element_file.xml", depth = "0",
-      optDelay = Some(1.second))
+      optDelay = Some(1.second), withSlash = false)
     val fs = new DavFileSystem(createConfig().copy(timeout = Timeout(250.millis)))
 
     expectFailedFuture[TimeoutException](runOp(fs.resolveFile(FileUri)))

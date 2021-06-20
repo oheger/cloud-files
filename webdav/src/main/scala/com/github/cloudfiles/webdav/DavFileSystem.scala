@@ -105,7 +105,7 @@ class DavFileSystem(val config: DavConfig)
 
   override def resolveFolder(id: Uri)(implicit system: ActorSystem[_]): Operation[DavModel.DavFolder] = Operation {
     httpSender =>
-      resolveElement(folderUri(id), httpSender) flatMap {
+      resolveElement(withTrailingSlash(id), httpSender) flatMap {
         case folder: DavModel.DavFolder => Future.successful(folder)
         case _ =>
           Future.failed(new IllegalArgumentException(s"URI $id could be resolved, but does not point to a folder."))
@@ -115,7 +115,7 @@ class DavFileSystem(val config: DavConfig)
   override def folderContent(id: Uri)(implicit system: ActorSystem[_]):
   Operation[Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder]] = Operation {
     httpSender =>
-      val contentRequest = HttpRequest(uri = id, method = MethodPropFind,
+      val contentRequest = HttpRequest(uri = withTrailingSlash(id), method = MethodPropFind,
         headers = List(HeaderAccept, HeaderDepthContent))
       for {
         response <- execute(httpSender, contentRequest)
@@ -130,7 +130,7 @@ class DavFileSystem(val config: DavConfig)
     updateDavFolder(toDavFolder(folder))
 
   override def deleteFolder(folderID: Uri)(implicit system: ActorSystem[_]): Operation[Unit] =
-    deleteElementOp(folderUri(folderID))
+    deleteElementOp(withTrailingSlash(folderID))
 
   override def createFile(parent: Uri, file: Model.File[Uri], content: Source[ByteString, Any])
                          (implicit system: ActorSystem[_]): Operation[Uri] =
@@ -234,7 +234,7 @@ class DavFileSystem(val config: DavConfig)
       executeAndDiscardEntity(httpSender, createFolderRequest) flatMap { _ =>
         PropPatchGenerator.generatePropPatch(folder.attributes, folder.description, config.optDescriptionKey) match {
           case Some(patchBody) =>
-            val patchRequest = HttpRequest(method = MethodPropPatch, uri = folderUri(newFolderUri),
+            val patchRequest = HttpRequest(method = MethodPropPatch, uri = withTrailingSlash(newFolderUri),
               entity = HttpEntity(ContentTypes.`text/xml(UTF-8)`, patchBody))
             executeAndDiscardEntity(httpSender, patchRequest)
           case None =>
@@ -253,7 +253,9 @@ class DavFileSystem(val config: DavConfig)
    */
   private def updateDavFolder(folder: DavModel.DavFolder)(implicit system: ActorSystem[_]): Operation[Unit] =
     Operation {
-      httpSender => executePatchRequest(httpSender, folderUri(folder.id), folder.description, folder.attributes)
+      httpSender =>
+        executePatchRequest(httpSender, withTrailingSlash(folder.id), folder.description,
+          folder.attributes)
     }
 
   /**
@@ -386,17 +388,6 @@ class DavFileSystem(val config: DavConfig)
   private def executeAndDiscardEntity(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
                                      (implicit system: ActorSystem[_]): Future[Unit] =
     execute(httpSender, request, DiscardEntityMode.Always) map (_ => ())
-
-  /**
-   * Returns a correct URI pointing to a folder. Makes sure that the URI ends
-   * with a slash, which is required by some servers.
-   *
-   * @param uri the original URI
-   * @return the valid URI pointing to a folder
-   */
-  private def folderUri(uri: Uri): Uri =
-    if (uri.path.endsWithSlash) uri
-    else uri.withPath(uri.path ++ Path.SingleSlash)
 }
 
 /**

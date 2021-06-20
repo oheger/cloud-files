@@ -95,6 +95,18 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
       "Win32LastModifiedTime")) should be("Wed, 19 Sep 2018 20:12:00 GMT")
   }
 
+  it should "add slashes to folder URIs if necessary" in {
+    val testResponse = resourceFile("/__files/folder_no_slashes.xml")
+    val source = FileIO.fromPath(testResponse)
+    val subFolder1Uri = Uri("/test%20data/subFolder%20%281%29/")
+    val subFolder2Uri = Uri("/test%20data/subFolder2/")
+    val parser = new DavParser()
+
+    val result = futureResult(parser.parseFolderContent(source))
+    result.folderID should be(Uri("/test/folder1/"))
+    result.folders.keys should contain only(subFolder1Uri, subFolder2Uri)
+  }
+
   it should "extract the content of an empty folder" in {
     val testResponse = resourceFile("/__files/empty_folder.xml")
     val source = FileIO.fromPath(testResponse)

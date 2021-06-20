@@ -113,7 +113,7 @@ object DavParser {
   private def parseFolderContentXml(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
   Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder] = {
     val responses = parseResponses(xml)
-    val folderUri = Uri(elemText(responses.head, ElemHref))
+    val folderUri = Uri(UriEncodingHelper withTrailingSeparator elemText(responses.head, ElemHref))
 
     val folderElements = responses.drop(1) // first element is the folder itself
       .foldLeft((Map.empty[Uri, DavModel.DavFolder], Map.empty[Uri, DavModel.DavFile])) { (maps, node) =>
@@ -194,7 +194,7 @@ object DavParser {
       val desc = (optDescriptionKey flatMap attributes.get).orNull
       val elemAttributes: DavModel.Attributes = constructElementAttributes(attributes, optDescriptionKey)
       if (isCollection(propNode))
-        DavModel.DavFolder(elemUri, name, desc, createdAt, lastModified, elemAttributes)
+        DavModel.DavFolder(withTrailingSlash(elemUri), name, desc, createdAt, lastModified, elemAttributes)
       else
         DavModel.DavFile(elemUri, name, desc, createdAt, lastModified, parseFileSize(attributes), elemAttributes)
     }

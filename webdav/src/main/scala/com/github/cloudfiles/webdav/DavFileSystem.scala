@@ -229,7 +229,7 @@ class DavFileSystem(val config: DavConfig)
   private def createDavFolder(parent: Uri, folder: DavModel.DavFolder)(implicit system: ActorSystem[_]):
   Operation[Uri] = Operation {
     httpSender =>
-      val newFolderUri = parent.withPath(parent.path / folder.name)
+      val newFolderUri = childElementUri(parent, folder.name)
       val createFolderRequest = HttpRequest(method = MethodMkCol, uri = newFolderUri)
       executeAndDiscardEntity(httpSender, createFolderRequest) flatMap { _ =>
         PropPatchGenerator.generatePropPatch(folder.attributes, folder.description, config.optDescriptionKey) match {
@@ -287,7 +287,7 @@ class DavFileSystem(val config: DavConfig)
   private def createDavFile(parent: Uri, file: DavModel.DavFile, content: Source[ByteString, Any])
                            (implicit system: ActorSystem[_]): Operation[Uri] = Operation {
     httpSender =>
-      val newFileUri = parent.withPath(parent.path / file.name)
+      val newFileUri = childElementUri(parent, file.name)
       for {
         uri <- executeUploadRequest(httpSender, newFileUri, file.size, content)
         _ <- executePatchRequest(httpSender, newFileUri, file.description, file.attributes)
@@ -322,6 +322,16 @@ class DavFileSystem(val config: DavConfig)
         DavModel.DavFile(file.id, file.name, file.description, file.createdAt, file.lastModifiedAt, file.size,
           DavModel.Attributes(Map.empty))
     }
+
+  /**
+   * Generates the URI of a child element based on the parent URI and its name.
+   *
+   * @param parent the parent URI
+   * @param name   the name of the element
+   * @return the URI of the child element
+   */
+  private def childElementUri(parent: Uri, name: String): Uri =
+    parent.withPath(parent.path ?/ name)
 
   /**
    * Executes a request to patch the properties of the given element if

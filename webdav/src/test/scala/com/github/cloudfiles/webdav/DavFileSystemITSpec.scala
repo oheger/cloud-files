@@ -319,6 +319,22 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .withRequestBody(equalToXml(expPatch)))
   }
 
+  it should "create a folder if the parent URI ends on a slash" in {
+    val folder = mock[Folder[Uri]]
+    val FolderName = "child"
+    val ParentUriStr = RootPath + "/parent"
+    val ParentUri = Uri(ParentUriStr)
+    val FolderUri = ParentUri.withPath(ParentUri.path / FolderName)
+    when(folder.name).thenReturn(FolderName)
+    stubFor(request("MKCOL", urlPathEqualTo(FolderUri.path.toString()))
+      .willReturn(aResponse().withStatus(StatusCodes.Created.intValue)))
+    val fs = new DavFileSystem(createConfig())
+
+    val result = futureResult(runOp(fs.createFolder(Uri(ParentUriStr + "/"), folder)))
+    result.path should be(FolderUri.path)
+    getAllServeEvents should have size 1
+  }
+
   it should "update a folder without additional attributes" in {
     val folder = mock[Folder[Uri]]
     when(folder.id).thenReturn(Uri(RootPath + "/some/uri"))
@@ -442,6 +458,26 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     verify(anyRequestedFor(urlPathEqualTo(FileUri.path.toString()))
       .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
       .withRequestBody(equalToXml(expPatch)))
+  }
+
+  it should "create a file if the parent URI ends on a slash" in {
+    val file = mock[Model.File[Uri]]
+    val FileName = "importantData.txt"
+    val ParentUriStr = RootPath + "/parent/folder"
+    val ParentUri = Uri(ParentUriStr)
+    val FileUri = ParentUri.withPath(ParentUri.path / FileName)
+    when(file.name).thenReturn(FileName)
+    when(file.size).thenReturn(FileContentSize)
+    stubFor(put(urlPathEqualTo(FileUri.path.toString()))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
+    val fs = new DavFileSystem(createConfig())
+
+    val resultUri = futureResult(runOp(fs.createFile(Uri(ParentUriStr + "/"), file, fileContentSource)))
+    resultUri should be(FileUri)
+    verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
+      .withHeader("Content-Length", equalTo(FileContentSize.toString))
+      .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
+    getAllServeEvents should have size 1
   }
 
   it should "apply the timeout from the configuration" in {

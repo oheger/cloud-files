@@ -53,6 +53,12 @@ object OneDriveFileSystem {
   /** The property to generate marker objects in JSON. */
   private val Marker = OneDriveJsonProtocol.MarkerProperty()
 
+  /** The header for accepting JSON responses. */
+  private val AcceptJsonHeader = Accept(MediaRange(MediaTypes.`application/json`))
+
+  /** A sequence with the standard headers to send for typical requests. */
+  private val StdHeaders = List(AcceptJsonHeader)
+
   /**
    * Returns an actor behavior for sending HTTP requests that fulfills all the
    * requirements of the OneDrive file system implementation. This actor has
@@ -91,10 +97,6 @@ object OneDriveFileSystem {
 
     MultiHostExtension(requestActorFactory = factory, requestQueueSize = requestQueueSize, proxy = proxy)
   }
-
-  /** The headers to use for an upload session request. */
-  private val UploadSessionHeaders = List(Accept(MediaRange(MediaType.applicationWithFixedCharset("json",
-    HttpCharsets.`UTF-8`))))
 
   /**
    * Transforms the given ''DriveItem'' object to a ''WritableDriveItem'' that
@@ -156,6 +158,19 @@ object OneDriveFileSystem {
       description = spec.patchDescription.orElse(item.description),
       size = spec.patchSize getOrElse item.size)
   }
+
+  /**
+   * Convenience function to create a request that expects a JSON response. The
+   * request uses standard headers.
+   *
+   * @param uri    the URI of the request
+   * @param method the HTTP method
+   * @param entity the entity
+   * @return the configured ''HttpRequest''
+   */
+  private def jsonRequest(uri: Uri, method: HttpMethod = HttpMethods.GET,
+                          entity: RequestEntity = HttpEntity.Empty): HttpRequest =
+    HttpRequest(uri = uri, method = method, headers = StdHeaders, entity = entity)
 }
 
 /**
@@ -224,7 +239,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
       val writableItem = toWritableItem(itemFor(folder))
       for {
         entity <- prepareJsonRequestEntity(writableItem)
-        request = HttpRequest(method = HttpMethods.POST, uri = createUrl, entity = entity)
+        request = jsonRequest(method = HttpMethods.POST, uri = createUrl, entity = entity)
         response <- executeJsonRequest[DriveItem](httpSender, request)
       } yield response.id
   }
@@ -247,7 +262,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
                                 (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
     httpSender =>
       val uri = s"${itemUri(fileID)}$UploadSessionSuffix"
-      val uploadSessionRequest = HttpRequest(uri = uri, method = HttpMethods.POST, headers = UploadSessionHeaders)
+      val uploadSessionRequest = jsonRequest(uri = uri, method = HttpMethods.POST)
       uploadFile(uploadSessionRequest, size, content, httpSender) map (_ => ())
   }
 
@@ -284,7 +299,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
    */
   private def resolveUriOperation(uri: Uri)(implicit system: ActorSystem[_]): Operation[String] = Operation {
     httpSender =>
-      val rootRequest = HttpRequest(uri = uri)
+      val rootRequest = jsonRequest(uri = uri)
       executeJsonRequest[ResolveResponse](httpSender, rootRequest).map(_.id)
   }
 
@@ -301,7 +316,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
   private def resolveItem[A](id: String)
                             (implicit system: ActorSystem[_], ct: ClassTag[A]): Operation[A] = Operation {
     httpSender =>
-      val folderRequest = HttpRequest(uri = itemUri(id))
+      val folderRequest = jsonRequest(uri = itemUri(id))
       executeJsonRequest[DriveItem](httpSender, folderRequest)
         .map(createElement)
         .map { elem =>
@@ -341,7 +356,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
                                  folders: Map[String, OneDriveModel.OneDriveFolder])
                                 (implicit system: ActorSystem[_]):
   Future[Model.FolderContent[String, OneDriveModel.OneDriveFile, OneDriveModel.OneDriveFolder]] = {
-    val contentRequest = HttpRequest(uri = uri)
+    val contentRequest = jsonRequest(uri = uri)
     executeJsonRequest[FolderResponse](httpSender, contentRequest) flatMap { response =>
       val contentMaps = response.value.foldLeft((files, folders)) { (maps, item) =>
         createElement(item) match {
@@ -390,7 +405,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
       val writableItem = toWritableItem(itemFor(element))
       for {
         entity <- prepareJsonRequestEntity(writableItem)
-        request = HttpRequest(method = HttpMethods.PATCH, uri = itemUri(element.id), entity = entity)
+        request = jsonRequest(method = HttpMethods.PATCH, uri = itemUri(element.id), entity = entity)
         _ <- executeJsonRequest[DriveItem](httpSender, request)
       } yield ()
   }
@@ -441,8 +456,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
       val item = toWritableItem(itemFor(file))
       for {
         entity <- prepareJsonRequestEntity(UploadSessionRequest(item))
-        uploadSessionRequest = HttpRequest(method = HttpMethods.POST, uri = uploadUri, entity = entity,
-          headers = UploadSessionHeaders)
+        uploadSessionRequest = jsonRequest(method = HttpMethods.POST, uri = uploadUri, entity = entity)
         result <- uploadFile(uploadSessionRequest, file.size, content, httpSender)
       } yield result
   }

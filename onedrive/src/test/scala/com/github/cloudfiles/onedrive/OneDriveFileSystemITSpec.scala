@@ -54,6 +54,12 @@ object OneDriveFileSystemITSpec {
   /** Test URI to upload files. */
   private val UploadUri = "/file-storage/data/temp123456.xyz"
 
+  /** Constant for the Accept header. */
+  private val HeaderAccept = "Accept"
+
+  /** Constant for the JSON content type for the accept header. */
+  private val ContentJson = "application/json"
+
   /**
    * Generates the full relative URI that corresponds to the given path.
    * Appends the correct prefix for all requests.
@@ -103,6 +109,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
   private def stubResolvePath(path: String): Unit = {
     stubFor(get(urlPathEqualTo(drivePath(path)))
       .withQueryParam("select", equalTo("id"))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
       .willReturn(aJsonResponse()
         .withBodyFile("resolve_response.json")))
   }
@@ -170,6 +177,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
   it should "resolve a folder by its ID" in {
     stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID")))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
       .willReturn(aJsonResponse(StatusCodes.OK)
         .withBodyFile("resolve_folder_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
@@ -193,6 +201,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
   it should "resolve a file by its ID" in {
     stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID")))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
       .willReturn(aJsonResponse(StatusCodes.OK)
         .withBodyFile("resolve_file_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
@@ -216,6 +225,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
   it should "return the content of a folder" in {
     stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID/children")))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
       .willReturn(aJsonResponse(StatusCodes.OK)
         .withBodyFile("folder_children_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
@@ -238,6 +248,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .willReturn(aJsonResponse(StatusCodes.OK)
         .withBody(folder1Data)))
     stubFor(get(urlPathEqualTo(nextUri))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
       .willReturn(aJsonResponse(StatusCodes.OK)
         .withBodyFile("folder_children_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
@@ -288,6 +299,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val ParentId = "someParent"
     val expBody = readDataFile(resourceFile("/createFolder.json"))
     stubFor(post(urlPathEqualTo(drivePath(s"/items/$ParentId/children")))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
       .withRequestBody(equalToJson(expBody))
       .willReturn(aJsonResponse(StatusCodes.Created)
         .withBodyFile("resolve_folder_response.json")))
@@ -319,6 +331,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val expBody = readDataFile(resourceFile("/createFolderMinimum.json"))
     val updatePath = drivePath(s"/items/$ResolvedID")
     stubFor(patch(urlPathEqualTo(updatePath))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
       .withRequestBody(equalToJson(expBody))
       .willReturn(aJsonResponse(StatusCodes.OK)
         .withBodyFile("resolve_folder_response.json")))
@@ -334,6 +347,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val expBody = readDataFile(resourceFile("/createFile.json"))
     val updatePath = drivePath(s"/items/$ResolvedID")
     stubFor(patch(urlPathEqualTo(updatePath))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
       .withRequestBody(equalToJson(expBody))
       .willReturn(aJsonResponse(StatusCodes.OK)
         .withBodyFile("resolve_file_response.json")))
@@ -431,7 +445,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       server =>
         stubFor(post(urlPathEqualTo(SourceUri))
           .withHeader("Content-Type", equalTo("application/json"))
-          .withHeader("Accept", equalTo("application/json"))
+          .withHeader(HeaderAccept, equalTo(ContentJson))
           .withRequestBody(equalToJson(uploadSessionRequest))
           .willReturn(aJsonResponse()
             .withBody(uploadSessionResponse(server))))

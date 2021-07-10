@@ -1,0 +1,16 @@
+:toc:
+:toc-placement!:
+:toclevels: 3
+= CloudFiles
+
+CloudFiles is a library that supports reading and manipulating files and
+folders stored on various HTTP-based file system, such as WebDav or OneDrive.
+
+TODO More documentation to come...
+
+toc::[]
+
+== Release Notes
+
+Information about the different releases can be found at the
+link:ReleaseNotes.adoc[Release Notes page].

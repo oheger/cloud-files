@@ -16,7 +16,10 @@
 
 import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
 
-/** Definition of versions. */
+/** The version of this project. */
+lazy val CloudFilesVersion = "0.2"
+
+/** Definition of dependency versions. */
 lazy val AkkaVersion = "2.6.15"
 lazy val AkkaHttpVersion = "10.2.4"
 lazy val VersionScala213 = "2.13.6"
@@ -59,7 +62,7 @@ ThisBuild / scalacOptions ++= Seq("-deprecation", "-feature")
 ThisBuild / organization := "com.github.oheger"
 ThisBuild / homepage := Some(url("https://github.com/oheger/cloud-files"))
 ThisBuild / scalaVersion := VersionScala213
-ThisBuild / version := "0.2-SNAPSHOT"
+ThisBuild / version := CloudFilesVersion
 ThisBuild / licenses := Seq(("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0.html")))
 ThisBuild / scmInfo := Some(
   ScmInfo(

@@ -60,7 +60,8 @@ class LocalFileSystem(val config: LocalFsConfig)
 
   override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[Path] = Operation { _ =>
     Future {
-      checkPath(config.basePath.resolve(UriEncodingHelper.removeLeadingSeparator(path)))
+      val resolvedPath = UriEncodingHelper.decodeComponents(path)
+      checkPath(config.basePath.resolve(UriEncodingHelper.removeLeadingSeparator(resolvedPath)))
     }
   }
 

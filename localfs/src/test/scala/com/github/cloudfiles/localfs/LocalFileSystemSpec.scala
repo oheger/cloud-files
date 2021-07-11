@@ -127,6 +127,15 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     resolvedPath should be(rootPath.resolve(SubPath))
   }
 
+  it should "decode the components of a path when it is resolved" in {
+    val path = "test/the%20data/My%20test%20file.xml"
+    val expResolvedPath = rootPath.resolve("test/the data/My test file.xml")
+    val fs = createFileSystem()
+
+    val resolvedPath = run(fs.resolvePath(path))
+    resolvedPath should be(expResolvedPath)
+  }
+
   it should "delete a folder" in {
     val fs = createFileSystem()
     val subFolder = Files.createDirectory(rootPath.resolve("toDelete"))

@@ -31,6 +31,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.io.IOException
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
@@ -262,5 +263,30 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
       HttpRequestSender.sendRequestSuccess(actor, request, RequestData, discardMode = DiscardEntityMode.Always)
     }
     futureResult(Future.sequence(futResults))
+  }
+
+  it should "answer pending requests when it is stopped" in {
+    val request = HttpRequest(uri = Path)
+    stubFor(get(anyUrl())
+      .willReturn(aResponse().withFixedDelay(10000)
+        .withStatus(StatusCodes.OK.intValue)
+        .withBody("Delayed response")))
+    val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
+
+    def checkFailedResult(futReq: Future[HttpRequestSender.Result], expData: String): Unit = {
+      futureResult(futReq) match {
+        case res: HttpRequestSender.FailedResult =>
+          res.request.request should be(request)
+          res.request.data should be(expData)
+          res.cause shouldBe a[IOException]
+        case res => fail("Unexpected result: " + res)
+      }
+    }
+
+    val futReq1 = HttpRequestSender.sendRequest(actor, request, "foo")
+    val futReq2 = HttpRequestSender.sendRequest(actor, request, "bar")
+    actor ! HttpRequestSender.Stop
+    checkFailedResult(futReq1, "foo")
+    checkFailedResult(futReq2, "bar")
   }
 }

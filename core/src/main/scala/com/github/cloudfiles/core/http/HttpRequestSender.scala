@@ -26,6 +26,7 @@ import akka.util.Timeout
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemProxy}
 
+import java.io.IOException
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
@@ -327,40 +328,55 @@ object HttpRequestSender {
   private[http] def create(uri: Uri, queueCreator: ActorSystem[_] => RequestQueue): Behavior[HttpCommand] =
     Behaviors.setup { context =>
       val requestQueue = queueCreator(context.system)
-      implicit val ec: ExecutionContext = context.system.executionContext
-
-      Behaviors.receive[HttpCommand] { (context, command) =>
-        (command: @unchecked) match {
-          case request: SendRequest =>
-            val futResponse = requestQueue.queueRequest(request.request)
-            context.pipeToSelf(futResponse) { triedResponse =>
-              WrappedHttpResponse(request, triedResponse)
-            }
-            context.log.info("{} {}", request.request.method.value, request.request.uri: Any)
-            Behaviors.same
-
-          case WrappedHttpResponse(request, triedResponse) =>
-            triedResponse match {
-              case Success(response) =>
-                resultFromResponse(context, request)(response) foreach (request.replyTo ! _)
-              case Failure(exception) =>
-                context.log.error(s"${request.request.method.value} ${request.request.uri} failed!", exception)
-                request.replyTo ! FailedResult(request, exception)
-            }
-            Behaviors.same
-
-          case Stop =>
-            Behaviors.stopped
-        }
-
-      }
-        .receiveSignal {
-          case (context, PostStop) =>
-            context.log.info("Stopping HttpRequestSender actor for URI {}.", uri)
-            requestQueue.shutdown()
-            Behaviors.same
-        }
+      handleRequests(uri, requestQueue, Set.empty)
     }
+
+  /**
+   * Returns the behavior for handling incoming HTTP requests. This is the
+   * main message handling function of the HTTP sender actor.
+   *
+   * @param uri             the base URI of this actor
+   * @param requestQueue    the request queue
+   * @param pendingRequests a set with the requests in progress
+   * @return the behavior to handle HTTP requests
+   */
+  private def handleRequests(uri: Uri, requestQueue: RequestQueue, pendingRequests: Set[SendRequest]):
+  Behavior[HttpCommand] =
+    Behaviors.receivePartial[HttpCommand] {
+      case (context, request: SendRequest) =>
+        val futResponse = requestQueue.queueRequest(request.request)
+        context.pipeToSelf(futResponse) { triedResponse =>
+          WrappedHttpResponse(request, triedResponse)
+        }
+        context.log.info("{} {}", request.request.method.value, request.request.uri: Any)
+        handleRequests(uri, requestQueue, pendingRequests + request)
+
+      case (context, WrappedHttpResponse(request, triedResponse)) =>
+        implicit val ec: ExecutionContext = context.system.executionContext
+        triedResponse match {
+          case Success(response) =>
+            resultFromResponse(context, request)(response) foreach (request.replyTo ! _)
+          case Failure(exception) =>
+            context.log.error(s"${request.request.method.value} ${request.request.uri} failed!", exception)
+            request.replyTo ! FailedResult(request, exception)
+        }
+        handleRequests(uri, requestQueue, pendingRequests - request)
+
+      case (_, Stop) =>
+        lazy val exception = new IOException("HttpRequestSender actor was stopped.")
+        pendingRequests foreach { request =>
+          val failureResult = FailedResult(request, exception)
+          request.replyTo ! failureResult
+        }
+        Behaviors.stopped
+    }
+
+      .receiveSignal {
+        case (context, PostStop) =>
+          context.log.info("Stopping HttpRequestSender actor for URI {}.", uri)
+          requestQueue.shutdown()
+          Behaviors.same
+      }
 
   /**
    * Checks the status code of an HTTP response and handles failure

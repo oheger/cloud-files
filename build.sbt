@@ -25,12 +25,12 @@ lazy val AkkaHttpVersion = "10.2.4"
 lazy val VersionScala213 = "2.13.6"
 lazy val VersionScala212 = "2.12.13"
 lazy val VersionScalaXml = "2.0.1"
-lazy val VersionSlf4j = "1.7.31"
+lazy val VersionSlf4j = "1.7.32"
 lazy val VersionScalaTest = "3.2.9"
 lazy val VersionWireMock = "2.27.2"
 lazy val VersionMockito = "1.9.5"
 lazy val VersionScalaTestMockito = "1.0.0-M2"
-lazy val VersionJunit = "4.13" // needed by mockito
+lazy val VersionJunit = "4.13.2" // needed by mockito
 
 lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
 

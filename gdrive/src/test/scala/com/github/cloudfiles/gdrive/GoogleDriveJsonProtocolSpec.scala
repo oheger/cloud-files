@@ -17,7 +17,7 @@
 package com.github.cloudfiles.gdrive
 
 import com.github.cloudfiles.core.FileTestHelper
-import com.github.cloudfiles.gdrive.GoogleDriveJsonProtocol.FolderResponse
+import com.github.cloudfiles.gdrive.GoogleDriveJsonProtocol.{FolderResponse, WritableFile}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json._
@@ -86,5 +86,26 @@ class GoogleDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTes
     val response = parseFolderResponse("/folderResponse.json")
 
     response.nextPageToken should be(None)
+  }
+
+  it should "serialize a WritableFile with all properties" in {
+    val file = WritableFile(name = Some("test.json"), mimeType = Some("application/json"),
+      parents = Some(List("parent_ynvAECVBSOx0123456789")), description = Some("This is a test file."),
+      createdTime = Some(Instant.parse("2021-08-14T19:23:05Z")),
+      modifiedTime = Some(Instant.parse("2021-08-14T19:23:22Z")),
+      properties = Some(Map("test" -> "yes", "foo" -> "baz")),
+      appProperties = Some(Map("appTest" -> "yeah", "appFoo" -> "appBaz")))
+    val expResult = readDataFile(resourceFile("/writableFile.json"))
+
+    val json = file.toJson.toString()
+    json should be(expResult)
+  }
+
+  it should "serialize a WritableFile with no properties" in {
+    val file = WritableFile(name = None, mimeType = None, parents = None, description = None,
+      createdTime = None, modifiedTime = None, properties = None, appProperties = None)
+
+    val json = file.toJson.toString()
+    json should be("{}")
   }
 }

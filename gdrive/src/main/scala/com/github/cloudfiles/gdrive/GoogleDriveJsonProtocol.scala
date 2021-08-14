@@ -91,6 +91,33 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
   }
 
   /**
+   * A data class representing a ''File'' resource when it is created or
+   * updated.
+   *
+   * This class has a subset of the properties of [[File]], and all are
+   * optional. These are the writable properties that can be set in create or
+   * update operations. The class is used to generate the JSON payload for
+   * these operations.
+   *
+   * @param name          the optional new name of the file
+   * @param mimeType      the optional new mime type
+   * @param parents       the optional parents
+   * @param createdTime   the optional new creation time
+   * @param modifiedTime  the optional new modified time
+   * @param description   the optional new description
+   * @param properties    the optional new properties
+   * @param appProperties the optional new application-specific properties
+   */
+  case class WritableFile(name: Option[String],
+                          mimeType: Option[String],
+                          parents: Option[List[String]],
+                          createdTime: Option[Instant],
+                          modifiedTime: Option[Instant],
+                          description: Option[String],
+                          properties: Option[Map[String, String]],
+                          appProperties: Option[Map[String, String]])
+
+  /**
    * A data class describing the content of a folder with all its files.
    *
    * In Google Drive, there is the single type [[File]] representing both files
@@ -118,5 +145,6 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
   }
 
   implicit val fileFormat: RootJsonFormat[File] = jsonFormat10(File)
+  implicit val writableFileFormat: RootJsonFormat[WritableFile] = jsonFormat8(WritableFile)
   implicit val folderResponseFormat: RootJsonFormat[FolderResponse] = jsonFormat2(FolderResponse)
 }

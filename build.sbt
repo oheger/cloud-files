@@ -100,7 +100,7 @@ lazy val CloudFiles = (project in file("."))
     description := "A library for accessing files stored on various server types",
     crossScalaVersions := Nil,
     publish := {}
-  ) aggregate(core, webDav, oneDrive, localFs, crypt, cryptAlgAES)
+  ) aggregate(core, webDav, oneDrive, googleDrive, localFs, crypt, cryptAlgAES)
 
 /**
  * The core project. This project defines the API for interacting with
@@ -164,6 +164,28 @@ lazy val oneDrive = (project in file("onedrive"))
     description := "Adds support for Microsoft's OneDrive protocol",
     crossScalaVersions := supportedScalaVersions,
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.onedrive.*"),
+    OsgiKeys.privatePackage := Seq.empty,
+    Test / testOptions := Seq(Tests.Filter(unitFilter)),
+    ITest / testOptions := Seq(Tests.Filter(itFilter))
+  ) dependsOn (core % "compile->compile;test->test")
+
+/**
+ * This project implements the CloudFiles API for Google Drive. Refer to
+ * https://developers.google.com/drive/api/v3/about-files.
+ */
+lazy val googleDrive = (project in file("gdrive"))
+  .enablePlugins(SbtOsgi)
+  .configs(ITest)
+  .settings(projectOsgiSettings)
+  .settings(
+    inConfig(ITest)(Defaults.testTasks),
+    libraryDependencies ++= akkaDependencies,
+    libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
+    libraryDependencies ++= testDependencies,
+    name := "cloud-files-googledrive",
+    description := "Adds support for the GoogleDrive protocol",
+    crossScalaVersions := supportedScalaVersions,
+    OsgiKeys.exportPackage := Seq("com.github.cloudfiles.gdrive.*"),
     OsgiKeys.privatePackage := Seq.empty,
     Test / testOptions := Seq(Tests.Filter(unitFilter)),
     ITest / testOptions := Seq(Tests.Filter(itFilter))

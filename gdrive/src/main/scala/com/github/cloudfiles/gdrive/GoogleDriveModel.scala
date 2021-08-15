@@ -40,6 +40,11 @@ import java.time.Instant
  */
 object GoogleDriveModel {
   /**
+   * Constant for the mime type used to mark a file in GoogleDrive as a folder.
+   */
+  final val MimeTypeGoogleFolder = "application/vnd.google-apps.folder"
+
+  /**
    * A trait implementing basic functionality required by the GoogleDrive
    * implementations for ''FileSystem'' files and folders.
    *
@@ -81,4 +86,82 @@ object GoogleDriveModel {
   case class GoogleDriveFile(override val googleFile: File) extends Model.File[String] with GoogleDriveElement {
     override def size: Long = googleFile.fileSize
   }
+
+  /**
+   * Constructs a ''GoogleDriveFolder'' object for creating or updating a
+   * folder in the GoogleDrive. For such an operation, typically only parts of
+   * the properties supported by a Google folder need to be specified.
+   * Therefore, this function sets default values for all properties, and the
+   * caller only has to specify the relevant ones.
+   *
+   * @param name           the name of the folder
+   * @param id             the folder ID (needed for update operations)
+   * @param description    the description
+   * @param createdAt      the time the folder was created
+   * @param lastModifiedAt the time of the last modification
+   * @param properties     a map with properties for the folder
+   * @param appProperties  a map with application-specific properties
+   * @return the new ''GoogleDriveFolder'' object
+   */
+  def newFolder(name: String = null, id: String = null, description: String = null, createdAt: Instant = null,
+                lastModifiedAt: Instant = null, properties: Map[String, String] = Map.empty,
+                appProperties: Map[String, String] = Map.empty): GoogleDriveFolder = {
+    val googleFile = createGoogleFile(name, id, description, createdAt, lastModifiedAt, properties, appProperties,
+      MimeTypeGoogleFolder)
+    GoogleDriveFolder(googleFile)
+  }
+
+  /**
+   * Constructs a ''GoogleDriveFile'' object for creating or updating a
+   * file in the GoogleDrive. For such an operation, typically only parts of
+   * the properties supported by a Google file need to be specified.
+   * Therefore, this function sets default values for all properties, and the
+   * caller only has to specify the relevant ones.
+   *
+   * @param name           the name of the file
+   * @param id             the file ID (needed for update operations)
+   * @param description    the description
+   * @param createdAt      the time the file was created
+   * @param lastModifiedAt the time of the last modification
+   * @param properties     a map with properties for the file
+   * @param appProperties  a map with application-specific properties
+   * @param mimeType       the mime type of the file
+   * @return the new ''GoogleDriveFile'' object
+   */
+  def newFile(name: String = null, id: String = null, description: String = null, createdAt: Instant = null,
+              lastModifiedAt: Instant = null, properties: Map[String, String] = Map.empty,
+              appProperties: Map[String, String] = Map.empty, mimeType: String = null): GoogleDriveFile = {
+    val googleFile = createGoogleFile(name, id, description, createdAt, lastModifiedAt, properties, appProperties,
+      mimeType)
+    GoogleDriveFile(googleFile)
+  }
+
+  /**
+   * Creates a [[File]] object from the passed in parameters.
+   *
+   * @param name           the name
+   * @param id             the ID
+   * @param description    the description
+   * @param createdAt      the creation time
+   * @param lastModifiedAt the last modified time
+   * @param properties     properties of the file
+   * @param appProperties  application-specific properties of the file
+   * @param mimeType       the mime type
+   * @return the ''File'' with these properties
+   */
+  private def createGoogleFile(name: String, id: String, description: String, createdAt: Instant,
+                               lastModifiedAt: Instant, properties: Map[String, String],
+                               appProperties: Map[String, String], mimeType: String): File =
+    File(id, name, mimeType, List.empty, createdAt, lastModifiedAt, Option(description),
+      None, optionalMap(properties), optionalMap(appProperties))
+
+  /**
+   * Converts the given map to an ''Option'', treating an empty map as
+   * undefined.
+   *
+   * @param map the map to convert
+   * @return the ''Option'' for the map
+   */
+  private def optionalMap(map: Map[String, String]): Option[Map[String, String]] =
+    Option(map).filterNot(_.isEmpty)
 }

@@ -55,4 +55,68 @@ class GoogleDriveModelSpec extends AnyFlatSpec with Matchers {
     googleFile.description should be(null)
     googleFile.size should be(1234)
   }
+
+  it should "create a new GoogleDriveFolder with the properties provided" in {
+    val FolderID = "theFolderID"
+    val FolderName = "MyTestFolder"
+    val FolderDescription = "The description of my folder"
+    val FolderCreationTime = Instant.parse("2021-08-15T16:36:57.11Z")
+    val FolderModifiedTime = Instant.parse("2021-08-15T16:37:15.22Z")
+    val FolderProperties = Map("prop1" -> "value1", "prop2" -> "value2")
+    val FolderAppProperties = Map("someAppProperty" -> "someValue")
+    val expFile = GoogleDriveJsonProtocol.File(id = FolderID, name = FolderName,
+      mimeType = "application/vnd.google-apps.folder", parents = List.empty, createdTime = FolderCreationTime,
+      modifiedTime = FolderModifiedTime, description = Some(FolderDescription), size = None,
+      properties = Some(FolderProperties), appProperties = Some(FolderAppProperties))
+
+    val folder = GoogleDriveModel.newFolder(id = FolderID, name = FolderName, description = FolderDescription,
+      createdAt = FolderCreationTime, lastModifiedAt = FolderModifiedTime, properties = FolderProperties,
+      appProperties = FolderAppProperties)
+    folder.googleFile should be(expFile)
+  }
+
+  it should "create a new GoogleDriveFolder with default values" in {
+    val expFile = GoogleDriveJsonProtocol.File(id = null, name = null, mimeType = "application/vnd.google-apps.folder",
+      parents = List.empty, createdTime = null, modifiedTime = null, description = None, size = None,
+      properties = None, appProperties = None)
+
+    val folder = GoogleDriveModel.newFolder()
+    folder.googleFile should be(expFile)
+  }
+
+  it should "deal with null values for maps when creating a new GoogleDriveFolder" in {
+    val folder = GoogleDriveModel.newFolder(properties = null, appProperties = null)
+
+    folder.googleFile.properties should be(empty)
+    folder.googleFile.appProperties should be(empty)
+  }
+
+  it should "create a new GoogleDriveFile with the properties provided" in {
+    val FileID = "theFileID"
+    val FileName = "MyTestFile.json"
+    val FileMimeType = "application/json"
+    val FileDescription = "The description of my file"
+    val FileCreationTime = Instant.parse("2021-08-15T16:59:49.33Z")
+    val FileModifiedTime = Instant.parse("2021-08-15T17:02:02.44Z")
+    val FileProperties = Map("prop1" -> "value1", "prop2" -> "value2")
+    val FileAppProperties = Map("someAppProperty" -> "someValue")
+    val expFile = GoogleDriveJsonProtocol.File(id = FileID, name = FileName,
+      mimeType = FileMimeType, parents = List.empty, createdTime = FileCreationTime,
+      modifiedTime = FileModifiedTime, description = Some(FileDescription), size = None,
+      properties = Some(FileProperties), appProperties = Some(FileAppProperties))
+
+    val file = GoogleDriveModel.newFile(id = FileID, name = FileName, createdAt = FileCreationTime,
+      lastModifiedAt = FileModifiedTime, description = FileDescription, properties = FileProperties,
+      appProperties = FileAppProperties, mimeType = FileMimeType)
+    file.googleFile should be(expFile)
+  }
+
+  it should "create a new GoogleDriveFile with default values" in {
+    val expFile = GoogleDriveJsonProtocol.File(id = null, name = null, mimeType = null,
+      parents = List.empty, createdTime = null, modifiedTime = null, description = None, size = None,
+      properties = None, appProperties = None)
+
+    val file = GoogleDriveModel.newFile()
+    file.googleFile should be(expFile)
+  }
 }

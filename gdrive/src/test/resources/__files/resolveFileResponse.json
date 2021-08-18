@@ -1,0 +1,21 @@
+{
+  "appProperties": {
+    "appFoo": "appBar",
+    "appTest": "true"
+  },
+  "createdTime": "2021-08-17T20:01:53.123Z",
+  "description": "Description of test file.",
+  "id": "file_id-J9die95gBb_123456987",
+  "md5Checksum": "0951900a329bc28f6354e98fb730f4e5",
+  "mimeType": "text/plain",
+  "modifiedTime": "2021-08-17T20:02:24.456Z",
+  "name": "test.txt",
+  "parents": [
+    "parent_id_OxrHyqtqWLAM7EY"
+  ],
+  "properties": {
+    "foo": "bar",
+    "test": "true"
+  },
+  "size": "323"
+}

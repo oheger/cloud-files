@@ -1,0 +1,64 @@
+{
+  "nextPageToken": "nextPage-12345",
+  "files": [
+    {
+      "createdTime": "2021-08-18T19:00:01.000Z",
+      "id": "folder_id-1",
+      "mimeType": "application/vnd.google-apps.folder",
+      "modifiedTime": "2021-08-18T20:00:01.000Z",
+      "name": "folder1",
+      "parents": [
+        "parent_id"
+      ]
+    },
+    {
+      "createdTime": "2021-08-18T17:00:01.000Z",
+      "description": "Description of test file1.",
+      "id": "file_id-1",
+      "md5Checksum": "check-1",
+      "mimeType": "text/plain",
+      "modifiedTime": "2021-08-18T18:00:01.000Z",
+      "name": "file1.txt",
+      "parents": [
+        "parent_id"
+      ],
+      "size": "1001"
+    },
+    {
+      "createdTime": "2021-08-18T19:00:02.000Z",
+      "id": "folder_id-2",
+      "mimeType": "application/vnd.google-apps.folder",
+      "modifiedTime": "2021-08-18T20:00:02.000Z",
+      "name": "folder2",
+      "parents": [
+        "parent_id"
+      ]
+    },
+    {
+      "createdTime": "2021-08-18T17:00:02.000Z",
+      "description": "Description of test file2.",
+      "id": "file_id-2",
+      "md5Checksum": "check-2",
+      "mimeType": "text/plain",
+      "modifiedTime": "2021-08-18T18:00:02.000Z",
+      "name": "file2.txt",
+      "parents": [
+        "parent_id"
+      ],
+      "size": "1002"
+    },
+    {
+      "createdTime": "2021-08-18T17:00:03.000Z",
+      "description": "Description of test file3.",
+      "id": "file_id-3",
+      "md5Checksum": "check-3",
+      "mimeType": "text/plain",
+      "modifiedTime": "2021-08-18T18:00:03.000Z",
+      "name": "file3.txt",
+      "parents": [
+        "parent_id"
+      ],
+      "size": "1003"
+    }
+  ]
+}

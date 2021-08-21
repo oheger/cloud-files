@@ -1,0 +1,27 @@
+{
+  "files": [
+    {
+      "createdTime": "2021-08-18T19:00:03.000Z",
+      "id": "folder_id-3",
+      "mimeType": "application/vnd.google-apps.folder",
+      "modifiedTime": "2021-08-18T20:00:03.000Z",
+      "name": "folder3",
+      "parents": [
+        "parent_id"
+      ]
+    },
+    {
+      "createdTime": "2021-08-18T17:00:04.000Z",
+      "description": "Description of test file4.",
+      "id": "file_id-4",
+      "md5Checksum": "check-4",
+      "mimeType": "text/plain",
+      "modifiedTime": "2021-08-18T18:00:04.000Z",
+      "name": "file4.txt",
+      "parents": [
+        "parent_id"
+      ],
+      "size": "1004"
+    }
+  ]
+}

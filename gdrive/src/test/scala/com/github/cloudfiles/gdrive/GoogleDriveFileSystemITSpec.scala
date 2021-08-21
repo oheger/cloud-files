@@ -17,15 +17,18 @@
 package com.github.cloudfiles.gdrive
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{ContentTypes, StatusCodes}
+import akka.stream.scaladsl.Sink
+import akka.util.ByteString
 import com.github.cloudfiles.core.http.HttpRequestSender
-import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, WireMockSupport}
+import com.github.cloudfiles.core._
 import com.github.tomakehurst.wiremock.client.WireMock._
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 object GoogleDriveFileSystemITSpec {
   /** ID of a test file used by the tests. */
@@ -35,11 +38,22 @@ object GoogleDriveFileSystemITSpec {
   private val ExpFileFields = "id,name,size,createdTime,modifiedTime,mimeType,parents,properties,appProperties," +
     "md5Checksum,description"
 
+  /** The expected fields that are requested for a folder's content. */
+  private val ExpFolderFields = s"nextPageToken,files($ExpFileFields)"
+
+  /** The expected query parameters when querying a folder's content. */
+  private val ExpFolderQueryParams = Map("fields" -> equalTo(ExpFolderFields),
+    "pageSize" -> equalTo("1000"),
+    "q" -> equalTo(s"'$TestFileID' in parents and trashed = false"))
+
   /** Constant for the Accept header. */
   private val HeaderAccept = "Accept"
 
   /** Constant for the JSON content type for the accept header. */
   private val ContentJson = "application/json"
+
+  /** The prefix for sending requests to the Google Drive API. */
+  private val DriveApiPrefix = "/drive/v3/files"
 
   /**
    * Generates an URI path for the ''files'' resource with the given suffix.
@@ -47,7 +61,7 @@ object GoogleDriveFileSystemITSpec {
    * @param suffix the suffix (without leading slash)
    * @return the full path to manipulate a file
    */
-  private def filePath(suffix: String): String = s"/drive/v3/files/$suffix"
+  private def filePath(suffix: String): String = s"$DriveApiPrefix/$suffix"
 }
 
 /**
@@ -170,5 +184,72 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
 
     val exception = expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFolder(TestFileID)))
     exception.getMessage should include(TestFileID)
+  }
+
+  /**
+   * Checks whether an object representing the content of a folder contains the
+   * expected elements.
+   *
+   * @param content        the content to check
+   * @param expFileCount   the expected number of files
+   * @param expFolderCount the expected number of folders
+   */
+  private def checkFolderContent(content: Model.FolderContent[String, GoogleDriveModel.GoogleDriveFile,
+    GoogleDriveModel.GoogleDriveFolder], expFileCount: Int, expFolderCount: Int): Unit = {
+    content.folderID should be(TestFileID)
+    content.files should have size expFileCount
+    (1 to expFileCount) foreach { idx =>
+      val file = content.files(s"file_id-$idx")
+      file.name should be(s"file$idx.txt")
+      file.size should be(1000 + idx)
+    }
+    content.folders should have size expFolderCount
+    (1 to expFolderCount) foreach { idx =>
+      val folder = content.folders(s"folder_id-$idx")
+      folder.name should be(s"folder$idx")
+    }
+  }
+
+  it should "query the content of a folder" in {
+    stubFor(get(urlPathEqualTo(DriveApiPrefix))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
+      .withQueryParams(ExpFolderQueryParams.asJava)
+      .willReturn(aJsonResponse().withBodyFile("folderContentResponse.json")))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val content = futureResult(runOp(fs.folderContent(TestFileID)))
+    checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+  }
+
+  it should "query the content of a folder that is split over multiple pages" in {
+    val paramsWithNextPageToken = ExpFolderQueryParams + ("pageToken" -> equalTo("nextPage-12345"))
+    stubFor(get(urlPathEqualTo(DriveApiPrefix))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
+      .withQueryParams(paramsWithNextPageToken.asJava)
+      .willReturn(aJsonResponse().withBodyFile("folderContentResponsePage2.json")))
+    stubFor(get(urlPathEqualTo(DriveApiPrefix))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
+      .withQueryParams(ExpFolderQueryParams.asJava)
+      .withQueryParam("pageToken", absent())
+      .willReturn(aJsonResponse().withBodyFile("folderContentResponsePage1.json")))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val content = futureResult(runOp(fs.folderContent(TestFileID)))
+    checkFolderContent(content, expFileCount = 4, expFolderCount = 3)
+  }
+
+  it should "download a file" in {
+    stubFor(get(urlPathEqualTo(filePath(TestFileID)))
+      .withQueryParam("alt", equalTo("media"))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
+        .withBody(FileTestHelper.TestData)
+        .withHeader("Content-Type", "text/plain; charset=UTF-8")))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val entity = futureResult(runOp(fs.downloadFile(TestFileID)))
+    entity.contentType should be(ContentTypes.`text/plain(UTF-8)`)
+    val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
+    val data = futureResult(entity.dataBytes.runWith(sink))
+    data.utf8String should be(FileTestHelper.TestData)
   }
 }

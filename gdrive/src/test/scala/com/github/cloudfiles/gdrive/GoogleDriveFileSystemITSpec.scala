@@ -23,8 +23,10 @@ import akka.util.ByteString
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core._
 import com.github.tomakehurst.wiremock.client.WireMock._
+import com.github.tomakehurst.wiremock.matching.StringValuePattern
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import spray.json._
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
@@ -49,6 +51,9 @@ object GoogleDriveFileSystemITSpec {
   /** Constant for the Accept header. */
   private val HeaderAccept = "Accept"
 
+  /** Constant for the Content-Type header. */
+  private val HeaderContent = "Content-Type"
+
   /** Constant for the JSON content type for the accept header. */
   private val ContentJson = "application/json"
 
@@ -62,6 +67,36 @@ object GoogleDriveFileSystemITSpec {
    * @return the full path to manipulate a file
    */
   private def filePath(suffix: String): String = s"$DriveApiPrefix/$suffix"
+
+  /**
+   * Provides a convenience matcher to check a request body against the JSON
+   * representation of the given writable file.
+   *
+   * @param file the reference file
+   * @return the matcher to check against this file
+   */
+  private def equalToFile(file: GoogleDriveJsonProtocol.WritableFile): StringValuePattern =
+    equalToJson(file.toJson.toString())
+
+  /**
+   * Generates a ''Model.Folder'' object with the properties provided.
+   *
+   * @param fid     the folder ID
+   * @param fName   the folder name
+   * @param fDesc   the folder description
+   * @param fCreate the creation time
+   * @param fModify the last modification time
+   * @return the folder with these properties
+   */
+  private def modelFolder(fid: String = null, fName: String = null, fDesc: String = null, fCreate: Instant = null,
+                          fModify: Instant = null): Model.Folder[String] =
+    new Model.Folder[String] {
+      override val id: String = fid
+      override val name: String = fName
+      override val description: String = fDesc
+      override val createdAt: Instant = fCreate
+      override val lastModifiedAt: Instant = fModify
+    }
 }
 
 /**
@@ -251,5 +286,110 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
     val data = futureResult(entity.dataBytes.runWith(sink))
     data.utf8String should be(FileTestHelper.TestData)
+  }
+
+  /**
+   * Helper function to check the creation of a folder. Checks whether a
+   * request with the correct content is sent, and the response is correctly
+   * evaluated.
+   *
+   * @param srcFolder          the source folder defining the new folder
+   * @param expectedProperties the expected properties in the request
+   */
+  private def checkCreateFolder(srcFolder: Model.Folder[String],
+                                expectedProperties: GoogleDriveJsonProtocol.WritableFile): Unit = {
+    stubFor(post(urlPathEqualTo(DriveApiPrefix))
+      .withHeader(HeaderContent, equalTo(ContentJson))
+      .withRequestBody(equalToFile(expectedProperties))
+      .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFolderResponse.json")))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val folderID = futureResult(runOp(fs.createFolder(TestFileID, srcFolder)))
+    folderID should be("folder_id-AECVBSOxrHyqtqTest")
+  }
+
+  it should "create a folder from a model folder" in {
+    val FolderName = "MyNewFolder"
+    val FolderDesc = "Description of my new folder"
+    val creationTime = Instant.parse("2021-08-21T14:41:48.123Z")
+    val modifiedTime = Instant.parse("2021-08-21T14:42:08.124Z")
+    val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = Some(FolderName),
+      createdTime = Some(creationTime), modifiedTime = Some(modifiedTime), properties = None, appProperties = None,
+      description = Some(FolderDesc), parents = Some(List(TestFileID)),
+      mimeType = Some("application/vnd.google-apps.folder"))
+    val srcFolder = modelFolder(fName = FolderName, fDesc = FolderDesc, fCreate = creationTime, fModify = modifiedTime)
+
+    checkCreateFolder(srcFolder, expectedProperties)
+  }
+
+  it should "create a folder from a model folder with minimum properties" in {
+    val FolderName = "MyNewFolder"
+    val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = Some(FolderName),
+      createdTime = None, modifiedTime = None, properties = None, appProperties = None,
+      description = None, parents = Some(List(TestFileID)),
+      mimeType = Some("application/vnd.google-apps.folder"))
+    val srcFolder = modelFolder(fName = FolderName)
+
+    checkCreateFolder(srcFolder, expectedProperties)
+  }
+
+  it should "create a folder from a GoogleDrive folder" in {
+    val googleFile = GoogleDriveJsonProtocol.File(id = null, name = "theNewFolder", parents = Nil,
+      createdTime = Instant.parse("2021-08-21T20:01:24.547Z"),
+      modifiedTime = Instant.parse("2021-08-21T20:06:35.456Z"),
+      description = Some("Folder description"), mimeType = "someMimeType", size = None,
+      properties = Some(Map("property" -> "test")), appProperties = Some(Map("appProp" -> "yes")))
+    val srcFolder = GoogleDriveModel.GoogleDriveFolder(googleFile)
+    val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = Some(googleFile.name),
+      createdTime = Some(srcFolder.createdAt), modifiedTime = Some(srcFolder.lastModifiedAt),
+      description = googleFile.description, properties = googleFile.properties,
+      appProperties = googleFile.appProperties, mimeType = Some("application/vnd.google-apps.folder"),
+      parents = Some(List(TestFileID)))
+
+    checkCreateFolder(srcFolder, expectedProperties)
+  }
+
+  /**
+   * Helper function to check whether a folder is correctly updated from the
+   * properties of another folder.
+   *
+   * @param srcFolder          the folder with the properties to update
+   * @param expectedProperties the properties expected in the update request
+   */
+  private def checkUpdateFolder(srcFolder: Model.Folder[String],
+                                expectedProperties: GoogleDriveJsonProtocol.WritableFile): Unit = {
+    stubFor(patch(urlPathEqualTo(filePath(TestFileID)))
+      .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFolderResponse.json")))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.updateFolder(srcFolder)))
+    verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
+      .withHeader(HeaderContent, equalTo(ContentJson))
+      .withRequestBody(equalToFile(expectedProperties)))
+  }
+
+  it should "update a folder from a model folder" in {
+    val srcFolder = modelFolder(fid = TestFileID, fDesc = "Updated folder description",
+      fCreate = Instant.parse("2021-08-22T15:51:47.369Z"),
+      fModify = Instant.parse("2021-08-22T15:52:14.741Z"))
+    val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = None, mimeType = None, parents = None,
+      createdTime = Some(srcFolder.createdAt), modifiedTime = Some(srcFolder.lastModifiedAt),
+      description = Some(srcFolder.description), properties = None, appProperties = None)
+
+    checkUpdateFolder(srcFolder, expectedProperties)
+  }
+
+  it should "update a folder from a GoogleDrive folder" in {
+    val googleFile = GoogleDriveJsonProtocol.File(id = TestFileID, name = null, mimeType = "someMimeType",
+      parents = List("someParent"), createdTime = null, description = Some("new description"),
+      modifiedTime = Instant.parse("2021-08-22T16:09:22.258Z"), size = None,
+      properties = Some(Map("newProperty" -> "newValue")),
+      appProperties = Some(Map("newAppProperty" -> "anotherNewValue")))
+    val srcFolder = GoogleDriveModel.GoogleDriveFolder(googleFile)
+    val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = None, mimeType = None, parents = None,
+      createdTime = None, modifiedTime = Some(srcFolder.lastModifiedAt), description = Some(srcFolder.description),
+      properties = googleFile.properties, appProperties = googleFile.appProperties)
+
+    checkUpdateFolder(srcFolder, expectedProperties)
   }
 }

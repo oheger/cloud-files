@@ -18,7 +18,8 @@ package com.github.cloudfiles.gdrive
 
 import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.headers.Accept
+import akka.http.scaladsl.marshalling.Marshal
+import akka.http.scaladsl.model.headers.{Accept, `Content-Type`}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
@@ -52,8 +53,14 @@ object GoogleDriveFileSystem {
   /** The header for accepting JSON responses. */
   private val AcceptJsonHeader = Accept(MediaRange(MediaTypes.`application/json`))
 
+  /** The header indicating a JSON request */
+  private val ContentJsonHeader = `Content-Type`(ContentTypes.`application/json`)
+
   /** A sequence with the standard headers to send for typical requests. */
   private val StdHeaders = List(AcceptJsonHeader)
+
+  /** A sequence with standard headers to send for typical update requests. */
+  private val StdUpdateHeaders = List(ContentJsonHeader)
 
   /** The query parameter to selecting the fields to retrieve. */
   private val QueryParamFields = "fields"
@@ -194,9 +201,30 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
       }
     }
 
-  override def createFolder(parent: String, folder: Model.Folder[String])(implicit system: ActorSystem[_]): FileSystem.Operation[String] = ???
+  override def createFolder(parent: String, folder: Model.Folder[String])(implicit system: ActorSystem[_]):
+  Operation[String] = Operation {
+    httpSender =>
+      val requestFile = createWritableFile(folder, optMimeType = Some(MimeTypeFolder),
+        optParents = Some(List(parent)))
+      for {
+        entity <- fileEntity(requestFile)
+        request = HttpRequest(method = HttpMethods.POST, uri = Uri(FileResourcePrefix), headers = StdUpdateHeaders,
+          entity = entity)
+        response <- executeQuery[GoogleDriveJsonProtocol.File](httpSender, request)
+      } yield response.id
+  }
 
-  override def updateFolder(folder: Model.Folder[String])(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
+  override def updateFolder(folder: Model.Folder[String])(implicit system: ActorSystem[_]): Operation[Unit] =
+    Operation {
+      httpSender =>
+        val requestFile = createWritableFile(folder)
+        for {
+          entity <- fileEntity(requestFile)
+          request = HttpRequest(method = HttpMethods.PATCH, uri = Uri(s"$FileResourcePrefix/${folder.id}"),
+            headers = StdUpdateHeaders, entity = entity)
+          response <- executeUpdate(httpSender, request)
+        } yield response
+    }
 
   override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
     deleteElement(folderID)
@@ -263,6 +291,29 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
     }
 
   /**
+   * Creates a ''WritableFile'' from the optional properties provided. Part of
+   * the properties are initialized from a source element. If this is an object
+   * from the GoogleDrive model, extended properties are taken into account.
+   *
+   * @param srcElement  the source element
+   * @param optMimeType optional mime type
+   * @param optParents  optional parents
+   * @return the ''WritableFile''
+   */
+  private def createWritableFile(srcElement: Model.Element[String], optMimeType: Option[String] = None,
+                                 optParents: Option[List[String]] = None): GoogleDriveJsonProtocol.WritableFile = {
+    val (properties, appProperties) = srcElement match {
+      case googleElem: GoogleDriveModel.GoogleDriveElement =>
+        (googleElem.googleFile.properties, googleElem.googleFile.appProperties)
+      case _ => (None, None)
+    }
+    GoogleDriveJsonProtocol.WritableFile(name = Option(srcElement.name), properties = properties,
+      appProperties = appProperties, mimeType = optMimeType, parents = optParents,
+      createdTime = Option(srcElement.createdAt), modifiedTime = Option(srcElement.lastModifiedAt),
+      description = Option(srcElement.description))
+  }
+
+  /**
    * Helper function to execute an HTTP request that is expected to yield a
    * JSON response, which is to be converted to an object.
    *
@@ -296,4 +347,16 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
                            (implicit system: ActorSystem[_]): Future[Unit] =
     HttpRequestSender.sendRequestSuccess(httpSender, request, requestData = null, discardMode = discardMode)
       .map(_ => ())
+
+  /**
+   * Produces a request entity from the given writable file. This is typically
+   * needed for update operations.
+   *
+   * @param file   the file to convert
+   * @param system the actor system
+   * @return a ''Future'' with the request entity
+   */
+  private def fileEntity(file: GoogleDriveJsonProtocol.WritableFile)
+                        (implicit system: ActorSystem[_]): Future[RequestEntity] =
+    Marshal(file).to[RequestEntity]
 }

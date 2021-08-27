@@ -16,6 +16,7 @@
 
 package com.github.cloudfiles.core
 
+import akka.actor.testkit.typed.scaladsl.ActorTestKit
 import akka.http.scaladsl.model.headers.Authorization
 import akka.http.scaladsl.model.{HttpResponse, StatusCode, StatusCodes}
 import akka.stream.Materializer
@@ -25,9 +26,11 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.client.{MappingBuilder, ResponseDefinitionBuilder}
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
+import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 object WireMockSupport {
   /** Test user ID. */
@@ -68,6 +71,12 @@ object WireMockSupport {
    * default user credentials to a request.
    */
   final val BasicAuthFunc: AuthFunc = basicAuth
+
+  /** The default timeout when waiting for requests. */
+  final val DefaultMaxRequestWait: FiniteDuration = 3.seconds
+
+  /** The default check period when waiting for requests. */
+  final val DefaultRequestWaitPeriod: FiniteDuration = 100.millis
 
   /**
    * Returns an authorization function that adds an authorization header with
@@ -247,5 +256,40 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
     } finally {
       server.stop()
     }
+  }
+
+  /**
+   * Waits for the given number of requests to be received by the mock server.
+   * This function addresses a subtle race condition that can occur with the
+   * standard ''verify()'' function of WireMock: When a request is sent, and
+   * its response body is discarded asynchronously, it can happen that the
+   * request has not been recorded when ''verify()'' is called. To work-around
+   * this problem, this function can be used to wait until the expected number
+   * of requests has been processed.
+   *
+   * @param testKit      the test kit
+   * @param requestCount the number of requests to wait for
+   * @param maxWait      the maximum time to wait
+   * @param period       the period to check for the condition to be satisfied
+   */
+  protected def waitForRequests(testKit: ActorTestKit, requestCount: Int,
+                                maxWait: FiniteDuration = DefaultMaxRequestWait,
+                                period: FiniteDuration = DefaultRequestWaitPeriod): Unit = {
+    WaitFor.condition(testKit, 3.seconds, 100.millis) {
+      wireMockServer.getAllServeEvents.size() == 2
+    }
+  }
+
+  /**
+   * A convenience function that combines ''waitForRequests()'' with the
+   * standard ''verify()'' function.
+   *
+   * @param testKit      the test kit
+   * @param requestCount the number of requests to wait for
+   * @param condition    the condition to verify
+   */
+  protected def waitAndVerify(testKit: ActorTestKit, requestCount: Int)(condition: RequestPatternBuilder): Unit = {
+    waitForRequests(testKit, requestCount)
+    verify(condition)
   }
 }

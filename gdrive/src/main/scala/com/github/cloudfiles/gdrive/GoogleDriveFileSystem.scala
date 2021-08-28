@@ -19,8 +19,8 @@ package com.github.cloudfiles.gdrive
 import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.model.headers.{Accept, `Content-Type`}
 import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.{Accept, Location, `Content-Type`}
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
@@ -37,6 +37,9 @@ import scala.concurrent.duration._
 object GoogleDriveFileSystem {
   /** The URI prefix for accessing the /files resource. */
   private val FileResourcePrefix = "/drive/v3/files"
+
+  /** The URI prefix for file upload operations. */
+  private val UploadResourcePrefix = s"/upload$FileResourcePrefix"
 
   /**
    * Constant for the names of the fields that are requested for files.
@@ -82,6 +85,9 @@ object GoogleDriveFileSystem {
   /** The query parameter that requests the download of a file's content. */
   private val QueryParameterAlt = "alt"
 
+  /** The query parameter that determines the upload type. */
+  private val QueryParameterUploadType = "uploadType"
+
   /**
    * The map with query parameters to be used when resolving a file. Here a
    * parameter needs to be passed to select the required properties.
@@ -103,6 +109,9 @@ object GoogleDriveFileSystem {
    * content of a file.
    */
   private val AltMedia = "media"
+
+  /** Constant for the value of the upload type "resumable". */
+  private val UploadResumable = "resumable"
 
   /**
    * Returns a map with all query parameters required to request the content of
@@ -215,25 +224,55 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   }
 
   override def updateFolder(folder: Model.Folder[String])(implicit system: ActorSystem[_]): Operation[Unit] =
-    Operation {
-      httpSender =>
-        val requestFile = createWritableFile(folder)
-        for {
-          entity <- fileEntity(requestFile)
-          request = HttpRequest(method = HttpMethods.PATCH, uri = Uri(s"$FileResourcePrefix/${folder.id}"),
-            headers = StdUpdateHeaders, entity = entity)
-          response <- executeUpdate(httpSender, request)
-        } yield response
-    }
+    updateElement(folder)
 
   override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
     deleteElement(folderID)
 
-  override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])(implicit system: ActorSystem[_]): FileSystem.Operation[String] = ???
+  override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])
+                         (implicit system: ActorSystem[_]): Operation[String] = Operation {
+    httpSender =>
+      val uploadTriggerUri = Uri(UploadResourcePrefix)
+        .withQuery(Uri.Query(QueryParameterUploadType -> UploadResumable))
+      val requestFile = createWritableFile(file, optParents = Some(List(parent)), mimeTypeFromSource = true)
 
-  override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
+      for {
+        entity <- fileEntity(requestFile)
+        request = HttpRequest(method = HttpMethods.POST, uri = uploadTriggerUri, headers = StdUpdateHeaders,
+          entity = entity)
+        result <- sendUploadTriggerRequest(httpSender, request)
+        uploadRequest <- createUploadRequest(result, file.size, content)
+        uploadResult <- executeQuery[GoogleDriveJsonProtocol.File](httpSender, uploadRequest)
+      } yield uploadResult.id
+  }
 
-  override def updateFileContent(fileID: String, size: Long, content: Source[ByteString, Any])(implicit system: ActorSystem[_]): FileSystem.Operation[Unit] = ???
+  override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
+    updateElement(file)
+
+  override def updateFileContent(fileID: String, size: Long, content: Source[ByteString, Any])
+                                (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
+    httpSender =>
+      val uploadTriggerUri = Uri(s"$UploadResourcePrefix/$fileID")
+        .withQuery(Uri.Query(QueryParameterUploadType -> UploadResumable))
+      val triggerRequest = HttpRequest(method = HttpMethods.PATCH, uri = uploadTriggerUri)
+
+      overwriteFileContent(httpSender, triggerRequest, size, content)
+  }
+
+  override def updateFileAndContent(file: Model.File[String], content: Source[ByteString, Any])
+                                   (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
+    httpSender =>
+      val uploadTriggerUri = Uri(s"$UploadResourcePrefix/${file.id}")
+        .withQuery(Uri.Query(QueryParameterUploadType -> UploadResumable))
+      val requestFile = createWritableFile(file, mimeTypeFromSource = true)
+
+      for {
+        entity <- fileEntity(requestFile)
+        request = HttpRequest(method = HttpMethods.PATCH, uri = uploadTriggerUri, headers = StdUpdateHeaders,
+          entity = entity)
+        uploadResult <- overwriteFileContent(httpSender, request, file.size, content)
+      } yield uploadResult
+  }
 
   override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): Operation[HttpEntity] = Operation {
     httpSender =>
@@ -278,6 +317,27 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   }
 
   /**
+   * Performs an update of a file or folder based on the given element. A PATCH
+   * request is sent for the affected element that lists the properties to be
+   * updated.
+   *
+   * @param element the element to be updated
+   * @param system  the actor system
+   * @return a ''Future'' with the outcome of the operation
+   */
+  private def updateElement(element: Model.Element[String])(implicit system: ActorSystem[_]): Operation[Unit] =
+    Operation {
+      httpSender =>
+        val requestFile = createWritableFile(element)
+        for {
+          entity <- fileEntity(requestFile)
+          request = HttpRequest(method = HttpMethods.PATCH, uri = Uri(s"$FileResourcePrefix/${element.id}"),
+            headers = StdUpdateHeaders, entity = entity)
+          response <- executeUpdate(httpSender, request)
+        } yield response
+    }
+
+  /**
    * Creates a model object (file or folder) for the given Google File. The
    * mime type of this file is evaluated to determine the correct type.
    *
@@ -295,20 +355,25 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
    * the properties are initialized from a source element. If this is an object
    * from the GoogleDrive model, extended properties are taken into account.
    *
-   * @param srcElement  the source element
-   * @param optMimeType optional mime type
-   * @param optParents  optional parents
+   * @param srcElement         the source element
+   * @param optMimeType        optional mime type
+   * @param optParents         optional parents
+   * @param mimeTypeFromSource if this parameter is '''true''', no mime type is
+   *                           provided, and the source element is a Google
+   *                           file, the mime type is obtained from this file
    * @return the ''WritableFile''
    */
   private def createWritableFile(srcElement: Model.Element[String], optMimeType: Option[String] = None,
-                                 optParents: Option[List[String]] = None): GoogleDriveJsonProtocol.WritableFile = {
-    val (properties, appProperties) = srcElement match {
+                                 optParents: Option[List[String]] = None, mimeTypeFromSource: Boolean = false):
+  GoogleDriveJsonProtocol.WritableFile = {
+    val (properties, appProperties, srcMimeType) = srcElement match {
       case googleElem: GoogleDriveModel.GoogleDriveElement =>
-        (googleElem.googleFile.properties, googleElem.googleFile.appProperties)
-      case _ => (None, None)
+        (googleElem.googleFile.properties, googleElem.googleFile.appProperties,
+          if (mimeTypeFromSource) Option(googleElem.googleFile.mimeType) else None)
+      case _ => (None, None, None)
     }
     GoogleDriveJsonProtocol.WritableFile(name = Option(srcElement.name), properties = properties,
-      appProperties = appProperties, mimeType = optMimeType, parents = optParents,
+      appProperties = appProperties, mimeType = srcMimeType orElse optMimeType, parents = optParents,
       createdTime = Option(srcElement.createdAt), modifiedTime = Option(srcElement.lastModifiedAt),
       description = Option(srcElement.description))
   }
@@ -359,4 +424,63 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   private def fileEntity(file: GoogleDriveJsonProtocol.WritableFile)
                         (implicit system: ActorSystem[_]): Future[RequestEntity] =
     Marshal(file).to[RequestEntity]
+
+  /**
+   * Sends the request that triggers a file upload operation. This request
+   * should be answered by the server with an empty response, but with a
+   * ''Location'' header referring to the upload URI.
+   *
+   * @param httpSender the HTTP sender actor
+   * @param request    the request to send
+   * @param system     the actor system
+   * @return the result of the request
+   */
+  private def sendUploadTriggerRequest(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
+                                      (implicit system: ActorSystem[_]): Future[HttpRequestSender.SuccessResult] =
+    HttpRequestSender.sendRequestSuccess(httpSender, request, requestData = null,
+      discardMode = DiscardEntityMode.Always)
+
+  /**
+   * Extracts the URI to upload a file from the ''Location'' header of the
+   * response for the upload trigger request and creates a request for the
+   * following file upload. Result is a ''Future'' to compose this function
+   * with other operations; if no ''Location'' header can be extracted, the
+   * ''Future'' fails.
+   *
+   * @param result   the result of the request that triggered the upload
+   * @param fileSize the size of the file to be uploaded
+   * @param content  a ''Source'' with the file content to upload
+   * @return a ''Future'' with the file upload request
+   */
+  private def createUploadRequest(result: HttpRequestSender.SuccessResult, fileSize: Long,
+                                  content: Source[ByteString, Any]): Future[HttpRequest] =
+    result.response.header[Location] match {
+      case Some(location) =>
+        Future.successful(HttpRequest(uri = location.uri, method = HttpMethods.PUT,
+          entity = HttpEntity(ContentTypes.`application/octet-stream`, fileSize, content)))
+      case None =>
+        Future.failed(new IllegalStateException(s"Could not extract 'Location' header from response: $result."))
+    }
+
+  /**
+   * Executes the steps to overwrite the content of a file based on a request
+   * to trigger the upload operation. The trigger request is sent, from its
+   * response, the upload URI is extracted, and eventually the upload is done.
+   *
+   * @param httpSender     the HTTP sender actor
+   * @param triggerRequest the request to trigger the upload
+   * @param size           the file size
+   * @param content        the content of the file
+   * @param system         the actor system
+   * @return a ''Future'' indicating success or failure
+   */
+  private def overwriteFileContent(httpSender: ActorRef[HttpRequestSender.HttpCommand], triggerRequest: HttpRequest,
+                                   size: Long, content: Source[ByteString, Any])
+                                  (implicit system: ActorSystem[_]): Future[Unit] = {
+    for {
+      result <- sendUploadTriggerRequest(httpSender, triggerRequest)
+      uploadRequest <- createUploadRequest(result, size, content)
+      uploadResult <- executeUpdate(httpSender, uploadRequest)
+    } yield uploadResult
+  }
 }

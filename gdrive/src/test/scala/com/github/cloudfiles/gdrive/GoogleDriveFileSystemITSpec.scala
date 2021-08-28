@@ -16,12 +16,14 @@
 
 package com.github.cloudfiles.gdrive
 
+import akka.NotUsed
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.{ContentTypes, StatusCodes}
-import akka.stream.scaladsl.Sink
+import akka.http.scaladsl.model.{ContentTypes, StatusCode, StatusCodes}
+import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
-import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core._
+import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.matching.StringValuePattern
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -54,11 +56,29 @@ object GoogleDriveFileSystemITSpec {
   /** Constant for the Content-Type header. */
   private val HeaderContent = "Content-Type"
 
+  /** Constant for the Content-Length header. */
+  private val HeaderLength = "Content-Length"
+
+  /** Constant for the Location header. */
+  private val HeaderLocation = "Location"
+
   /** Constant for the JSON content type for the accept header. */
   private val ContentJson = "application/json"
 
   /** The prefix for sending requests to the Google Drive API. */
   private val DriveApiPrefix = "/drive/v3/files"
+
+  /** The prefix for sending file upload requests to the Google Drive API. */
+  private val UploadApiPrefix = s"/upload$DriveApiPrefix"
+
+  /** The length of the test content for file uploads. */
+  private val TestFileContentLength = FileTestHelper.TestData.length
+
+  /** A test upload ID to be used for file upload requests. */
+  private val UploadID = "someComplexUploadID"
+
+  /** A test upload URI with all the required query parameters. */
+  private val UploadUri = s"$UploadApiPrefix?uploadType=resumable&upload_id=$UploadID"
 
   /**
    * Generates an URI path for the ''files'' resource with the given suffix.
@@ -97,6 +117,14 @@ object GoogleDriveFileSystemITSpec {
       override val createdAt: Instant = fCreate
       override val lastModifiedAt: Instant = fModify
     }
+
+  /**
+   * Returns a source with test content for a file upload.
+   *
+   * @return the source with test file content
+   */
+  private def testFileContent: Source[ByteString, NotUsed] =
+    Source(FileTestHelper.testBytes().grouped(32).map(ByteString.apply).toList)
 }
 
 /**
@@ -127,6 +155,37 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
   private def runOp[A](op: FileSystem.Operation[A]): Future[A] = {
     val httpActor = spawn(HttpRequestSender(serverBaseUri))
     op.run(httpActor)
+  }
+
+  /**
+   * Helper function to stub a file upload request. The headers, query
+   * parameters, and the body of a test upload request are specified.
+   * Optionally, the status code for the response can be configured.
+   *
+   * @param status the response status code
+   * @return the configured ''MappingBuilder''
+   */
+  private def stubUploadRequest(status: StatusCode = StatusCodes.OK): Unit = {
+    stubFor(put(urlPathEqualTo(UploadApiPrefix))
+      .withQueryParam("uploadType", equalTo("resumable"))
+      .withQueryParam("upload_id", equalTo(UploadID))
+      .withHeader(HeaderLength, equalTo(TestFileContentLength.toString))
+      .withRequestBody(equalTo(FileTestHelper.TestData))
+      .willReturn(aJsonResponse(status).withBodyFile("resolveFileResponse.json")))
+  }
+
+  /**
+   * Verifies that a correct upload request has been executed. Unfortunately,
+   * the declarations from the stubbing have to be repeated.
+   */
+  private def verifyUploadRequest(): Unit = {
+    waitAndVerify(testKit, 2) {
+      putRequestedFor(urlPathEqualTo(UploadApiPrefix))
+        .withQueryParam("uploadType", equalTo("resumable"))
+        .withQueryParam("upload_id", equalTo(UploadID))
+        .withHeader(HeaderLength, equalTo(TestFileContentLength.toString))
+        .withRequestBody(equalTo(FileTestHelper.TestData))
+    }
   }
 
   "GoogleDriveFileSystem" should "delete a folder" in {
@@ -391,5 +450,109 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       properties = googleFile.properties, appProperties = googleFile.appProperties)
 
     checkUpdateFolder(srcFolder, expectedProperties)
+  }
+
+  it should "create a new file" in {
+    val googleFile = GoogleDriveJsonProtocol.File(id = null, name = "NewFile.dat", mimeType = "text/plain",
+      parents = List("ignoredParent"), createdTime = Instant.parse("2021-08-22T16:48:16.654Z"),
+      modifiedTime = Instant.parse("2021-08-22T16:48:50.987Z"), description = Some("a new file"),
+      size = Some(TestFileContentLength.toString), properties = Some(Map("property" -> "test")),
+      appProperties = Some(Map("appProperty" -> "appTest")))
+    val srcFile = GoogleDriveModel.GoogleDriveFile(googleFile)
+    val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = Some(srcFile.name),
+      mimeType = Some(googleFile.mimeType), parents = Some(List(TestFileID)), description = googleFile.description,
+      createdTime = Some(srcFile.createdAt), modifiedTime = Some(srcFile.lastModifiedAt),
+      properties = googleFile.properties, appProperties = googleFile.appProperties)
+    stubFor(post(urlPathEqualTo(UploadApiPrefix))
+      .withQueryParam("uploadType", equalTo("resumable"))
+      .withHeader(HeaderContent, equalTo(ContentJson))
+      .withRequestBody(equalToFile(expectedProperties))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
+        .withHeader(HeaderLocation, serverUri(UploadUri))))
+    stubUploadRequest()
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val fileID = futureResult(runOp(fs.createFile(TestFileID, srcFile, testFileContent)))
+    fileID should be("file_id-J9die95gBb_123456987")
+  }
+
+  it should "handle a missing Location header when creating a new file" in {
+    stubFor(post(urlPathEqualTo(UploadApiPrefix))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val opCreate = fs.createFile(TestFileID, GoogleDriveModel.newFile(name = "myNewFile"), testFileContent)
+    val exception = expectFailedFuture[IllegalStateException](runOp(opCreate))
+    exception.getMessage should include("'Location' header")
+  }
+
+  it should "update the content of a file" in {
+    stubFor(patch(urlPathEqualTo(s"$UploadApiPrefix/$TestFileID"))
+      .withQueryParam("uploadType", equalTo("resumable"))
+      .withRequestBody(absent())
+      .withHeader(HeaderContent, absent())
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
+        .withHeader(HeaderLocation, serverUri(UploadUri))))
+    stubUploadRequest()
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.updateFileContent(TestFileID, TestFileContentLength, testFileContent)))
+    verifyUploadRequest()
+  }
+
+  it should "evaluate the response status when updating the content of a file" in {
+    stubFor(patch(urlPathEqualTo(s"$UploadApiPrefix/$TestFileID"))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
+        .withHeader(HeaderLocation, serverUri(UploadUri))))
+    stubUploadRequest(status = StatusCodes.InternalServerError)
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val exception = expectFailedFuture[FailedResponseException](runOp(fs.updateFileContent(TestFileID,
+      TestFileContentLength, testFileContent)))
+    exception.response.status should be(StatusCodes.InternalServerError)
+  }
+
+  it should "update both the content and the metadata of a file" in {
+    val googleFile = GoogleDriveJsonProtocol.File(id = TestFileID, name = null, mimeType = "text/plain",
+      parents = List("ignoredParent"), createdTime = Instant.parse("2021-08-28T18:29:40.543Z"),
+      modifiedTime = Instant.parse("2021-08-28T18:30:02.876Z"), description = Some("a new file"),
+      size = Some(TestFileContentLength.toString), properties = Some(Map("property" -> "test")),
+      appProperties = Some(Map("appProperty" -> "appTest")))
+    val srcFile = GoogleDriveModel.GoogleDriveFile(googleFile)
+    val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = None,
+      mimeType = Some(googleFile.mimeType), parents = None, description = googleFile.description,
+      createdTime = Some(srcFile.createdAt), modifiedTime = Some(srcFile.lastModifiedAt),
+      properties = googleFile.properties, appProperties = googleFile.appProperties)
+    stubFor(patch(urlPathEqualTo(s"$UploadApiPrefix/$TestFileID"))
+      .withQueryParam("uploadType", equalTo("resumable"))
+      .withHeader(HeaderContent, equalTo(ContentJson))
+      .withRequestBody(equalToFile(expectedProperties))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
+        .withHeader(HeaderLocation, serverUri(UploadUri))))
+    stubUploadRequest()
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.updateFileAndContent(srcFile, testFileContent)))
+    verifyUploadRequest()
+  }
+
+  it should "update the metadata of a file" in {
+    val googleFile = GoogleDriveJsonProtocol.File(id = TestFileID, name = null, mimeType = "someMimeType",
+      parents = List("someParent"), createdTime = null, description = Some("new description"),
+      modifiedTime = Instant.parse("2021-08-28T19:05:55.347Z"), size = None,
+      properties = Some(Map("newProperty" -> "newValue")),
+      appProperties = Some(Map("newAppProperty" -> "anotherNewValue")))
+    val srcFile = GoogleDriveModel.GoogleDriveFile(googleFile)
+    val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = None, mimeType = None, parents = None,
+      createdTime = None, modifiedTime = Some(srcFile.lastModifiedAt), description = Some(srcFile.description),
+      properties = googleFile.properties, appProperties = googleFile.appProperties)
+    stubFor(patch(urlPathEqualTo(filePath(TestFileID)))
+      .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFolderResponse.json")))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.updateFile(srcFile)))
+    verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
+      .withHeader(HeaderContent, equalTo(ContentJson))
+      .withRequestBody(equalToFile(expectedProperties)))
   }
 }

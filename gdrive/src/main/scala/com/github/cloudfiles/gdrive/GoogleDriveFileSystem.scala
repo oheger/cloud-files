@@ -32,7 +32,6 @@ import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.Disca
 import com.github.cloudfiles.core.{FileSystem, Model}
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
 
 object GoogleDriveFileSystem {
   /** The URI prefix for accessing the /files resource. */
@@ -125,6 +124,76 @@ object GoogleDriveFileSystem {
     optPageToken.fold(QueryParamsFolderContent) { token =>
       QueryParamsFolderContent + (QueryParamNextPage -> token)
     } + (QueryParamFilter -> s"'$folderID' in parents and trashed = false")
+
+  /**
+   * Creates a model object (file or folder) for the given Google File. The
+   * mime type of this file is evaluated to determine the correct type.
+   *
+   * @param googleFile the Google file
+   * @return the model element associated with this file
+   */
+  private def createModelElement(googleFile: GoogleDriveJsonProtocol.File): GoogleDriveModel.GoogleDriveElement =
+    googleFile.mimeType match {
+      case MimeTypeFolder => GoogleDriveModel.GoogleDriveFolder(googleFile)
+      case _ => GoogleDriveModel.GoogleDriveFile(googleFile)
+    }
+
+  /**
+   * Creates a ''WritableFile'' from the optional properties provided. Part of
+   * the properties are initialized from a source element. If this is an object
+   * from the GoogleDrive model, extended properties are taken into account.
+   *
+   * @param srcElement         the source element
+   * @param optMimeType        optional mime type
+   * @param optParents         optional parents
+   * @param mimeTypeFromSource if this parameter is '''true''', no mime type is
+   *                           provided, and the source element is a Google
+   *                           file, the mime type is obtained from this file
+   * @return the ''WritableFile''
+   */
+  private def createWritableFile(srcElement: Model.Element[String], optMimeType: Option[String] = None,
+                                 optParents: Option[List[String]] = None, mimeTypeFromSource: Boolean = false):
+  GoogleDriveJsonProtocol.WritableFile = {
+    val (properties, appProperties, srcMimeType) = srcElement match {
+      case googleElem: GoogleDriveModel.GoogleDriveElement =>
+        (googleElem.googleFile.properties, googleElem.googleFile.appProperties,
+          if (mimeTypeFromSource) Option(googleElem.googleFile.mimeType) else None)
+      case _ => (None, None, None)
+    }
+    GoogleDriveJsonProtocol.WritableFile(name = Option(srcElement.name), properties = properties,
+      appProperties = appProperties, mimeType = srcMimeType orElse optMimeType, parents = optParents,
+      createdTime = Option(srcElement.createdAt), modifiedTime = Option(srcElement.lastModifiedAt),
+      description = Option(srcElement.description))
+  }
+
+  /**
+   * Applies an ''ElementPatchSpec'' to the given element. This function
+   * obtains a [[GoogleDriveJsonProtocol.File]] object for the source element
+   * (if the element is not a Google Drive element, a new one is created).
+   * Then the patch spec is applied on this file. Finally, the provided
+   * creation function is called to create the result.
+   *
+   * @param source  the source element to be patched
+   * @param size    the optional file size
+   * @param spec    the patch specification
+   * @param fCreate the function to create the result element
+   * @tparam T the type of the result element
+   * @return the patched result element
+   */
+  private def patchElement[T](source: Model.Element[String], size: Option[Long], spec: ElementPatchSpec)
+                             (fCreate: GoogleDriveJsonProtocol.File => T): T = {
+    val googleFile = source match {
+      case elem: GoogleDriveModel.GoogleDriveElement => elem.googleFile
+      case _ =>
+        GoogleDriveJsonProtocol.File(id = source.id, name = source.name, parents = null, mimeType = null,
+          createdTime = source.createdAt, modifiedTime = source.lastModifiedAt, description = Option(source.description),
+          size = size map (_.toString), properties = None, appProperties = None)
+    }
+    val patchedFile = googleFile.copy(name = spec.patchName getOrElse googleFile.name,
+      description = if (spec.patchDescription.isDefined) spec.patchDescription else googleFile.description,
+      size = if (spec.patchSize.isDefined) spec.patchSize map (_.toString) else googleFile.size)
+    fCreate(patchedFile)
+  }
 }
 
 /**
@@ -154,11 +223,11 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
 
   import GoogleDriveFileSystem._
 
-  private implicit val requestTimeout: Timeout = Timeout(1.minute)
+  override def patchFolder(source: Model.Folder[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFolder =
+    patchElement(source, None, spec)(GoogleDriveModel.GoogleDriveFolder)
 
-  override def patchFolder(source: Model.Folder[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFolder = ???
-
-  override def patchFile(source: Model.File[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFile = ???
+  override def patchFile(source: Model.File[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFile =
+    patchElement(source, Some(source.size), spec)(GoogleDriveModel.GoogleDriveFile)
 
   override def resolvePath(path: String)(implicit system: ActorSystem[_]): FileSystem.Operation[String] = ???
 
@@ -338,47 +407,6 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
     }
 
   /**
-   * Creates a model object (file or folder) for the given Google File. The
-   * mime type of this file is evaluated to determine the correct type.
-   *
-   * @param googleFile the Google file
-   * @return the model element associated with this file
-   */
-  private def createModelElement(googleFile: GoogleDriveJsonProtocol.File): GoogleDriveModel.GoogleDriveElement =
-    googleFile.mimeType match {
-      case MimeTypeFolder => GoogleDriveModel.GoogleDriveFolder(googleFile)
-      case _ => GoogleDriveModel.GoogleDriveFile(googleFile)
-    }
-
-  /**
-   * Creates a ''WritableFile'' from the optional properties provided. Part of
-   * the properties are initialized from a source element. If this is an object
-   * from the GoogleDrive model, extended properties are taken into account.
-   *
-   * @param srcElement         the source element
-   * @param optMimeType        optional mime type
-   * @param optParents         optional parents
-   * @param mimeTypeFromSource if this parameter is '''true''', no mime type is
-   *                           provided, and the source element is a Google
-   *                           file, the mime type is obtained from this file
-   * @return the ''WritableFile''
-   */
-  private def createWritableFile(srcElement: Model.Element[String], optMimeType: Option[String] = None,
-                                 optParents: Option[List[String]] = None, mimeTypeFromSource: Boolean = false):
-  GoogleDriveJsonProtocol.WritableFile = {
-    val (properties, appProperties, srcMimeType) = srcElement match {
-      case googleElem: GoogleDriveModel.GoogleDriveElement =>
-        (googleElem.googleFile.properties, googleElem.googleFile.appProperties,
-          if (mimeTypeFromSource) Option(googleElem.googleFile.mimeType) else None)
-      case _ => (None, None, None)
-    }
-    GoogleDriveJsonProtocol.WritableFile(name = Option(srcElement.name), properties = properties,
-      appProperties = appProperties, mimeType = srcMimeType orElse optMimeType, parents = optParents,
-      createdTime = Option(srcElement.createdAt), modifiedTime = Option(srcElement.lastModifiedAt),
-      description = Option(srcElement.description))
-  }
-
-  /**
    * Helper function to execute an HTTP request that is expected to yield a
    * JSON response, which is to be converted to an object.
    *
@@ -483,4 +511,11 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
       uploadResult <- executeUpdate(httpSender, uploadRequest)
     } yield uploadResult
   }
+
+  /**
+   * Defines the timeout for all operations by referring to the configuration.
+   *
+   * @return the timeout for requests
+   */
+  private implicit def requestTimeout: Timeout = config.timeout
 }

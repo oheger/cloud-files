@@ -20,8 +20,9 @@ import akka.NotUsed
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.http.scaladsl.model.{ContentTypes, StatusCode, StatusCodes}
 import akka.stream.scaladsl.{Sink, Source}
-import akka.util.ByteString
+import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core._
+import com.github.cloudfiles.core.delegate.ElementPatchSpec
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.tomakehurst.wiremock.client.WireMock._
@@ -31,7 +32,8 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.time.Instant
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, TimeoutException}
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 object GoogleDriveFileSystemITSpec {
@@ -119,6 +121,28 @@ object GoogleDriveFileSystemITSpec {
     }
 
   /**
+   * Generates a ''Model.File'' object with the properties provided.
+   *
+   * @param fid     the file ID
+   * @param fName   the file name
+   * @param fDesc   the file description
+   * @param fCreate the creation time
+   * @param fModify the last modification time
+   * @param fSize   the file size
+   * @return the file with these properties
+   */
+  private def modelFile(fid: String = null, fName: String = null, fDesc: String = null, fCreate: Instant = null,
+                        fModify: Instant = null, fSize: Long = 0L): Model.File[String] =
+    new Model.File[String] {
+      override val id: String = fid
+      override val name: String = fName
+      override val description: String = fDesc
+      override val createdAt: Instant = fCreate
+      override val lastModifiedAt: Instant = fModify
+      override val size: Long = fSize
+    }
+
+  /**
    * Returns a source with test content for a file upload.
    *
    * @return the source with test file content
@@ -137,13 +161,13 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
   import GoogleDriveFileSystemITSpec._
 
   /**
-   * Returns a ''GoogleDriveConfig'' with a server URI pointing to the local
-   * mock server.
+   * Convenience function to create a ''GoogleDriveConfig'' with defaults.
    *
+   * @param timeout the timeout
    * @return the initialized ''GoogleDriveConfig''
    */
-  private def createConfig(): GoogleDriveConfig =
-    GoogleDriveConfig(serverUri = serverBaseUri)
+  private def createConfig(timeout: Timeout = GoogleDriveConfig.DefaultTimeout): GoogleDriveConfig =
+    GoogleDriveConfig(timeout = timeout)
 
   /**
    * Executes the given file system operation against the mock server.
@@ -554,5 +578,71 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
       .withHeader(HeaderContent, equalTo(ContentJson))
       .withRequestBody(equalToFile(expectedProperties)))
+  }
+
+  it should "patch a model folder without updates" in {
+    val folder = modelFolder(fid = "folderID", fName = "folderName", fDesc = "folderDesc",
+      fCreate = Instant.parse("2021-08-28T19:34:30.369Z"),
+      fModify = Instant.parse("2021-08-28T19:34:59.741Z"))
+    val expGoogleFile = GoogleDriveJsonProtocol.File(id = folder.id, name = folder.name, parents = null,
+      mimeType = null, createdTime = folder.createdAt, modifiedTime = folder.lastModifiedAt,
+      description = Some(folder.description), size = None, properties = None, appProperties = None)
+    val expResultFolder = GoogleDriveModel.GoogleDriveFolder(expGoogleFile)
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    fs.patchFolder(folder, ElementPatchSpec()) should be(expResultFolder)
+  }
+
+  it should "patch a model file without updates" in {
+    val file = modelFile(fid = "fileID", fName = "MyFile.txt", fSize = 16385,
+      fCreate = Instant.parse("2021-08-29T18:22:48.528Z"),
+      fModify = Instant.parse("2021-08-29T18:23:20.741Z"))
+    val expGoogleFile = GoogleDriveJsonProtocol.File(id = file.id, name = file.name, parents = null,
+      mimeType = null, createdTime = file.createdAt, modifiedTime = file.lastModifiedAt, description = None,
+      size = Some("16385"), properties = None, appProperties = None)
+    val expResultFile = GoogleDriveModel.GoogleDriveFile(expGoogleFile)
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    fs.patchFile(file, ElementPatchSpec()) should be(expResultFile)
+  }
+
+  it should "patch a Google element without updates" in {
+    val googleFile = GoogleDriveJsonProtocol.File(id = "123456", name = "theGoogleName", size = None,
+      mimeType = "application/vnd.google-apps.folder", parents = List("parentID"),
+      createdTime = Instant.parse("2021-08-29T18:48:14.774Z"),
+      modifiedTime = Instant.parse("2021-08-29T18:48:40.332Z"), description = Some("description"),
+      properties = Some(Map("foo" -> "bar")), appProperties = Some(Map("appFoo" -> "appBar")))
+    val source = GoogleDriveModel.GoogleDriveFolder(googleFile)
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val patchResult = fs.patchFolder(source, ElementPatchSpec())
+    patchResult.googleFile should be(googleFile)
+  }
+
+  it should "patch an element with updates" in {
+    val NewName = "thePatchedName"
+    val NewDesc = "The patched description"
+    val NewSize = 32769
+    val spec = ElementPatchSpec(patchName = Some(NewName), patchDescription = Some(NewDesc), patchSize = Some(NewSize))
+    val file = modelFile(fid = "fileID", fName = "MyOriginalFile.txt", fSize = 16385,
+      fCreate = Instant.parse("2021-08-29T18:58:54.528Z"),
+      fModify = Instant.parse("2021-08-29T18:59:03.741Z"))
+    val expGoogleFile = GoogleDriveJsonProtocol.File(id = file.id, name = NewName, parents = null,
+      mimeType = null, createdTime = file.createdAt, modifiedTime = file.lastModifiedAt, description = Some(NewDesc),
+      size = Some(NewSize.toString), properties = None, appProperties = None)
+    val expResultFile = GoogleDriveModel.GoogleDriveFile(expGoogleFile)
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    fs.patchFile(file, spec) should be(expResultFile)
+  }
+
+  it should "take the timeout from the configuration into account" in {
+    val config = createConfig(timeout = Timeout(250.millis))
+    stubFor(get(anyUrl())
+      .willReturn(aJsonResponse().withBodyFile("resolveFileResponse.json")
+        .withFixedDelay(1000)))
+    val fs = new GoogleDriveFileSystem(config)
+
+    expectFailedFuture[TimeoutException](runOp(fs.resolveFile(TestFileID)))
   }
 }

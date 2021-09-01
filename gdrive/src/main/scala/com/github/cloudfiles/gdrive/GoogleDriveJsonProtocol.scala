@@ -131,6 +131,29 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
                             nextPageToken: Option[String])
 
   /**
+   * A data class representing a reference to a file.
+   *
+   * This class is used for resolve operation, where only file IDs are
+   * relevant. Other information is ignored.
+   *
+   * @param id the ID of the referenced file
+   */
+  case class FileReference(id: String)
+
+  /**
+   * A data class describing the response of a query to resolve files.
+   *
+   * The query requests only the ID field of files; therefore, only
+   * [[FileReference]] objects are constructed. Paging needs to be supported as
+   * well.
+   *
+   * @param files         the elements returned by the query
+   * @param nextPageToken an optional token to query the next result page
+   */
+  case class ResolveResponse(files: List[FileReference],
+                             nextPageToken: Option[String])
+
+  /**
    * A format implementation to deal with date-time values. GoogleDrive uses
    * the default ISO format that can be parsed by the ''Instant'' class.
    * Therefore, this implementation is straight-forward.
@@ -147,4 +170,6 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
   implicit val fileFormat: RootJsonFormat[File] = jsonFormat10(File)
   implicit val writableFileFormat: RootJsonFormat[WritableFile] = jsonFormat8(WritableFile)
   implicit val folderResponseFormat: RootJsonFormat[FolderResponse] = jsonFormat2(FolderResponse)
+  implicit val fileReferenceFormat: RootJsonFormat[FileReference] = jsonFormat1(FileReference)
+  implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat2(ResolveResponse)
 }

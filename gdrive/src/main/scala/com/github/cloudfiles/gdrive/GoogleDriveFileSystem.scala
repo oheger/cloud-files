@@ -25,11 +25,11 @@ import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
-import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
-import com.github.cloudfiles.core.{FileSystem, Model}
+import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
 
 import scala.concurrent.Future
 
@@ -52,6 +52,12 @@ object GoogleDriveFileSystem {
    */
   private val FolderFields = s"nextPageToken,files($FileFields)"
 
+  /**
+   * Constant for the names of the fields that are requested when resolving
+   * path components.
+   */
+  private val ResolveFields = "nextPageToken,files(id)"
+
   /** The header for accepting JSON responses. */
   private val AcceptJsonHeader = Accept(MediaRange(MediaTypes.`application/json`))
 
@@ -63,6 +69,13 @@ object GoogleDriveFileSystem {
 
   /** A sequence with standard headers to send for typical update requests. */
   private val StdUpdateHeaders = List(ContentJsonHeader)
+
+  /**
+   * Constant for the maximum page size supported by the Google Drive API.
+   * This page size is set by requests to minimize the number of interactions
+   * with the server necessary to retrieve all results.
+   */
+  private val MaxPageSize = "1000"
 
   /** The query parameter to selecting the fields to retrieve. */
   private val QueryParamFields = "fields"
@@ -98,10 +111,13 @@ object GoogleDriveFileSystem {
    * content of a folder. Some more parameters have to be added for an
    * individual request.
    */
-  private val QueryParamsFolderContent = Map(QueryParamFields -> FolderFields, QueryParamPageSize -> "1000")
+  private val QueryParamsFolderContent = Map(QueryParamFields -> FolderFields, QueryParamPageSize -> MaxPageSize)
 
   /** The special mime type used to identify a folder in GoogleDrive. */
   private val MimeTypeFolder = "application/vnd.google-apps.folder"
+
+  /** Constant for the reserved name of the root folder. */
+  private val RootFolder = "root"
 
   /**
    * Constant for the value of the ''alt'' query parameter to request the
@@ -194,6 +210,22 @@ object GoogleDriveFileSystem {
       size = if (spec.patchSize.isDefined) spec.patchSize map (_.toString) else googleFile.size)
     fCreate(patchedFile)
   }
+
+  /**
+   * Generates the query parameter for resolving a single path component. The
+   * query selects files in the parent folder with the given component name.
+   * Unless the current component is the last one, only folders are selected.
+   *
+   * @param parent         the ID of the parent component
+   * @param component      the name of the current component to resolve
+   * @param tailComponents a sequence with remaining components
+   * @return the query string for this resolve operation
+   */
+  private def resolveQuery(parent: String, component: String, tailComponents: Seq[String]): String = {
+    val query = s"'$parent' in parents and trashed = false and name = '$component'"
+    if (tailComponents.isEmpty) query
+    else s"$query and mimeType = '$MimeTypeFolder'"
+  }
 }
 
 /**
@@ -229,7 +261,16 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   override def patchFile(source: Model.File[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFile =
     patchElement(source, Some(source.size), spec)(GoogleDriveModel.GoogleDriveFile)
 
-  override def resolvePath(path: String)(implicit system: ActorSystem[_]): FileSystem.Operation[String] = ???
+  override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[String] = {
+    val components = if (path.isEmpty) Seq.empty
+    else UriEncodingHelper.splitAndDecodeComponents(path)
+    resolvePathComponents(components)
+  }
+
+  override def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[String] =
+    Operation { httpSender =>
+      resolvePathComponent(httpSender, RootFolder, components.toList)
+    }
 
   override def rootID(implicit system: ActorSystem[_]): Operation[String] = Operation {
     _ => Future.successful("root")
@@ -510,6 +551,91 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
       uploadRequest <- createUploadRequest(result, size, content)
       uploadResult <- executeUpdate(httpSender, uploadRequest)
     } yield uploadResult
+  }
+
+  /**
+   * Resolves a single component of a path. This function is called for each
+   * component of a path to be resolved until the full path has been processed
+   * or the remaining components cannot be resolved.
+   *
+   * @param httpSender the actor for sending HTTP requests
+   * @param parent     the current parent ID
+   * @param components the remaining components to resolve
+   * @param system     the actor system
+   * @return a ''Future'' with the ID of the resolved path
+   */
+  private def resolvePathComponent(httpSender: ActorRef[HttpRequestSender.HttpCommand], parent: String,
+                                   components: List[String])(implicit system: ActorSystem[_]): Future[String] =
+    components match {
+      case h :: t =>
+        val queryParams = Map(QueryParamFields -> ResolveFields, QueryParamPageSize -> MaxPageSize,
+          QueryParamFilter -> resolveQuery(parent, h, t))
+        resolvePathComponentQuery(httpSender, queryParams, Nil, None) flatMap { files =>
+          resolvePathComponentAlternatives(httpSender, h, t, files)
+        }
+
+      case _ => Future.successful(parent)
+    }
+
+  /**
+   * Resolves a single component of a path by following all alternatives.
+   * Google drive allows multiple files with the same names in a folder; all
+   * of these may need to be tried in order to resolve a path.
+   *
+   * @param httpSender          the actor for sending HTTP requests
+   * @param currentComponent    the name of the current path component
+   * @param remainingComponents the remaining components to resolve
+   * @param files               the files in the current folder
+   * @param system              the actor system
+   * @return a ''Future'' with the ID of the resolved path
+   */
+  private def resolvePathComponentAlternatives(httpSender: ActorRef[HttpRequestSender.HttpCommand],
+                                               currentComponent: String,
+                                               remainingComponents: List[String],
+                                               files: List[GoogleDriveJsonProtocol.FileReference])
+                                              (implicit system: ActorSystem[_]): Future[String] =
+    files match {
+      case h :: t =>
+        resolvePathComponent(httpSender, h.id, remainingComponents) recoverWith {
+          case _ => resolvePathComponentAlternatives(httpSender, currentComponent, remainingComponents, t)
+        }
+
+      case Nil =>
+        val unresolved = currentComponent :: remainingComponents
+        val ex = new IllegalArgumentException(s"Could not resolve path components: '${unresolved.mkString("/")}'")
+        Future.failed(ex)
+    }
+
+  /**
+   * Queries all the files for a specific resolve step. This includes handling
+   * of multiple result pages.
+   *
+   * @param httpSender   the actor for sending HTTP requests
+   * @param queryParams  the query parameters for the current resolve step
+   * @param files        the accumulated list of result files
+   * @param optNextToken optional token for the next result page
+   * @param system       the actor system
+   * @return a ''Future'' with all the files matching the query parameters
+   */
+  private def resolvePathComponentQuery(httpSender: ActorRef[HttpRequestSender.HttpCommand],
+                                        queryParams: Map[String, String],
+                                        files: List[GoogleDriveJsonProtocol.FileReference],
+                                        optNextToken: Option[String])(implicit system: ActorSystem[_]):
+  Future[List[GoogleDriveJsonProtocol.FileReference]] = {
+    val pagingQueryParams = optNextToken.fold(queryParams) { token =>
+      queryParams + (QueryParamNextPage -> token)
+    }
+    val uri = Uri(FileResourcePrefix).withQuery(Uri.Query(pagingQueryParams))
+    val request = HttpRequest(uri = uri, headers = StdHeaders)
+    executeQuery[GoogleDriveJsonProtocol.ResolveResponse](httpSender, request) flatMap { response =>
+      val currentFiles = response.files ++ files
+      response.nextPageToken match {
+        case optToken@Some(_) =>
+          resolvePathComponentQuery(httpSender, queryParams, currentFiles, optToken)
+        case None =>
+          Future.successful(currentFiles)
+      }
+    }
   }
 
   /**

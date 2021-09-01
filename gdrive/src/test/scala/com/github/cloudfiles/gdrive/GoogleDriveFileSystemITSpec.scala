@@ -32,8 +32,8 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.time.Instant
-import scala.concurrent.{ExecutionContext, Future, TimeoutException}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future, TimeoutException}
 import scala.jdk.CollectionConverters._
 
 object GoogleDriveFileSystemITSpec {
@@ -46,6 +46,9 @@ object GoogleDriveFileSystemITSpec {
 
   /** The expected fields that are requested for a folder's content. */
   private val ExpFolderFields = s"nextPageToken,files($ExpFileFields)"
+
+  /** The expected fields that are requested for a resolve query. */
+  private val ExpResolveFields = "nextPageToken,files(id)"
 
   /** The expected query parameters when querying a folder's content. */
   private val ExpFolderQueryParams = Map("fields" -> equalTo(ExpFolderFields),
@@ -149,6 +152,34 @@ object GoogleDriveFileSystemITSpec {
    */
   private def testFileContent: Source[ByteString, NotUsed] =
     Source(FileTestHelper.testBytes().grouped(32).map(ByteString.apply).toList)
+
+  /**
+   * Generates a JSON fragment with the given file IDs that can be added to a
+   * response for a resolve query.
+   *
+   * @param ids the IDs to add to the response
+   * @return the response fragment with resolved IDs
+   */
+  private def generateResolvedIDs(ids: String*): String =
+    ids.map(id => """{ "id": """" + id + "\"}").mkString(",")
+
+  /**
+   * Generates a response for a resolve query based on the given files fragment
+   * with an optional token for the next page.
+   *
+   * @param files        the fragment with the files in the response
+   * @param optNextToken the optional token for the next page
+   * @return the JSON response for a resolve query
+   */
+  private def resolveResponse(files: String, optNextToken: Option[String] = None): String = {
+    val tokenFragment = optNextToken.map(token => "\"nextPageToken\": \"" + token + "\",") getOrElse ""
+    s"""{
+       |  $tokenFragment
+       |  "files": [
+       |    $files
+       |  ]
+       |}""".stripMargin
+  }
 }
 
 /**
@@ -210,6 +241,41 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
         .withHeader(HeaderLength, equalTo(TestFileContentLength.toString))
         .withRequestBody(equalTo(FileTestHelper.TestData))
     }
+  }
+
+  /**
+   * Helper function to stub a request to resolve a path component.
+   *
+   * @param parent       the parent folder
+   * @param fileName     the name of the file to resolve
+   * @param response     the response to return
+   * @param optPageToken optional token for the next page
+   * @param foldersOnly  flag whether the request should filter for folders
+   */
+  private def stubResolveRequest(parent: String, fileName: String, response: String,
+                                 optPageToken: Option[String] = None, foldersOnly: Boolean = false): Unit = {
+    val filterParam = s"'$parent' in parents and trashed = false and name = '$fileName'"
+    val filterParamWithFolders = if (foldersOnly) filterParam + " and mimeType = 'application/vnd.google-apps.folder'"
+    else filterParam
+    stubFor(get(urlPathEqualTo(DriveApiPrefix))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
+      .withQueryParam("fields", equalTo(ExpResolveFields))
+      .withQueryParam("pageSize", equalTo("1000"))
+      .withQueryParam("q", equalTo(filterParamWithFolders))
+      .withQueryParam("pageToken", optPageToken.fold(absent())(token => equalTo(token)))
+      .willReturn(aJsonResponse().withBody(response)))
+  }
+
+  /**
+   * Stubs a request to resolve a path component that does not yield any
+   * results. This means that this component cannot be resolved.
+   *
+   * @param parent      the parent folder
+   * @param fileName    the name of the file to resolve
+   * @param foldersOnly flag whether the request should filter for folders
+   */
+  private def stubFailedResolveRequest(parent: String, fileName: String, foldersOnly: Boolean = false): Unit = {
+    stubResolveRequest(parent, fileName, resolveResponse(""), foldersOnly = foldersOnly)
   }
 
   "GoogleDriveFileSystem" should "delete a folder" in {
@@ -644,5 +710,81 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     val fs = new GoogleDriveFileSystem(config)
 
     expectFailedFuture[TimeoutException](runOp(fs.resolveFile(TestFileID)))
+  }
+
+  it should "resolve a path inside the root folder" in {
+    val FileName = "SearchedFile.txt"
+    val response = resolveResponse(generateResolvedIDs(TestFileID, "anotherID", "oneMoreID"))
+    stubResolveRequest("root", FileName, response)
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val id = futureResult(runOp(fs.resolvePath(FileName)))
+    id should be(TestFileID)
+  }
+
+  it should "handle a path in the root folder that cannot be resolved" in {
+    val FileName = "nonExistingFile.dat"
+    stubFailedResolveRequest("root", FileName)
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val exception = expectFailedFuture[IllegalArgumentException](runOp(fs.resolvePath(FileName)))
+    exception.getMessage should include(FileName)
+  }
+
+  it should "resolve a path with multiple components" in {
+    val Path = "my/test/file.txt"
+    stubResolveRequest("root", "my", resolveResponse(generateResolvedIDs("id1", "id_other")),
+      foldersOnly = true)
+    stubResolveRequest("id1", "test", resolveResponse(generateResolvedIDs("id2")),
+      foldersOnly = true)
+    stubResolveRequest("id2", "file.txt", resolveResponse(generateResolvedIDs(TestFileID)))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val id = futureResult(runOp(fs.resolvePath(Path)))
+    id should be(TestFileID)
+  }
+
+  it should "correctly resolve an empty path" in {
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.resolvePath(""))) should be("root")
+    futureResult(runOp(fs.resolvePathComponents(Seq.empty))) should be("root")
+  }
+
+  it should "try different paths in a resolve operation" in {
+    val Path = "my/very%20complex/path"
+    stubResolveRequest("root", "my", resolveResponse(generateResolvedIDs("w1", "id1")),
+      foldersOnly = true)
+    stubFailedResolveRequest("w1", "very complex", foldersOnly = true)
+    stubResolveRequest("id1", "very complex", resolveResponse(generateResolvedIDs("w2", "id2", "w3")),
+      foldersOnly = true)
+    stubFailedResolveRequest("w2", "path")
+    stubResolveRequest("id2", "path", resolveResponse(generateResolvedIDs(TestFileID)))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val id = futureResult(runOp(fs.resolvePath(Path)))
+    id should be(TestFileID)
+  }
+
+  it should "deal with paging in a resolve operation" in {
+    val Dir = "the"
+    val File = "file.txt"
+    val Path = s"$Dir/$File"
+    val Token1 = "page1"
+    val Token2 = "page2"
+    stubResolveRequest("root", Dir,
+      resolveResponse(generateResolvedIDs("id1"), optNextToken = Some(Token1)), foldersOnly = true)
+    stubResolveRequest("root", Dir,
+      resolveResponse(generateResolvedIDs("id2"), optNextToken = Some(Token2)),
+      optPageToken = Some(Token1), foldersOnly = true)
+    stubResolveRequest("root", Dir,
+      resolveResponse(generateResolvedIDs("id3")), optPageToken = Some(Token2), foldersOnly = true)
+    stubFailedResolveRequest("id1", File)
+    stubFailedResolveRequest("id2", File)
+    stubResolveRequest("id3", File, resolveResponse(generateResolvedIDs(TestFileID)))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    val id = futureResult(runOp(fs.resolvePath(Path)))
+    id should be(TestFileID)
   }
 }

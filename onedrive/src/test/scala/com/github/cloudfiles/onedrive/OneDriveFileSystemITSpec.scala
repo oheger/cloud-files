@@ -633,15 +633,15 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
   it should "patch a folder against a defined patch spec" in {
     val PatchedName = "theUpdatedFolder"
-    val PatchedDescription = "This description has changed."
     val createdAt = Instant.parse("2021-02-13T16:07:30.214Z")
     val lastModifiedAt = Instant.parse("2021-02-13T16:08:16.587Z")
     val fileInfo = Some(WritableFileSystemInfo(createdDateTime = Some(createdAt),
       lastModifiedDateTime = Some(lastModifiedAt)))
-    val folder = OneDriveModel.newFolder(id = ResolvedID, name = "someName", info = fileInfo)
-    val expFolder = OneDriveModel.newFolder(id = ResolvedID, name = PatchedName, description = PatchedDescription,
+    val folder = OneDriveModel.newFolder(id = ResolvedID, name = "someName", info = fileInfo,
+      description = "some description")
+    val expFolder = OneDriveModel.newFolder(id = ResolvedID, name = PatchedName, description = folder.description,
       info = fileInfo)
-    val spec = ElementPatchSpec(patchName = Some(PatchedName), patchDescription = Some(PatchedDescription))
+    val spec = ElementPatchSpec(patchName = Some(PatchedName))
     val fs = new OneDriveFileSystem(createConfig())
 
     fs.patchFolder(folder, spec) should be(expFolder)

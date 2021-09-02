@@ -36,10 +36,8 @@ package com.github.cloudfiles.core.delegate
  * implementation must be able to apply these patches to its own data
  * structures.
  *
- * @param patchName        optional value to override the name
- * @param patchDescription optional value to override the description
- * @param patchSize        optional value to override the size
+ * @param patchName optional value to override the name
+ * @param patchSize optional value to override the size
  */
 case class ElementPatchSpec(patchName: Option[String] = None,
-                            patchDescription: Option[String] = None,
                             patchSize: Option[Long] = None)

@@ -206,7 +206,6 @@ object GoogleDriveFileSystem {
           size = size map (_.toString), properties = None, appProperties = None)
     }
     val patchedFile = googleFile.copy(name = spec.patchName getOrElse googleFile.name,
-      description = if (spec.patchDescription.isDefined) spec.patchDescription else googleFile.description,
       size = if (spec.patchSize.isDefined) spec.patchSize map (_.toString) else googleFile.size)
     fCreate(patchedFile)
   }

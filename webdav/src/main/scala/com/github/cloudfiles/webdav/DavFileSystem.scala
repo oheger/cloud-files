@@ -161,14 +161,12 @@ class DavFileSystem(val config: DavConfig)
 
   override def patchFolder(source: Model.Folder[Uri], spec: ElementPatchSpec): DavModel.DavFolder = {
     val davFolder = toDavFolder(source)
-    davFolder.copy(name = spec.patchName getOrElse davFolder.name,
-      description = spec.patchDescription getOrElse davFolder.description)
+    davFolder.copy(name = spec.patchName getOrElse davFolder.name)
   }
 
   override def patchFile(source: Model.File[Uri], spec: ElementPatchSpec): DavModel.DavFile = {
     val davFile = toDavFile(source)
     davFile.copy(name = spec.patchName getOrElse davFile.name,
-      description = spec.patchDescription getOrElse davFile.description,
       size = spec.patchSize getOrElse davFile.size)
   }
 

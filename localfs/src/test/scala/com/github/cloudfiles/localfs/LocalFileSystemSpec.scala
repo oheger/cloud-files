@@ -327,8 +327,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val folderPath = rootPath.resolve(NewName)
     val sourceFolder = LocalFsModel.LocalFolder(id = folderPath, name = "originalName", createdAt = CreatedAt,
       lastModifiedAt = ModifiedAt, lastModifiedUpdate = Some(ModifiedUpdate))
-    val spec = ElementPatchSpec(patchName = Some(NewName), patchDescription = Some("desc"),
-      patchSize = Some(128))
+    val spec = ElementPatchSpec(patchName = Some(NewName), patchSize = Some(128))
     val expFolder = LocalFsModel.LocalFolder(id = folderPath, name = NewName, createdAt = CreatedAt,
       lastModifiedAt = ModifiedAt, lastModifiedUpdate = Some(ModifiedUpdate))
 
@@ -366,8 +365,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val filePath = rootPath.resolve(NewName)
     val sourceFile = LocalFsModel.LocalFile(id = filePath, name = "originalName", createdAt = CreatedAt,
       lastModifiedAt = ModifiedAt, size = NewSize / 2, lastModifiedUpdate = Some(ModifiedUpdate))
-    val spec = ElementPatchSpec(patchName = Some(NewName), patchDescription = Some("desc"),
-      patchSize = Some(NewSize))
+    val spec = ElementPatchSpec(patchName = Some(NewName), patchSize = Some(NewSize))
     val expFile = LocalFsModel.LocalFile(id = filePath, name = NewName, createdAt = CreatedAt,
       lastModifiedAt = ModifiedAt, size = NewSize, lastModifiedUpdate = Some(ModifiedUpdate))
 

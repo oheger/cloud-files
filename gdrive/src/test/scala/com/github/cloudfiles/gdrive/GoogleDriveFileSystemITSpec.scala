@@ -688,14 +688,13 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
 
   it should "patch an element with updates" in {
     val NewName = "thePatchedName"
-    val NewDesc = "The patched description"
     val NewSize = 32769
-    val spec = ElementPatchSpec(patchName = Some(NewName), patchDescription = Some(NewDesc), patchSize = Some(NewSize))
+    val spec = ElementPatchSpec(patchName = Some(NewName), patchSize = Some(NewSize))
     val file = modelFile(fid = "fileID", fName = "MyOriginalFile.txt", fSize = 16385,
       fCreate = Instant.parse("2021-08-29T18:58:54.528Z"),
       fModify = Instant.parse("2021-08-29T18:59:03.741Z"))
     val expGoogleFile = GoogleDriveJsonProtocol.File(id = file.id, name = NewName, parents = null,
-      mimeType = null, createdTime = file.createdAt, modifiedTime = file.lastModifiedAt, description = Some(NewDesc),
+      mimeType = null, createdTime = file.createdAt, modifiedTime = file.lastModifiedAt, description = None,
       size = Some(NewSize.toString), properties = None, appProperties = None)
     val expResultFile = GoogleDriveModel.GoogleDriveFile(expGoogleFile)
     val fs = new GoogleDriveFileSystem(createConfig())

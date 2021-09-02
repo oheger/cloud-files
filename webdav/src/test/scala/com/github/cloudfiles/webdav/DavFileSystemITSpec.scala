@@ -509,10 +509,8 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val folder = DavModel.newFolder("originalName", description = "original description",
       attributes = attributes)
     val PatchedName = "newFolderName"
-    val PatchDescription = "This is the patched description of the folder"
-    val expFolder = DavModel.newFolder(name = PatchedName, description = PatchDescription, attributes = attributes)
-    val spec = ElementPatchSpec(patchName = Some(PatchedName), patchDescription = Some(PatchDescription),
-      patchSize = Some(42))
+    val expFolder = DavModel.newFolder(name = PatchedName, description = folder.description, attributes = attributes)
+    val spec = ElementPatchSpec(patchName = Some(PatchedName), patchSize = Some(42))
     val fs = new DavFileSystem(createConfig())
 
     fs.patchFolder(folder, spec) should be(expFolder)
@@ -534,15 +532,13 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "patch a file against a defined patch spec" in {
     val FileID = Uri("https://some.uri.org/foo")
     val PatchedName = "newFileName.txt"
-    val PatchedDescription = "The modified description of the test file."
     val PatchedSize = 20210213164608L
     val file = mock[Model.File[Uri]]
     when(file.id).thenReturn(FileID)
     when(file.name).thenReturn("original.name")
     when(file.size).thenReturn(11)
-    val expFile = DavModel.newFile(PatchedName, PatchedSize, description = PatchedDescription, id = FileID)
-    val spec = ElementPatchSpec(patchDescription = Some(PatchedDescription),
-      patchName = Some(PatchedName), patchSize = Some(PatchedSize))
+    val expFile = DavModel.newFile(PatchedName, PatchedSize, id = FileID)
+    val spec = ElementPatchSpec(patchName = Some(PatchedName), patchSize = Some(PatchedSize))
     val fs = new DavFileSystem(createConfig())
 
     fs.patchFile(file, spec) should be(expFile)

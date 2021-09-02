@@ -155,7 +155,6 @@ object OneDriveFileSystem {
   private def patchedItem(source: Model.Element[String], spec: ElementPatchSpec): DriveItem = {
     val item = itemFor(source)
     item.copy(name = spec.patchName getOrElse item.name,
-      description = spec.patchDescription.orElse(item.description),
       size = spec.patchSize getOrElse item.size)
   }
 

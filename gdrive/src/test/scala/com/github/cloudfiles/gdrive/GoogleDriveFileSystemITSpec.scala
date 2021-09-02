@@ -195,10 +195,11 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
    * Convenience function to create a ''GoogleDriveConfig'' with defaults.
    *
    * @param timeout the timeout
+   * @param optRoot an optional root path
    * @return the initialized ''GoogleDriveConfig''
    */
-  private def createConfig(timeout: Timeout = GoogleDriveConfig.DefaultTimeout): GoogleDriveConfig =
-    GoogleDriveConfig(timeout = timeout)
+  private def createConfig(timeout: Timeout = GoogleDriveConfig.DefaultTimeout, optRoot: Option[String] = None):
+  GoogleDriveConfig = GoogleDriveConfig(timeout = timeout, optRootPath = optRoot)
 
   /**
    * Executes the given file system operation against the mock server.
@@ -785,6 +786,38 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     val fs = new GoogleDriveFileSystem(createConfig())
 
     val id = futureResult(runOp(fs.resolvePath(Path)))
+    id should be(TestFileID)
+  }
+
+  it should "resolve the root path if it is specified" in {
+    val RootPath = "my/root"
+    stubResolveRequest("root", "my", resolveResponse(generateResolvedIDs("id1")),
+      foldersOnly = true)
+    stubResolveRequest("id1", "root", resolveResponse(generateResolvedIDs(TestFileID)))
+    val fs = new GoogleDriveFileSystem(createConfig(optRoot = Some(RootPath)))
+
+    val rootID = futureResult(runOp(fs.rootID))
+    rootID should be(TestFileID)
+  }
+
+  it should "resolve the root path if it starts with a slash" in {
+    val RootFolder = "data"
+    stubResolveRequest("root", RootFolder, resolveResponse(generateResolvedIDs(TestFileID)))
+    val fs = new GoogleDriveFileSystem(createConfig(optRoot = Some("/" + RootFolder)))
+
+    val rootID = futureResult(runOp(fs.rootID))
+    rootID should be(TestFileID)
+  }
+
+  it should "take the root path into account when resolving a path" in {
+    stubResolveRequest("root", "the", resolveResponse(generateResolvedIDs("id1")),
+      foldersOnly = true)
+    stubResolveRequest("id1", "root path", resolveResponse(generateResolvedIDs("id2")),
+      foldersOnly = true)
+    stubResolveRequest("id2", "data", resolveResponse(generateResolvedIDs(TestFileID)))
+    val fs = new GoogleDriveFileSystem(createConfig(optRoot = Some("the/root%20path")))
+
+    val id = futureResult(runOp(fs.resolvePath("/data")))
     id should be(TestFileID)
   }
 }

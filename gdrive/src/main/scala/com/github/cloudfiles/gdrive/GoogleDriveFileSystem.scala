@@ -255,6 +255,13 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
 
   import GoogleDriveFileSystem._
 
+  /**
+   * Stores a list of path components for the optional root path. This is used
+   * when resolving relative paths.
+   */
+  private val rootPathComponents =
+    (config.optRootPath map UriEncodingHelper.splitAndDecodeComponents getOrElse Nil).toList
+
   override def patchFolder(source: Model.Folder[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFolder =
     patchElement(source, None, spec)(GoogleDriveModel.GoogleDriveFolder)
 
@@ -269,11 +276,15 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
 
   override def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[String] =
     Operation { httpSender =>
-      resolvePathComponent(httpSender, RootFolder, components.toList)
+      val fullComponents = config.optRootPath.fold(components.toList) { _ =>
+        rootPathComponents ::: components.toList
+      }
+      resolvePathComponent(httpSender, RootFolder, fullComponents)
     }
 
-  override def rootID(implicit system: ActorSystem[_]): Operation[String] = Operation {
-    _ => Future.successful("root")
+  override def rootID(implicit system: ActorSystem[_]): Operation[String] = config.optRootPath match {
+    case Some(_) => resolvePathComponents(Seq.empty)
+    case None => Operation { _ => Future.successful(RootFolder) }
   }
 
   override def resolveFile(id: String)(implicit system: ActorSystem[_]): Operation[GoogleDriveModel.GoogleDriveFile] =

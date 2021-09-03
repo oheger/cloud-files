@@ -64,7 +64,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     result.folders.keys should contain only subFolderUri
     val folder = result.folders(subFolderUri)
     folder.id should be(subFolderUri)
-    folder.description should be(null)
+    folder.description should be(None)
     folder.createdAt should be(toInstant("2018-08-27T18:38:25Z"))
     folder.lastModifiedAt should be(toInstant("2018-08-28T19:39:26Z"))
     folder.name should be("subFolder (1)")
@@ -163,7 +163,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
 
     val result = futureResult(parser.parseFolderContent(source))
     val file = result.files(Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3"))
-    file.description should be("A test description")
+    file.description should be(Some("A test description"))
     file.attributes.values.keys should not contain KeyDesc
   }
 
@@ -200,7 +200,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
       case file: DavModel.DavFile =>
         file.name should be("test.txt")
         file.lastModifiedAt should be(toInstant("2020-12-31T19:23:52Z"))
-        file.description should be("A test description")
+        file.description should be(Some("A test description"))
       case r =>
         fail("Unexpected result: " + r)
     }

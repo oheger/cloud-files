@@ -95,7 +95,7 @@ object DavModel {
    */
   case class DavFolder(override val id: Uri,
                        override val name: String,
-                       override val description: String,
+                       override val description: Option[String],
                        override val createdAt: Instant,
                        override val lastModifiedAt: Instant,
                        attributes: Attributes) extends Model.Folder[Uri]
@@ -115,7 +115,7 @@ object DavModel {
    */
   case class DavFile(override val id: Uri,
                      override val name: String,
-                     override val description: String,
+                     override val description: Option[String],
                      override val createdAt: Instant,
                      override val lastModifiedAt: Instant,
                      override val size: Long,
@@ -143,7 +143,8 @@ object DavModel {
    * @param attributes  optional custom attributes
    * @return the new ''DavFolder'' object
    */
-  def newFolder(name: String, id: Uri = null, description: String = null, attributes: Attributes = EmptyAttributes):
+  def newFolder(name: String, id: Uri = null, description: Option[String] = None,
+                attributes: Attributes = EmptyAttributes):
   DavFolder =
     DavFolder(name = name, description = description, attributes = attributes, id = id, createdAt = null,
       lastModifiedAt = null)
@@ -165,7 +166,7 @@ object DavModel {
    * @param attributes  optional custom attributes
    * @return the new ''DavFile'' object
    */
-  def newFile(name: String, size: Long, id: Uri = null, description: String = null,
+  def newFile(name: String, size: Long, id: Uri = null, description: Option[String] = None,
               attributes: Attributes = EmptyAttributes): DavFile =
     DavFile(name = name, size = size, description = description, attributes = attributes,
       id = id, createdAt = null, lastModifiedAt = null)

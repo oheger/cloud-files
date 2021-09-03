@@ -139,7 +139,7 @@ class PropPatchGeneratorSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
 
   "PropPatchGenerator" should "return no request if there are no attributes" in {
     val attributes = DavModel.Attributes(Map.empty)
-    val optRequest = PropPatchGenerator.generatePropPatch(attributes, null, Some(DescKey))
+    val optRequest = PropPatchGenerator.generatePropPatch(attributes, None, Some(DescKey))
 
     optRequest should be(None)
   }
@@ -147,7 +147,7 @@ class PropPatchGeneratorSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
   it should "create a request with a description attribute" in {
     val Desc = "some description"
     val attributes = DavModel.Attributes(Map.empty)
-    val request = PropPatchGenerator.generatePropPatch(attributes, Desc, Some(DescKey))
+    val request = PropPatchGenerator.generatePropPatch(attributes, Some(Desc), Some(DescKey))
 
     val setCommands = parseSetCommands(parsePatchRequest(request))
     setCommands should have size 1
@@ -156,7 +156,7 @@ class PropPatchGeneratorSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
 
   it should "ignore the description if no attribute is defined" in {
     val attributes = DavModel.Attributes(Map.empty)
-    val optRequest = PropPatchGenerator.generatePropPatch(attributes, "some desc", None)
+    val optRequest = PropPatchGenerator.generatePropPatch(attributes, Some("some desc"), None)
 
     optRequest should be(None)
   }
@@ -166,7 +166,7 @@ class PropPatchGeneratorSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
     val keyAdd2 = DavModel.AttributeKey("urn:other:", "bar")
     val Desc = "<cool> desc"
     val attributes = DavModel.Attributes(Map(keyAdd1 -> "<foo> value", keyAdd2 -> "<bar> value"))
-    val request = PropPatchGenerator.generatePropPatch(attributes, Desc, Some(DescKey))
+    val request = PropPatchGenerator.generatePropPatch(attributes, Some(Desc), Some(DescKey))
 
     val root = parsePatchRequest(request)
     val setCommands = parseSetCommands(root)
@@ -193,7 +193,7 @@ class PropPatchGeneratorSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
     val keyDel = DavModel.AttributeKey(DescKey.namespace, "remove")
     val Desc = "the new description"
     val attributes = DavModel.Attributes(Map.empty, List(keyDel))
-    val request = PropPatchGenerator.generatePropPatch(attributes, Desc, Some(DescKey))
+    val request = PropPatchGenerator.generatePropPatch(attributes, Some(Desc), Some(DescKey))
 
     val root = parsePatchRequest(request)
     val setCommands = parseSetCommands(root)

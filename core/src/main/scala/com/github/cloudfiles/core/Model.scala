@@ -61,12 +61,13 @@ object Model {
     def name: String
 
     /**
-     * Returns the description of this element. This can be '''null''' if the
-     * user has not provided a description.
+     * Returns the description of this element. Not all file systems support
+     * such a description, and users typically do not provide one; therefore,
+     * this is an ''Option'' and can be ''None''.
      *
-     * @return the description of this element
+     * @return the optional description of this element
      */
-    def description: String
+    def description: Option[String]
 
     /**
      * Returns the date when this element has been created.

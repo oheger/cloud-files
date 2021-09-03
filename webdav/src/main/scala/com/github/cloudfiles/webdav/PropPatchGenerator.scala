@@ -44,12 +44,12 @@ private object PropPatchGenerator {
    * the request can be skipped.
    *
    * @param attributes        the attributes to modify
-   * @param desc              the element description
+   * @param desc              the optional element description
    * @param optDescriptionKey the optional attribute for the description; if
    *                          undefined, no description is stored
    * @return an ''Option'' with the XML content of the request
    */
-  def generatePropPatch(attributes: DavModel.Attributes, desc: String,
+  def generatePropPatch(attributes: DavModel.Attributes, desc: Option[String],
                         optDescriptionKey: Option[DavModel.AttributeKey]): Option[String] = {
     if (desc != null && optDescriptionKey.isEmpty) {
       log.warn("No description attribute defined. Ignoring element description.")
@@ -57,7 +57,7 @@ private object PropPatchGenerator {
 
     val optDesc = for {
       descKey <- optDescriptionKey
-      descValue <- Option(desc)
+      descValue <- desc
     } yield (descKey, descValue)
     val setCommands = List(attributes.values.toList, optDesc.toList).flatten
 

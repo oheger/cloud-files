@@ -179,7 +179,7 @@ object GoogleDriveFileSystem {
     GoogleDriveJsonProtocol.WritableFile(name = Option(srcElement.name), properties = properties,
       appProperties = appProperties, mimeType = srcMimeType orElse optMimeType, parents = optParents,
       createdTime = Option(srcElement.createdAt), modifiedTime = Option(srcElement.lastModifiedAt),
-      description = Option(srcElement.description))
+      description = srcElement.description)
   }
 
   /**
@@ -202,7 +202,7 @@ object GoogleDriveFileSystem {
       case elem: GoogleDriveModel.GoogleDriveElement => elem.googleFile
       case _ =>
         GoogleDriveJsonProtocol.File(id = source.id, name = source.name, parents = null, mimeType = null,
-          createdTime = source.createdAt, modifiedTime = source.lastModifiedAt, description = Option(source.description),
+          createdTime = source.createdAt, modifiedTime = source.lastModifiedAt, description = source.description,
           size = size map (_.toString), properties = None, appProperties = None)
     }
     val patchedFile = googleFile.copy(name = spec.patchName getOrElse googleFile.name,

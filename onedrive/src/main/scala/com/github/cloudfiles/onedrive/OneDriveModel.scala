@@ -64,7 +64,7 @@ object OneDriveModel {
 
     override def name: String = item.name
 
-    override def description: String = item.description.orNull
+    override def description: Option[String] = item.description
 
     override def createdAt: Instant = item.createdDateTime
 
@@ -124,7 +124,7 @@ object OneDriveModel {
    * @param info        optional object with local file system information
    * @return the newly created ''OneDriveFolder'' object
    */
-  def newFolder(name: String, id: String = null, description: String = null,
+  def newFolder(name: String, id: String = null, description: Option[String] = None,
                 info: Option[WritableFileSystemInfo] = None): OneDriveFolder =
     OneDriveFolder(itemForFolder(id, name, description, info))
 
@@ -143,7 +143,7 @@ object OneDriveModel {
    * @param info        optional object with local file system information
    * @return the newly created ''OneDriveFile'' object
    */
-  def newFile(size: Long, name: String, id: String = null, description: String = null,
+  def newFile(size: Long, name: String, id: String = null, description: Option[String] = None,
               info: Option[WritableFileSystemInfo] = None): OneDriveFile =
     OneDriveFile(itemForFile(id, name, description, size, info))
 
@@ -172,7 +172,7 @@ object OneDriveModel {
    * @param info        the optional file system info
    * @return a ''DriveItem'' representing this folder
    */
-  private def itemForFolder(id: String, name: String, description: String,
+  private def itemForFolder(id: String, name: String, description: Option[String],
                             info: Option[WritableFileSystemInfo]): DriveItem =
     itemForElement(id, name, description, 0, info, optFile = None, optFolder = FolderMarker)
 
@@ -187,7 +187,7 @@ object OneDriveModel {
    * @param info        the optional file system info
    * @return a ''DriveItem'' representing this folder
    */
-  private def itemForFile(id: String, name: String, description: String, size: Long,
+  private def itemForFile(id: String, name: String, description: Option[String], size: Long,
                           info: Option[WritableFileSystemInfo]): DriveItem =
     itemForElement(id, name, description, size, info, optFile = FileMarker, optFolder = None)
 
@@ -204,10 +204,10 @@ object OneDriveModel {
    * @param optFolder   the optional folder structure
    * @return a ''DriveItem'' representing this element
    */
-  private def itemForElement(id: String, name: String, description: String, size: Long,
+  private def itemForElement(id: String, name: String, description: Option[String], size: Long,
                              info: Option[WritableFileSystemInfo], optFile: Option[File],
                              optFolder: Option[Folder]): DriveItem =
-    DriveItem(id = id, name = name, description = Option(description),
+    DriveItem(id = id, name = name, description = description,
       createdBy = null, createdDateTime = null, lastModifiedBy = null, lastModifiedDateTime = null,
       size = size, webUrl = null, file = optFile, folder = optFolder,
       fileSystemInfo = createFileSystemInfoFor(info), parentReference = None, shared = None,

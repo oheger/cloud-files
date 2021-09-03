@@ -66,7 +66,7 @@ object LocalFsModel {
                          override val lastModifiedAt: Instant,
                          override val lastModifiedUpdate: Option[Instant] = None)
     extends Model.Folder[Path] with LocalUpdatable {
-    override def description: String = null
+    override def description: Option[String] = None
   }
 
   /**
@@ -96,7 +96,7 @@ object LocalFsModel {
                        override val size: Long,
                        override val lastModifiedUpdate: Option[Instant] = None)
     extends Model.File[Path] with LocalUpdatable {
-    override def description: String = null
+    override def description: Option[String] = None
   }
 
   /**

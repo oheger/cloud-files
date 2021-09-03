@@ -37,7 +37,7 @@ class GoogleDriveModelSpec extends AnyFlatSpec with Matchers {
     googleFolder.name should be(file.name)
     googleFolder.createdAt should be(file.createdTime)
     googleFolder.lastModifiedAt should be(file.modifiedTime)
-    googleFolder.description should be(file.description.get)
+    googleFolder.description should be(file.description)
   }
 
   it should "provide a File implementation" in {
@@ -52,7 +52,7 @@ class GoogleDriveModelSpec extends AnyFlatSpec with Matchers {
     googleFile.name should be(file.name)
     googleFile.createdAt should be(file.createdTime)
     googleFile.lastModifiedAt should be(file.modifiedTime)
-    googleFile.description should be(null)
+    googleFile.description should be(None)
     googleFile.size should be(1234)
   }
 

@@ -61,14 +61,14 @@ class OneDriveModelSpec extends AnyFlatSpec with Matchers {
   it should "provide access to the description property if it is defined" in {
     val folder = OneDriveModel.OneDriveFolder(TestDriveItem)
 
-    folder.description should be(TestDriveItem.description.get)
+    folder.description should be(TestDriveItem.description)
   }
 
   it should "provide access to the description property if it is not defined" in {
     val item = TestDriveItem.copy(description = None)
     val folder = OneDriveModel.OneDriveFolder(item)
 
-    folder.description should be(null)
+    folder.description should be(None)
   }
 
   it should "provide access to the createdAt property" in {

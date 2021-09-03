@@ -342,7 +342,7 @@ class DavFileSystem(val config: DavConfig)
    * @param system     the actor system
    * @return a ''Future'' with the result of the operation
    */
-  private def executePatchRequest(httpSender: ActorRef[HttpRequestSender.HttpCommand], uri: Uri, desc: String,
+  private def executePatchRequest(httpSender: ActorRef[HttpRequestSender.HttpCommand], uri: Uri, desc: Option[String],
                                   attributes: DavModel.Attributes)(implicit system: ActorSystem[_]): Future[Unit] =
     PropPatchGenerator.generatePropPatch(attributes, desc, config.optDescriptionKey)
       .map { xml =>

@@ -113,12 +113,12 @@ object GoogleDriveFileSystemITSpec {
    * @param fModify the last modification time
    * @return the folder with these properties
    */
-  private def modelFolder(fid: String = null, fName: String = null, fDesc: String = null, fCreate: Instant = null,
-                          fModify: Instant = null): Model.Folder[String] =
+  private def modelFolder(fid: String = null, fName: String = null, fDesc: Option[String] = None,
+                          fCreate: Instant = null, fModify: Instant = null): Model.Folder[String] =
     new Model.Folder[String] {
       override val id: String = fid
       override val name: String = fName
-      override val description: String = fDesc
+      override val description: Option[String] = fDesc
       override val createdAt: Instant = fCreate
       override val lastModifiedAt: Instant = fModify
     }
@@ -134,12 +134,12 @@ object GoogleDriveFileSystemITSpec {
    * @param fSize   the file size
    * @return the file with these properties
    */
-  private def modelFile(fid: String = null, fName: String = null, fDesc: String = null, fCreate: Instant = null,
-                        fModify: Instant = null, fSize: Long = 0L): Model.File[String] =
+  private def modelFile(fid: String = null, fName: String = null, fDesc: Option[String] = None,
+                        fCreate: Instant = null, fModify: Instant = null, fSize: Long = 0L): Model.File[String] =
     new Model.File[String] {
       override val id: String = fid
       override val name: String = fName
-      override val description: String = fDesc
+      override val description: Option[String] = fDesc
       override val createdAt: Instant = fCreate
       override val lastModifiedAt: Instant = fModify
       override val size: Long = fSize
@@ -467,7 +467,8 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       createdTime = Some(creationTime), modifiedTime = Some(modifiedTime), properties = None, appProperties = None,
       description = Some(FolderDesc), parents = Some(List(TestFileID)),
       mimeType = Some("application/vnd.google-apps.folder"))
-    val srcFolder = modelFolder(fName = FolderName, fDesc = FolderDesc, fCreate = creationTime, fModify = modifiedTime)
+    val srcFolder = modelFolder(fName = FolderName, fDesc = Some(FolderDesc), fCreate = creationTime,
+      fModify = modifiedTime)
 
     checkCreateFolder(srcFolder, expectedProperties)
   }
@@ -519,12 +520,12 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
   }
 
   it should "update a folder from a model folder" in {
-    val srcFolder = modelFolder(fid = TestFileID, fDesc = "Updated folder description",
+    val srcFolder = modelFolder(fid = TestFileID, fDesc = Some("Updated folder description"),
       fCreate = Instant.parse("2021-08-22T15:51:47.369Z"),
       fModify = Instant.parse("2021-08-22T15:52:14.741Z"))
     val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = None, mimeType = None, parents = None,
       createdTime = Some(srcFolder.createdAt), modifiedTime = Some(srcFolder.lastModifiedAt),
-      description = Some(srcFolder.description), properties = None, appProperties = None)
+      description = srcFolder.description, properties = None, appProperties = None)
 
     checkUpdateFolder(srcFolder, expectedProperties)
   }
@@ -537,7 +538,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       appProperties = Some(Map("newAppProperty" -> "anotherNewValue")))
     val srcFolder = GoogleDriveModel.GoogleDriveFolder(googleFile)
     val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = None, mimeType = None, parents = None,
-      createdTime = None, modifiedTime = Some(srcFolder.lastModifiedAt), description = Some(srcFolder.description),
+      createdTime = None, modifiedTime = Some(srcFolder.lastModifiedAt), description = srcFolder.description,
       properties = googleFile.properties, appProperties = googleFile.appProperties)
 
     checkUpdateFolder(srcFolder, expectedProperties)
@@ -635,7 +636,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       appProperties = Some(Map("newAppProperty" -> "anotherNewValue")))
     val srcFile = GoogleDriveModel.GoogleDriveFile(googleFile)
     val expectedProperties = GoogleDriveJsonProtocol.WritableFile(name = None, mimeType = None, parents = None,
-      createdTime = None, modifiedTime = Some(srcFile.lastModifiedAt), description = Some(srcFile.description),
+      createdTime = None, modifiedTime = Some(srcFile.lastModifiedAt), description = srcFile.description,
       properties = googleFile.properties, appProperties = googleFile.appProperties)
     stubFor(patch(urlPathEqualTo(filePath(TestFileID)))
       .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFolderResponse.json")))
@@ -648,12 +649,12 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
   }
 
   it should "patch a model folder without updates" in {
-    val folder = modelFolder(fid = "folderID", fName = "folderName", fDesc = "folderDesc",
+    val folder = modelFolder(fid = "folderID", fName = "folderName", fDesc = Some("folderDesc"),
       fCreate = Instant.parse("2021-08-28T19:34:30.369Z"),
       fModify = Instant.parse("2021-08-28T19:34:59.741Z"))
     val expGoogleFile = GoogleDriveJsonProtocol.File(id = folder.id, name = folder.name, parents = null,
       mimeType = null, createdTime = folder.createdAt, modifiedTime = folder.lastModifiedAt,
-      description = Some(folder.description), size = None, properties = None, appProperties = None)
+      description = folder.description, size = None, properties = None, appProperties = None)
     val expResultFolder = GoogleDriveModel.GoogleDriveFolder(expGoogleFile)
     val fs = new GoogleDriveFileSystem(createConfig())
 

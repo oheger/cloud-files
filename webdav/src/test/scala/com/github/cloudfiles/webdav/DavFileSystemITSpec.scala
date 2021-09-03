@@ -162,7 +162,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     file3.size should be(300)
     file3.attributes.values(AttributeKey("urn:schemas-microsoft-com:",
       "Win32LastModifiedTime")) should be("Wed, 19 Sep 2018 20:12:00 GMT")
-    file3.description should be("A test description")
+    file3.description should be(Some("A test description"))
   }
 
   it should "return the content of a folder" in {
@@ -190,7 +190,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val file = futureResult(runOp(fs.resolveFile(FileUri)))
     file.name should be("test.txt")
     file.lastModifiedAt should be(Instant.parse("2020-12-31T19:23:52Z"))
-    file.description should be("A test description")
+    file.description should be(Some("A test description"))
   }
 
   it should "handle a request to resolve a file that yields a folder" in {
@@ -288,6 +288,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val ParentUri = Uri(RootPath + "/parent")
     val FolderUri = ParentUri.withPath(ParentUri.path / FolderName)
     when(folder.name).thenReturn(FolderName)
+    when(folder.description).thenReturn(None)
     stubFor(request("MKCOL", urlPathEqualTo(FolderUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.Created.intValue)))
     val fs = new DavFileSystem(createConfig())
@@ -304,7 +305,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val keyAdd = DavModel.AttributeKey(NS_TEST, "foo")
     val attributes = DavModel.Attributes(Map(keyAdd -> "<foo> value"))
     val expPatch = readDataFile(resourceFile("/proppatch_attributes.xml"))
-    val newFolder = DavModel.newFolder(name = FolderName, description = "<cool> description ;-)",
+    val newFolder = DavModel.newFolder(name = FolderName, description = Some("<cool> description ;-)"),
       attributes = attributes)
     stubFor(request("MKCOL", urlPathEqualTo(FolderUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.Created.intValue)))
@@ -326,6 +327,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val ParentUri = Uri(ParentUriStr)
     val FolderUri = ParentUri.withPath(ParentUri.path / FolderName)
     when(folder.name).thenReturn(FolderName)
+    when(folder.description).thenReturn(None)
     stubFor(request("MKCOL", urlPathEqualTo(FolderUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.Created.intValue)))
     val fs = new DavFileSystem(createConfig())
@@ -338,6 +340,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "update a folder without additional attributes" in {
     val folder = mock[Folder[Uri]]
     when(folder.id).thenReturn(Uri(RootPath + "/some/uri"))
+    when(folder.description).thenReturn(None)
     val fs = new DavFileSystem(createConfig())
 
     futureResult(runOp(fs.updateFolder(folder)))
@@ -351,7 +354,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val attributes = DavModel.Attributes(Map(keyAdd -> "<foo> value"), List(keyDel))
     val expPatch = readDataFile(resourceFile("/proppatch_attributes_remove.xml"))
     val folder = DavModel.DavFolder(id = FolderUri, lastModifiedAt = null, createdAt = null,
-      name = "ignore", description = "<cool> description ;-)", attributes = attributes)
+      name = "ignore", description = Some("<cool> description ;-)"), attributes = attributes)
     stubFor(request("PROPPATCH", urlPathEqualTo(FolderUri.path.toString() + "/"))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig())
@@ -364,6 +367,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
 
   it should "update a file without additional attributes" in {
     val file = mock[Model.File[Uri]]
+    when(file.description).thenReturn(None)
     val fs = new DavFileSystem(createConfig())
 
     futureResult(runOp(fs.updateFile(file)))
@@ -377,7 +381,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val attributes = DavModel.Attributes(Map(keyAdd -> "<foo> value"), List(keyDel))
     val expPatch = readDataFile(resourceFile("/proppatch_attributes_remove.xml"))
     val file = DavModel.DavFile(id = FileUri, lastModifiedAt = null, createdAt = null,
-      name = "ignore", description = "<cool> description ;-)", attributes = attributes, size = 0)
+      name = "ignore", description = Some("<cool> description ;-)"), attributes = attributes, size = 0)
     stubFor(request("PROPPATCH", urlPathEqualTo(FileUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig())
@@ -423,6 +427,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val FileUri = ParentUri.withPath(ParentUri.path / FileName)
     when(file.name).thenReturn(FileName)
     when(file.size).thenReturn(FileContentSize)
+    when(file.description).thenReturn(None)
     stubFor(put(urlPathEqualTo(FileUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig())
@@ -442,7 +447,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val keyAdd = DavModel.AttributeKey(NS_TEST, "foo")
     val attributes = DavModel.Attributes(Map(keyAdd -> "<foo> value"))
     val expPatch = readDataFile(resourceFile("/proppatch_attributes.xml"))
-    val newFile = DavModel.newFile(name = FileName, description = "<cool> description ;-)",
+    val newFile = DavModel.newFile(name = FileName, description = Some("<cool> description ;-)"),
       attributes = attributes, size = FileContentSize)
     stubFor(put(urlPathEqualTo(FileUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
@@ -468,6 +473,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val FileUri = ParentUri.withPath(ParentUri.path / FileName)
     when(file.name).thenReturn(FileName)
     when(file.size).thenReturn(FileContentSize)
+    when(file.description).thenReturn(None)
     stubFor(put(urlPathEqualTo(FileUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig())
@@ -493,7 +499,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val folder = mock[Folder[Uri]]
     val FolderID = Uri("https://my.test.dav/my/folder")
     val FolderName = "originalFolderName"
-    val FolderDesc = "original folder description"
+    val FolderDesc = Some("original folder description")
     when(folder.id).thenReturn(FolderID)
     when(folder.name).thenReturn(FolderName)
     when(folder.description).thenReturn(FolderDesc)
@@ -506,7 +512,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "patch a folder against a defined patch spec" in {
     val attributes = DavModel.Attributes(Map(AttributeKey("foo", "key1") -> "value1",
       AttributeKey("bar", "key2") -> "value2"))
-    val folder = DavModel.newFolder("originalName", description = "original description",
+    val folder = DavModel.newFolder("originalName", description = Some("original description"),
       attributes = attributes)
     val PatchedName = "newFolderName"
     val expFolder = DavModel.newFolder(name = PatchedName, description = folder.description, attributes = attributes)
@@ -519,7 +525,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
   it should "patch a file against an empty patch spec" in {
     val FileID = Uri("https://my.test.dav/my/file.dat")
     val FileName = "file.dat"
-    val FileDesc = "This is the description of my test file."
+    val FileDesc = Some("This is the description of my test file.")
     val FileSize = 20210213164214L
     val attributes = DavModel.Attributes(Map(AttributeKey("foo", "key1") -> "value1",
       AttributeKey("bar", "key2") -> "value2"))
@@ -537,6 +543,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     when(file.id).thenReturn(FileID)
     when(file.name).thenReturn("original.name")
     when(file.size).thenReturn(11)
+    when(file.description).thenReturn(None)
     val expFile = DavModel.newFile(PatchedName, PatchedSize, id = FileID)
     val spec = ElementPatchSpec(patchName = Some(PatchedName), patchSize = Some(PatchedSize))
     val fs = new DavFileSystem(createConfig())

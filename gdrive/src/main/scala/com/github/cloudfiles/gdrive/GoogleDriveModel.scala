@@ -64,7 +64,7 @@ object GoogleDriveModel {
 
     override def name: String = googleFile.name
 
-    override def description: String = googleFile.description.orNull
+    override def description: Option[String] = googleFile.description
 
     override def createdAt: Instant = googleFile.createdTime
 

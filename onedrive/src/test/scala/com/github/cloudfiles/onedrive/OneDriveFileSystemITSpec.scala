@@ -185,7 +185,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val folder = futureResult(runOp(fs.resolveFolder(ResolvedID)))
     folder.id should be(ResolvedID)
     folder.name should be("data")
-    folder.description should be(null)
+    folder.description should be(None)
     folder.folderData.childCount should be(9)
     folder.item.fileSystemInfo.createdDateTime should be(Instant.parse("2019-11-12T14:32:50.8Z"))
   }
@@ -306,7 +306,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fsInfo =
       OneDriveJsonProtocol.WritableFileSystemInfo(createdDateTime = Some(Instant.parse("2021-01-23T20:07:10.113Z")))
     val folder = OneDriveModel.newFolder("cloud-files", info = Some(fsInfo),
-      description = "This is the description of the test folder.")
+      description = Some("This is the description of the test folder."))
     val fs = new OneDriveFileSystem(createConfig())
 
     val folderId = futureResult(runOp(fs.createFolder(ParentId, folder)))
@@ -316,6 +316,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
   it should "create a new folder from another Folder implementation" in {
     val folder = mock[Model.Folder[String]]
     when(folder.name).thenReturn("cloud-files")
+    when(folder.description).thenReturn(None)
     val expBody = readDataFile(resourceFile("/createFolderMinimum.json"))
     stubFor(post(urlPathEqualTo(drivePath(s"/items/$ResolvedID/children")))
       .withRequestBody(equalToJson(expBody))
@@ -364,7 +365,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
   it should "update a file from another File implementation" in {
     val file = mock[Model.File[String]]
     when(file.id).thenReturn(ResolvedID)
-    when(file.description).thenReturn("A test file.")
+    when(file.description).thenReturn(Some("A test file."))
     val expBody = readDataFile(resourceFile("/createFileMinimum.json"))
     val updatePath = drivePath(s"/items/$ResolvedID")
     stubFor(patch(urlPathEqualTo(updatePath))
@@ -431,7 +432,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
   private def checkUploadNewFile(uploadChunkSize: Int, groupSize: Int): Unit = {
     val ParentId = ResolvedID.reverse
     val FileName = "new File.txt"
-    val FileDescription = "Upload test file description"
+    val FileDescription = Some("Upload test file description")
     val Content = FileTestHelper.TestData * 8
     val fileInfo = WritableFileSystemInfo(createdDateTime = Some(Instant.parse("2021-01-31T21:21:10.123Z")),
       lastModifiedDateTime = Some(Instant.parse("2021-01-31T21:21:50.987Z")))
@@ -510,7 +511,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       lastModifiedDateTime = Some(Instant.parse("2021-01-31T21:21:50.987Z")),
       createdDateTime = Some(Instant.parse("2021-01-31T21:21:10.123Z")))
     val file = OneDriveModel.newFile(id = ResolvedID, name = "new File.txt", info = Some(fsInfo),
-      size = FileTestHelper.TestData.length, description = "Upload test file description")
+      size = FileTestHelper.TestData.length, description = Some("Upload test file description"))
 
     runWithNewServer { server =>
       stubFor(post(urlPathEqualTo(SourceUri))
@@ -620,7 +621,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
   it should "patch a folder against an empty patch spec" in {
     val FolderName = "theFolder"
-    val FolderDesc = "Description of the test folder"
+    val FolderDesc = Some("Description of the test folder")
     val folder = mock[Model.Folder[String]]
     when(folder.id).thenReturn(ResolvedID)
     when(folder.name).thenReturn(FolderName)
@@ -638,7 +639,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fileInfo = Some(WritableFileSystemInfo(createdDateTime = Some(createdAt),
       lastModifiedDateTime = Some(lastModifiedAt)))
     val folder = OneDriveModel.newFolder(id = ResolvedID, name = "someName", info = fileInfo,
-      description = "some description")
+      description = Some("some description"))
     val expFolder = OneDriveModel.newFolder(id = ResolvedID, name = PatchedName, description = folder.description,
       info = fileInfo)
     val spec = ElementPatchSpec(patchName = Some(PatchedName))
@@ -658,7 +659,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
   it should "patch a file against a defined patch spec" in {
     val PatchedName = "modifiedFileName.dat"
     val PatchedSize = 20210213210711L
-    val FileDescription = "The original file description."
+    val FileDescription = Some("The original file description.")
     val file = mock[Model.File[String]]
     when(file.id).thenReturn(ResolvedID)
     when(file.name).thenReturn("originalName.txt")

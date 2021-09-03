@@ -191,7 +191,7 @@ object DavParser {
       val name = attributes.getOrElse(AttrName, nameFromUri(elemUri))
       val createdAt = parseTimeAttribute(attributes.getOrElse(AttrCreatedAt, UndefinedDate.toString))
       val lastModified = parseTimeAttribute(attributes.getOrElse(AttrModifiedAt, UndefinedDate.toString))
-      val desc = (optDescriptionKey flatMap attributes.get).orNull
+      val desc = optDescriptionKey flatMap attributes.get
       val elemAttributes: DavModel.Attributes = constructElementAttributes(attributes, optDescriptionKey)
       if (isCollection(propNode))
         DavModel.DavFolder(withTrailingSlash(elemUri), name, desc, createdAt, lastModified, elemAttributes)

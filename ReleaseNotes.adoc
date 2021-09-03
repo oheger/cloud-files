@@ -8,6 +8,13 @@ of the CloudFiles library.
 * Fixed the encoding handling when resolving paths in LocalFileSystem. The
   `resolvePath()` function now correctly decodes the passed in strings before
   they are converted to `Path` objects.
+* `ElementPatchSpec` no longer supports patching the description field. While
+  concrete `FileSystem` implementations may need to modify certain attributes,
+  it is very unlikely that this would be required for the description.
+* The type of the `description` property of files and folders has been changed
+  from `String` to `Option[String]`. This better reflects the usage in
+  practice, and is also more in-line with many concrete `FileSystem`
+  implementations, for which this attribute is optional or even not supported.
 
 == Release 0.2 (2021-01-10)
 

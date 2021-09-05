@@ -34,11 +34,11 @@ import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
 import scala.concurrent.Future
 
 object GoogleDriveFileSystem {
-  /** The URI prefix for accessing the /files resource. */
-  private val FileResourcePrefix = "/drive/v3/files"
+  /** The endpoint for accessing the /files resource. */
+  private val FilesEndpoint = "/drive/v3/files"
 
-  /** The URI prefix for file upload operations. */
-  private val UploadResourcePrefix = s"/upload$FileResourcePrefix"
+  /** The endpoint for file upload operations. */
+  private val UploadEndpoint = s"/upload$FilesEndpoint"
 
   /**
    * Constant for the names of the fields that are requested for files.
@@ -261,6 +261,12 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   private val rootPathComponents =
     (config.optRootPath map UriEncodingHelper.splitAndDecodeComponents getOrElse Nil).toList
 
+  /** The absolute URI prefix for accessing the files resource. */
+  private val fileResourcePrefix = resolveEndpoint(FilesEndpoint)
+
+  /** The absolute URI prefix for executing upload operations. */
+  private val uploadResourcePrefix = resolveEndpoint(UploadEndpoint)
+
   override def patchFolder(source: Model.Folder[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFolder =
     patchElement(source, None, spec)(GoogleDriveModel.GoogleDriveFolder)
 
@@ -305,7 +311,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
 
       def processPage(files: List[GoogleDriveJsonProtocol.File], nextToken: Option[String]):
       Future[List[GoogleDriveJsonProtocol.File]] = {
-        val uri = Uri(FileResourcePrefix).withQuery(Uri.Query(folderContentQueryParams(id, nextToken)))
+        val uri = Uri(fileResourcePrefix).withQuery(Uri.Query(folderContentQueryParams(id, nextToken)))
         val request = HttpRequest(uri = uri, headers = StdHeaders)
         executeQuery[GoogleDriveJsonProtocol.FolderResponse](httpSender, request) flatMap { response =>
           val nextFiles = files ++ response.files
@@ -337,7 +343,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
         optParents = Some(List(parent)))
       for {
         entity <- fileEntity(requestFile)
-        request = HttpRequest(method = HttpMethods.POST, uri = Uri(FileResourcePrefix), headers = StdUpdateHeaders,
+        request = HttpRequest(method = HttpMethods.POST, uri = Uri(fileResourcePrefix), headers = StdUpdateHeaders,
           entity = entity)
         response <- executeQuery[GoogleDriveJsonProtocol.File](httpSender, request)
       } yield response.id
@@ -352,7 +358,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])
                          (implicit system: ActorSystem[_]): Operation[String] = Operation {
     httpSender =>
-      val uploadTriggerUri = Uri(UploadResourcePrefix)
+      val uploadTriggerUri = Uri(uploadResourcePrefix)
         .withQuery(Uri.Query(QueryParameterUploadType -> UploadResumable))
       val requestFile = createWritableFile(file, optParents = Some(List(parent)), mimeTypeFromSource = true)
 
@@ -372,7 +378,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   override def updateFileContent(fileID: String, size: Long, content: Source[ByteString, Any])
                                 (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
     httpSender =>
-      val uploadTriggerUri = Uri(s"$UploadResourcePrefix/$fileID")
+      val uploadTriggerUri = Uri(s"$uploadResourcePrefix/$fileID")
         .withQuery(Uri.Query(QueryParameterUploadType -> UploadResumable))
       val triggerRequest = HttpRequest(method = HttpMethods.PATCH, uri = uploadTriggerUri)
 
@@ -382,7 +388,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   override def updateFileAndContent(file: Model.File[String], content: Source[ByteString, Any])
                                    (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
     httpSender =>
-      val uploadTriggerUri = Uri(s"$UploadResourcePrefix/${file.id}")
+      val uploadTriggerUri = Uri(s"$uploadResourcePrefix/${file.id}")
         .withQuery(Uri.Query(QueryParameterUploadType -> UploadResumable))
       val requestFile = createWritableFile(file, mimeTypeFromSource = true)
 
@@ -396,7 +402,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
 
   override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): Operation[HttpEntity] = Operation {
     httpSender =>
-      val downloadUri = Uri(s"$FileResourcePrefix/$fileID").withQuery(Uri.Query(QueryParameterAlt -> AltMedia))
+      val downloadUri = Uri(s"$fileResourcePrefix/$fileID").withQuery(Uri.Query(QueryParameterAlt -> AltMedia))
       val request = HttpRequest(uri = downloadUri)
       HttpRequestSender.sendRequestSuccess(httpSender, request, requestData = null) map { result =>
         result.response.entity
@@ -418,7 +424,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   private def resolveElement(id: String)(implicit system: ActorSystem[_]):
   Operation[GoogleDriveModel.GoogleDriveElement] = Operation {
     httpSender =>
-      val uri = Uri(s"$FileResourcePrefix/$id").withQuery(Uri.Query(QueryParamsFileFields))
+      val uri = Uri(s"$fileResourcePrefix/$id").withQuery(Uri.Query(QueryParamsFileFields))
       val request = HttpRequest(uri = uri, headers = StdHeaders)
       executeQuery[GoogleDriveJsonProtocol.File](httpSender, request) map createModelElement
   }
@@ -432,7 +438,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
    */
   private def deleteElement(id: String)(implicit system: ActorSystem[_]): Operation[Unit] = Operation {
     httpSender =>
-      val deleteRequest = HttpRequest(method = HttpMethods.DELETE, uri = s"$FileResourcePrefix/$id")
+      val deleteRequest = HttpRequest(method = HttpMethods.DELETE, uri = s"$fileResourcePrefix/$id")
       executeUpdate(httpSender, deleteRequest)
   }
 
@@ -451,7 +457,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
         val requestFile = createWritableFile(element)
         for {
           entity <- fileEntity(requestFile)
-          request = HttpRequest(method = HttpMethods.PATCH, uri = Uri(s"$FileResourcePrefix/${element.id}"),
+          request = HttpRequest(method = HttpMethods.PATCH, uri = Uri(s"$fileResourcePrefix/${element.id}"),
             headers = StdUpdateHeaders, entity = entity)
           response <- executeUpdate(httpSender, request)
         } yield response
@@ -635,7 +641,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
     val pagingQueryParams = optNextToken.fold(queryParams) { token =>
       queryParams + (QueryParamNextPage -> token)
     }
-    val uri = Uri(FileResourcePrefix).withQuery(Uri.Query(pagingQueryParams))
+    val uri = Uri(fileResourcePrefix).withQuery(Uri.Query(pagingQueryParams))
     val request = HttpRequest(uri = uri, headers = StdHeaders)
     executeQuery[GoogleDriveJsonProtocol.ResolveResponse](httpSender, request) flatMap { response =>
       val currentFiles = response.files ++ files
@@ -647,6 +653,16 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
       }
     }
   }
+
+  /**
+   * Generates an absolute URI that points to the specified endpoint on the
+   * configured GoogleDrive server.
+   *
+   * @param endpoint the relative endpoint path
+   * @return the absolute URI referencing this endpoint
+   */
+  private def resolveEndpoint(endpoint: String): String =
+    s"${UriEncodingHelper.removeTrailingSeparator(config.serverUri)}$endpoint"
 
   /**
    * Defines the timeout for all operations by referring to the configuration.

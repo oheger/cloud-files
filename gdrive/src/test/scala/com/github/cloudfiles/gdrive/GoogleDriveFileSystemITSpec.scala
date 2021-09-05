@@ -23,8 +23,8 @@ import akka.stream.scaladsl.{Sink, Source}
 import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core._
 import com.github.cloudfiles.core.delegate.ElementPatchSpec
-import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
+import com.github.cloudfiles.core.http.{MultiHostExtension, UriEncodingHelper}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.matching.StringValuePattern
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -199,7 +199,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
    * @return the initialized ''GoogleDriveConfig''
    */
   private def createConfig(timeout: Timeout = GoogleDriveConfig.DefaultTimeout, optRoot: Option[String] = None):
-  GoogleDriveConfig = GoogleDriveConfig(timeout = timeout, optRootPath = optRoot)
+  GoogleDriveConfig =
+    GoogleDriveConfig(timeout = timeout, optRootPath = optRoot,
+      serverUri = UriEncodingHelper.withTrailingSeparator(serverBaseUri))
 
   /**
    * Executes the given file system operation against the mock server.
@@ -209,7 +211,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
    * @return a future with the result of the operation
    */
   private def runOp[A](op: FileSystem.Operation[A]): Future[A] = {
-    val httpActor = spawn(HttpRequestSender(serverBaseUri))
+    val httpActor = spawn(MultiHostExtension())
     op.run(httpActor)
   }
 

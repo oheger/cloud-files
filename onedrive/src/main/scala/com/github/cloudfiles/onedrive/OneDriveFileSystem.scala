@@ -81,18 +81,21 @@ object OneDriveFileSystem {
                        requestQueueSize: Int = HttpRequestSender.DefaultQueueSize,
                        proxy: ProxySelectorFunc = SystemProxy): Behavior[HttpRequestSender.HttpCommand] = {
     val serverUri = Uri(config.serverUri)
-    val factory: MultiHostExtension.RequestActorFactory = (context, uri, queueSize, proxy) => {
-      def createSender(uri: Uri, requestQueueSize: Int = HttpRequestSender.DefaultQueueSize):
-      ActorRef[HttpRequestSender.HttpCommand] =
-        context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize, proxy))
+    val factory: MultiHostExtension.RequestActorFactory = (uri, queueSize, proxy) => {
+      val creator: MultiHostExtension.RequestActorCreator = context => {
+        def createSender(uri: Uri, requestQueueSize: Int = HttpRequestSender.DefaultQueueSize):
+        ActorRef[HttpRequestSender.HttpCommand] =
+          context.spawnAnonymous(HttpRequestSender(uri, requestQueueSize, proxy))
 
-      if (uri.authority == serverUri.authority) {
-        val idpSender = createSender(authConfig.tokenEndpoint)
-        val sender = createSender(uri, queueSize)
-        context.spawnAnonymous(OAuthExtension(sender, idpSender, authConfig))
-      } else {
-        createSender(uri, queueSize)
+        if (uri.authority == serverUri.authority) {
+          val idpSender = createSender(authConfig.tokenEndpoint)
+          val sender = createSender(uri, queueSize)
+          context.spawnAnonymous(OAuthExtension(sender, idpSender, authConfig))
+        } else {
+          createSender(uri, queueSize)
+        }
       }
+      Future.successful(creator)
     }
 
     MultiHostExtension(requestActorFactory = factory, requestQueueSize = requestQueueSize, proxy = proxy)

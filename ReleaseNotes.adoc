@@ -15,6 +15,11 @@ of the CloudFiles library.
   from `String` to `Option[String]`. This better reflects the usage in
   practice, and is also more in-line with many concrete `FileSystem`
   implementations, for which this attribute is optional or even not supported.
+* Changed the `RequestActorFactory` function type in `MultiHostExtension`. The
+  new type no longer returns an `ActorRef`, but a `Future` with a function that
+  actually creates the new request actor. This makes it possible to support
+  more complex actor creation functionality, which could fail; e.g. loading
+  credentials for a specific server from some source.
 
 == Release 0.2 (2021-01-10)
 

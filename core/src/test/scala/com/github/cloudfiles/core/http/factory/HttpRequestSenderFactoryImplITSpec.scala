@@ -220,9 +220,9 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
     val authConfig = BasicAuthConfig(WireMockSupport.UserId, Secret(WireMockSupport.Password))
     val config = HttpRequestSenderConfig(authConfig = authConfig)
     val createdSenderActors = new AtomicInteger
-    val factory: RequestActorFactory = (ctx, uri, size, proxy) => {
+    val factory: RequestActorFactory = (uri, size, proxy) => {
       createdSenderActors.incrementAndGet()
-      MultiHostExtension.defaultRequestActorFactory(ctx, uri, size, proxy)
+      MultiHostExtension.defaultRequestActorFactory(uri, size, proxy)
     }
 
     runWithNewServer { server =>

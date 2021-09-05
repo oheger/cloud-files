@@ -477,7 +477,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   private def executeQuery[R](httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
                              (implicit system: ActorSystem[_], um: Unmarshaller[HttpResponse, R]): Future[R] =
     for {
-      result <- HttpRequestSender.sendRequestSuccess(httpSender, request, null, DiscardEntityMode.OnFailure)
+      result <- HttpRequestSender.sendRequestSuccess(httpSender, request)
       obj <- Unmarshal(result.response).to[R]
     } yield obj
 
@@ -495,8 +495,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   private def executeUpdate(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest,
                             discardMode: DiscardEntityMode = DiscardEntityMode.Always)
                            (implicit system: ActorSystem[_]): Future[Unit] =
-    HttpRequestSender.sendRequestSuccess(httpSender, request, requestData = null, discardMode = discardMode)
-      .map(_ => ())
+    HttpRequestSender.sendRequestSuccess(httpSender, request, discardMode).map(_ => ())
 
   /**
    * Produces a request entity from the given writable file. This is typically

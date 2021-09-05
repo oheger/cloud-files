@@ -27,7 +27,6 @@ import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
-import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -118,7 +117,7 @@ class DavFileSystem(val config: DavConfig)
       val contentRequest = HttpRequest(uri = withTrailingSlash(id), method = MethodPropFind,
         headers = List(HeaderAccept, HeaderDepthContent))
       for {
-        response <- execute(httpSender, contentRequest)
+        response <- HttpRequestSender.sendRequestSuccess(httpSender, contentRequest)
         content <- davParser.parseFolderContent(response.response.entity.dataBytes)
       } yield content
   }
@@ -153,7 +152,7 @@ class DavFileSystem(val config: DavConfig)
   override def downloadFile(fileID: Uri)(implicit system: ActorSystem[_]): Operation[HttpEntity] = Operation {
     httpSender =>
       val downloadRequest = HttpRequest(uri = fileID)
-      execute(httpSender, downloadRequest) map (_.response.entity)
+      HttpRequestSender.sendRequestSuccess(httpSender, downloadRequest) map (_.response.entity)
   }
 
   override def deleteFile(fileID: Uri)(implicit system: ActorSystem[_]): Operation[Unit] =
@@ -183,7 +182,7 @@ class DavFileSystem(val config: DavConfig)
     val folderRequest = HttpRequest(uri = uri, method = MethodPropFind,
       headers = List(HeaderAccept, HeaderDepthElement))
     for {
-      response <- execute(httpSender, folderRequest)
+      response <- HttpRequestSender.sendRequestSuccess(httpSender, folderRequest)
       elem <- davParser.parseElement(response.response.entity.dataBytes)
     } yield elem
   }
@@ -369,21 +368,6 @@ class DavFileSystem(val config: DavConfig)
   }
 
   /**
-   * Executes an HTTP request against the given request sender actor with
-   * error handling.
-   *
-   * @param httpSender  the HTTP request sender actor
-   * @param request     the request to execute
-   * @param discardMode controls when to discard the entity bytes
-   * @param system      the actor system
-   * @return a ''Future'' with the successful result
-   */
-  private def execute(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest,
-                      discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure)
-                     (implicit system: ActorSystem[_]): Future[HttpRequestSender.SuccessResult] =
-    HttpRequestSender.sendRequestSuccess(httpSender, request, null, discardMode)
-
-  /**
    * Executes an HTTP request against the given request sender actor, for which
    * the response entity does not matter. The content of the entity is directly
    * discarded.
@@ -395,7 +379,7 @@ class DavFileSystem(val config: DavConfig)
    */
   private def executeAndDiscardEntity(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
                                      (implicit system: ActorSystem[_]): Future[Unit] =
-    execute(httpSender, request, DiscardEntityMode.Always) map (_ => ())
+    HttpRequestSender.sendRequestSuccess(httpSender, request, DiscardEntityMode.Always) map (_ => ())
 }
 
 /**

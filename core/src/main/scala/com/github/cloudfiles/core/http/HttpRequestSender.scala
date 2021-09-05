@@ -246,14 +246,14 @@ object HttpRequestSender {
    *
    * @param sender      the actor to process the request
    * @param request     the HTTP request to be sent
-   * @param requestData the data object associated with the request
    * @param discardMode controls when to discard the entity's bytes
+   * @param requestData the data object associated with the request
    * @param system      the actor system
    * @param timeout     the timeout for the ask operation
    * @return a ''Future'' with the result of request processing
    */
-  def sendRequest(sender: ActorRef[HttpCommand], request: HttpRequest, requestData: Any,
-                  discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure)
+  def sendRequest(sender: ActorRef[HttpCommand], request: HttpRequest,
+                  discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure, requestData: Any = null)
                  (implicit system: ActorSystem[_], timeout: Timeout): Future[Result] =
     sender.ask { ref =>
       SendRequest(request, requestData, ref, discardMode)
@@ -268,17 +268,17 @@ object HttpRequestSender {
    *
    * @param sender      the actor to process the request
    * @param request     the HTTP request to be sent
-   * @param requestData the data object associated with the request
    * @param discardMode controls when to discard the entity's bytes
+   * @param requestData the data object associated with the request
    * @param system      the actor system
    * @param timeout     the timeout for the ask operation
    * @return a ''Future'' with the successful result of request processing
    */
-  def sendRequestSuccess(sender: ActorRef[HttpCommand], request: HttpRequest, requestData: Any,
-                         discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure)
+  def sendRequestSuccess(sender: ActorRef[HttpCommand], request: HttpRequest,
+                         discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure, requestData: Any = null)
                         (implicit system: ActorSystem[_], timeout: Timeout): Future[SuccessResult] = {
     implicit val ec: ExecutionContextExecutor = system.executionContext
-    sendRequest(sender, request, requestData, discardMode) flatMap {
+    sendRequest(sender, request, discardMode, requestData) flatMap {
       case HttpRequestSender.FailedResult(_, cause) => Future.failed(cause)
       case suc: HttpRequestSender.SuccessResult => Future.successful(suc)
     }

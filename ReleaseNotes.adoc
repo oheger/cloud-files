@@ -20,6 +20,10 @@ of the CloudFiles library.
   actually creates the new request actor. This makes it possible to support
   more complex actor creation functionality, which could fail; e.g. loading
   credentials for a specific server from some source.
+* The API for sending HTTP requests in `HttpRequestSender` has slightly
+  changed: The parameters for the discard mode and the request data have
+  changed their position (because the discard mode seems to be used more
+  frequently). The request data now has the default value *null*.
 
 == Release 0.2 (2021-01-10)
 

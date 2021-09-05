@@ -180,7 +180,8 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
       BaseName + HttpRequestSenderFactoryImpl.IDPName)
     val idpSender = namedActors(BaseName + HttpRequestSenderFactoryImpl.IDPName)
       .asInstanceOf[ActorRef[HttpRequestSender.HttpCommand]]
-    val result = futureResult(HttpRequestSender.sendRequestSuccess(idpSender, HttpRequest(uri = TokenPath), this))
+    val result = futureResult(HttpRequestSender.sendRequestSuccess(idpSender, HttpRequest(uri = TokenPath),
+      requestData = this))
     result.response.status should be(StatusCodes.OK)
   }
 

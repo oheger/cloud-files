@@ -152,7 +152,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
-    val result = futureResult(HttpRequestSender.sendRequest(actor, request, RequestData))
+    val result = futureResult(HttpRequestSender.sendRequest(actor, request, requestData = RequestData))
     result.request.request should be(request)
     result.request.data should be(RequestData)
 
@@ -206,7 +206,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
-    val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, RequestData))
+    val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, requestData = RequestData))
     result.request.request should be(request)
     result.request.data should be(RequestData)
 
@@ -228,7 +228,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val request = HttpRequest(uri = Path)
 
     val exception = expectFailedFuture[FailedResponseException](HttpRequestSender.sendRequestSuccess(actor,
-      request, RequestData))
+      request, requestData = RequestData))
     exception.response.status should be(StatusCodes.BadRequest)
   }
 
@@ -242,7 +242,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = ErrorPath)
 
-    val result = futureResult(HttpRequestSender.sendRequest(actor, request, RequestData, DiscardEntityMode.Never))
+    val result = futureResult(HttpRequestSender.sendRequest(actor, request, DiscardEntityMode.Never, RequestData))
     result match {
       case HttpRequestSender.FailedResult(_, cause: FailedResponseException) =>
         futureResult(entityToString(cause.response)) should be(ErrorEntity)
@@ -260,7 +260,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val request = HttpRequest(uri = Path)
 
     val futResults = (1 to 16) map { _ =>
-      HttpRequestSender.sendRequestSuccess(actor, request, RequestData, discardMode = DiscardEntityMode.Always)
+      HttpRequestSender.sendRequestSuccess(actor, request, discardMode = DiscardEntityMode.Always, RequestData)
     }
     futureResult(Future.sequence(futResults))
   }
@@ -283,8 +283,8 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
       }
     }
 
-    val futReq1 = HttpRequestSender.sendRequest(actor, request, "foo")
-    val futReq2 = HttpRequestSender.sendRequest(actor, request, "bar")
+    val futReq1 = HttpRequestSender.sendRequest(actor, request, requestData = "foo")
+    val futReq2 = HttpRequestSender.sendRequest(actor, request, requestData = "bar")
     actor ! HttpRequestSender.Stop
     checkFailedResult(futReq1, "foo")
     checkFailedResult(futReq2, "bar")

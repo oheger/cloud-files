@@ -526,7 +526,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
   private def executeRequest(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest,
                              discardMode: DiscardEntityMode = DiscardEntityMode.Always)
                             (implicit system: ActorSystem[_]): Future[HttpRequestSender.SuccessResult] =
-    HttpRequestSender.sendRequestSuccess(httpSender, request, null, discardMode)
+    HttpRequestSender.sendRequestSuccess(httpSender, request, discardMode)
 
   /**
    * Generates the URI to resolve an item with the given ID.

@@ -95,6 +95,7 @@ class GoogleDriveModelSpec extends AnyFlatSpec with Matchers {
     val FileID = "theFileID"
     val FileName = "MyTestFile.json"
     val FileMimeType = "application/json"
+    val FileSize = 65537
     val FileDescription = "The description of my file"
     val FileCreationTime = Instant.parse("2021-08-15T16:59:49.33Z")
     val FileModifiedTime = Instant.parse("2021-08-15T17:02:02.44Z")
@@ -102,12 +103,12 @@ class GoogleDriveModelSpec extends AnyFlatSpec with Matchers {
     val FileAppProperties = Map("someAppProperty" -> "someValue")
     val expFile = GoogleDriveJsonProtocol.File(id = FileID, name = FileName,
       mimeType = FileMimeType, parents = List.empty, createdTime = FileCreationTime,
-      modifiedTime = FileModifiedTime, description = Some(FileDescription), size = None,
+      modifiedTime = FileModifiedTime, description = Some(FileDescription), size = Some(FileSize.toString),
       properties = Some(FileProperties), appProperties = Some(FileAppProperties))
 
     val file = GoogleDriveModel.newFile(id = FileID, name = FileName, createdAt = FileCreationTime,
       lastModifiedAt = FileModifiedTime, description = FileDescription, properties = FileProperties,
-      appProperties = FileAppProperties, mimeType = FileMimeType)
+      appProperties = FileAppProperties, mimeType = FileMimeType, size = FileSize)
     file.googleFile should be(expFile)
   }
 

@@ -106,8 +106,8 @@ object GoogleDriveModel {
   def newFolder(name: String = null, id: String = null, description: String = null, createdAt: Instant = null,
                 lastModifiedAt: Instant = null, properties: Map[String, String] = Map.empty,
                 appProperties: Map[String, String] = Map.empty): GoogleDriveFolder = {
-    val googleFile = createGoogleFile(name, id, description, createdAt, lastModifiedAt, properties, appProperties,
-      MimeTypeGoogleFolder)
+    val googleFile = createGoogleFile(name, id, None, description, createdAt, lastModifiedAt, properties,
+      appProperties, MimeTypeGoogleFolder)
     GoogleDriveFolder(googleFile)
   }
 
@@ -120,6 +120,8 @@ object GoogleDriveModel {
    *
    * @param name           the name of the file
    * @param id             the file ID (needed for update operations)
+   * @param size           the size of the file; note that this property must
+   *                       be set when uploading the file's content
    * @param description    the description
    * @param createdAt      the time the file was created
    * @param lastModifiedAt the time of the last modification
@@ -128,11 +130,12 @@ object GoogleDriveModel {
    * @param mimeType       the mime type of the file
    * @return the new ''GoogleDriveFile'' object
    */
-  def newFile(name: String = null, id: String = null, description: String = null, createdAt: Instant = null,
-              lastModifiedAt: Instant = null, properties: Map[String, String] = Map.empty,
+  def newFile(name: String = null, id: String = null, size: Long = -1, description: String = null,
+              createdAt: Instant = null, lastModifiedAt: Instant = null, properties: Map[String, String] = Map.empty,
               appProperties: Map[String, String] = Map.empty, mimeType: String = null): GoogleDriveFile = {
-    val googleFile = createGoogleFile(name, id, description, createdAt, lastModifiedAt, properties, appProperties,
-      mimeType)
+    val fileSize = Some(size).filter(_ >= 0).map(_.toString)
+    val googleFile = createGoogleFile(name, id, fileSize, description, createdAt, lastModifiedAt, properties,
+      appProperties, mimeType)
     GoogleDriveFile(googleFile)
   }
 
@@ -141,6 +144,7 @@ object GoogleDriveModel {
    *
    * @param name           the name
    * @param id             the ID
+   * @param size           the optional file size
    * @param description    the description
    * @param createdAt      the creation time
    * @param lastModifiedAt the last modified time
@@ -149,11 +153,11 @@ object GoogleDriveModel {
    * @param mimeType       the mime type
    * @return the ''File'' with these properties
    */
-  private def createGoogleFile(name: String, id: String, description: String, createdAt: Instant,
-                               lastModifiedAt: Instant, properties: Map[String, String],
+  private def createGoogleFile(name: String, id: String, size: Option[String], description: String,
+                               createdAt: Instant, lastModifiedAt: Instant, properties: Map[String, String],
                                appProperties: Map[String, String], mimeType: String): File =
     File(id, name, mimeType, List.empty, createdAt, lastModifiedAt, Option(description),
-      None, optionalMap(properties), optionalMap(appProperties))
+      size, optionalMap(properties), optionalMap(appProperties))
 
   /**
    * Converts the given map to an ''Option'', treating an empty map as

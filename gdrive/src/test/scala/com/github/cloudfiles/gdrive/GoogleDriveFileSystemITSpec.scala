@@ -32,9 +32,9 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.time.Instant
+import java.util
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, TimeoutException}
-import scala.jdk.CollectionConverters._
 
 object GoogleDriveFileSystemITSpec {
   /** ID of a test file used by the tests. */
@@ -179,6 +179,22 @@ object GoogleDriveFileSystemITSpec {
        |    $files
        |  ]
        |}""".stripMargin
+  }
+
+  /**
+   * Helper function to convert a Scala map with query parameters to a Java map
+   * as needed by WireMock. (We do not use Scala's collection converters here
+   * to avoid problems with cross compilation.)
+   *
+   * @param params the map with parameters to convert
+   * @return the Java map with query parameters
+   */
+  private def toQueryParams(params: Map[String, StringValuePattern]): java.util.Map[String, StringValuePattern] = {
+    val javaMap = new util.HashMap[String, StringValuePattern]
+    params foreach { e =>
+      javaMap.put(e._1, e._2)
+    }
+    javaMap
   }
 }
 
@@ -400,7 +416,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
   it should "query the content of a folder" in {
     stubFor(get(urlPathEqualTo(DriveApiPrefix))
       .withHeader(HeaderAccept, equalTo(ContentJson))
-      .withQueryParams(ExpFolderQueryParams.asJava)
+      .withQueryParams(toQueryParams(ExpFolderQueryParams))
       .willReturn(aJsonResponse().withBodyFile("folderContentResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
@@ -412,11 +428,11 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     val paramsWithNextPageToken = ExpFolderQueryParams + ("pageToken" -> equalTo("nextPage-12345"))
     stubFor(get(urlPathEqualTo(DriveApiPrefix))
       .withHeader(HeaderAccept, equalTo(ContentJson))
-      .withQueryParams(paramsWithNextPageToken.asJava)
+      .withQueryParams(toQueryParams(paramsWithNextPageToken))
       .willReturn(aJsonResponse().withBodyFile("folderContentResponsePage2.json")))
     stubFor(get(urlPathEqualTo(DriveApiPrefix))
       .withHeader(HeaderAccept, equalTo(ContentJson))
-      .withQueryParams(ExpFolderQueryParams.asJava)
+      .withQueryParams(toQueryParams(ExpFolderQueryParams))
       .withQueryParam("pageToken", absent())
       .willReturn(aJsonResponse().withBodyFile("folderContentResponsePage1.json")))
     val fs = new GoogleDriveFileSystem(createConfig())

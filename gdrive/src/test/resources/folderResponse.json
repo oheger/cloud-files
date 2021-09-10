@@ -8,7 +8,8 @@
       "name": "test",
       "parents": [
         "parent_id_OxrHyqtqWLAM7EY"
-      ]
+      ],
+      "trashed": false
     },
     {
       "appProperties": {
@@ -30,7 +31,9 @@
         "foo": "bar",
         "test": "true"
       },
-      "size": "323"
+      "size": "323",
+      "trashed": true,
+      "trashedTime": "2021-09-10T18:59:57.999Z"
     }
   ]
 }

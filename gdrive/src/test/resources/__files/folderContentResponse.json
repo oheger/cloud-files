@@ -8,7 +8,8 @@
       "name": "folder1",
       "parents": [
         "parent_id"
-      ]
+      ],
+      "trashed": false
     },
     {
       "createdTime": "2021-08-18T17:00:01.000Z",
@@ -21,7 +22,8 @@
       "parents": [
         "parent_id"
       ],
-      "size": "1001"
+      "size": "1001",
+      "trashed": false
     },
     {
       "createdTime": "2021-08-18T19:00:02.000Z",
@@ -31,7 +33,8 @@
       "name": "folder2",
       "parents": [
         "parent_id"
-      ]
+      ],
+      "trashed": false
     },
     {
       "createdTime": "2021-08-18T17:00:02.000Z",
@@ -44,7 +47,8 @@
       "parents": [
         "parent_id"
       ],
-      "size": "1002"
+      "size": "1002",
+      "trashed": false
     },
     {
       "createdTime": "2021-08-18T17:00:03.000Z",
@@ -57,7 +61,8 @@
       "parents": [
         "parent_id"
       ],
-      "size": "1003"
+      "size": "1003",
+      "trashed": false
     }
   ]
 }

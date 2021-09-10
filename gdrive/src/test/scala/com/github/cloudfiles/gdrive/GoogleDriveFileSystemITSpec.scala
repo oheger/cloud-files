@@ -439,6 +439,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
 
     val content = futureResult(runOp(fs.folderContent(TestFileID)))
     checkFolderContent(content, expFileCount = 4, expFolderCount = 3)
+    val trashedFolder = content.folders("folder_id-3")
+    trashedFolder.googleFile.trashed shouldBe true
+    trashedFolder.googleFile.trashedTime should be(Some(Instant.parse("2021-09-10T19:09:41.110Z")))
   }
 
   it should "download a file" in {

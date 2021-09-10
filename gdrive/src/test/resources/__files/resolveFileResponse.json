@@ -17,5 +17,6 @@
     "foo": "bar",
     "test": "true"
   },
-  "size": "323"
+  "size": "323",
+  "trashed": false
 }

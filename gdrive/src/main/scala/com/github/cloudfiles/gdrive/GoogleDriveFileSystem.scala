@@ -173,7 +173,7 @@ object GoogleDriveFileSystem {
     GoogleDriveJsonProtocol.WritableFile(name = Option(srcElement.name), properties = properties,
       appProperties = appProperties, mimeType = srcMimeType orElse optMimeType, parents = optParents,
       createdTime = Option(srcElement.createdAt), modifiedTime = Option(srcElement.lastModifiedAt),
-      description = srcElement.description)
+      description = srcElement.description, trashed = None, trashedTime = None)
   }
 
   /**

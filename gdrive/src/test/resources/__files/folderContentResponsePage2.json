@@ -8,7 +8,9 @@
       "name": "folder3",
       "parents": [
         "parent_id"
-      ]
+      ],
+      "trashed": true,
+      "trashedTime": "2021-09-10T19:09:41.110Z"
     },
     {
       "createdTime": "2021-08-18T17:00:04.000Z",
@@ -21,7 +23,8 @@
       "parents": [
         "parent_id"
       ],
-      "size": "1004"
+      "size": "1004",
+      "trashed": false
     }
   ]
 }

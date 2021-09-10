@@ -58,6 +58,8 @@ class GoogleDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTes
     file.fileProperties should be(expectedProperties)
     file.fileAppProperties should be(expectedAppProperties)
     file.description should be(Some("Description of test file."))
+    file.trashed shouldBe true
+    file.trashedTime should be(Some(Instant.parse("2021-09-10T18:59:57.999Z")))
   }
 
   it should "deserialize a folder resource" in {
@@ -73,6 +75,8 @@ class GoogleDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTes
     folder.fileProperties should have size 0
     folder.fileAppProperties should have size 0
     folder.description should be(empty)
+    folder.trashed shouldBe false
+    folder.trashedTime should be(None)
   }
 
   it should "read the token for the next page from a folder response" in {
@@ -94,7 +98,8 @@ class GoogleDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTes
       createdTime = Some(Instant.parse("2021-08-14T19:23:05Z")),
       modifiedTime = Some(Instant.parse("2021-08-14T19:23:22Z")),
       properties = Some(Map("test" -> "yes", "foo" -> "baz")),
-      appProperties = Some(Map("appTest" -> "yeah", "appFoo" -> "appBaz")))
+      appProperties = Some(Map("appTest" -> "yeah", "appFoo" -> "appBaz")),
+      trashed = Some(true), trashedTime = Some(Instant.parse("2021-09-10T18:41:57.365Z")))
     val expResult = readDataFile(resourceFile("/writableFile.json"))
 
     val json = file.toJson.toString()

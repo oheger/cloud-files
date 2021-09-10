@@ -53,6 +53,8 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
    * @param size          the size of the file
    * @param properties    optional properties assigned to this file
    * @param appProperties optional application-specific properties
+   * @param trashed       flag whether the file is in trash
+   * @param trashedTime   optional time when the file was moved to trash
    */
   case class File(id: String,
                   name: String,
@@ -63,7 +65,9 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
                   description: Option[String],
                   size: Option[String],
                   properties: Option[Map[String, String]],
-                  appProperties: Option[Map[String, String]]) {
+                  appProperties: Option[Map[String, String]],
+                  trashed: Boolean = false,
+                  trashedTime: Option[Instant] = None) {
     /**
      * Returns the size of this file as a ''Long'' value. The string-based size
      * from the original data is converted. In case of a folder, no size is
@@ -107,6 +111,8 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
    * @param description   the optional new description
    * @param properties    the optional new properties
    * @param appProperties the optional new application-specific properties
+   * @param trashed       the optional new trashed flag
+   * @param trashedTime   the optional new trashed time
    */
   case class WritableFile(name: Option[String],
                           mimeType: Option[String],
@@ -115,7 +121,9 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
                           modifiedTime: Option[Instant],
                           description: Option[String],
                           properties: Option[Map[String, String]],
-                          appProperties: Option[Map[String, String]])
+                          appProperties: Option[Map[String, String]],
+                          trashed: Option[Boolean] = None,
+                          trashedTime: Option[Instant] = None)
 
   /**
    * A data class describing the content of a folder with all its files.
@@ -167,8 +175,8 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
     override def write(obj: Instant): JsValue = JsString(obj.toString)
   }
 
-  implicit val fileFormat: RootJsonFormat[File] = jsonFormat10(File)
-  implicit val writableFileFormat: RootJsonFormat[WritableFile] = jsonFormat8(WritableFile)
+  implicit val fileFormat: RootJsonFormat[File] = jsonFormat12(File)
+  implicit val writableFileFormat: RootJsonFormat[WritableFile] = jsonFormat10(WritableFile)
   implicit val folderResponseFormat: RootJsonFormat[FolderResponse] = jsonFormat2(FolderResponse)
   implicit val fileReferenceFormat: RootJsonFormat[FileReference] = jsonFormat1(FileReference)
   implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat2(ResolveResponse)

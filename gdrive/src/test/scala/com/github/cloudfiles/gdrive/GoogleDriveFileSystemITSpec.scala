@@ -245,7 +245,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .withQueryParam("upload_id", equalTo(UploadID))
       .withHeader(HeaderLength, equalTo(TestFileContentLength.toString))
       .withRequestBody(equalTo(FileTestHelper.TestData))
-      .willReturn(aJsonResponse(status).withBodyFile("resolveFileResponse.json")))
+      .willReturn(aJsonResponse(status).withBodyFile("createFileResponse.json")))
   }
 
   /**
@@ -469,7 +469,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubFor(post(urlPathEqualTo(DriveApiPrefix))
       .withHeader(HeaderContent, equalTo(ContentJson))
       .withRequestBody(equalToFile(expectedProperties))
-      .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFolderResponse.json")))
+      .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("createFolderResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
     val folderID = futureResult(runOp(fs.createFolder(TestFileID, srcFolder)))

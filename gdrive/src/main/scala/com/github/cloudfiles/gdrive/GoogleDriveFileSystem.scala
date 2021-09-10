@@ -345,7 +345,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
         entity <- fileEntity(requestFile)
         request = HttpRequest(method = HttpMethods.POST, uri = Uri(fileResourcePrefix), headers = StdUpdateHeaders,
           entity = entity)
-        response <- executeQuery[GoogleDriveJsonProtocol.File](httpSender, request)
+        response <- executeQuery[GoogleDriveJsonProtocol.FileReference](httpSender, request)
       } yield response.id
   }
 
@@ -368,7 +368,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
           entity = entity)
         result <- sendUploadTriggerRequest(httpSender, request)
         uploadRequest <- createUploadRequest(result, file.size, content)
-        uploadResult <- executeQuery[GoogleDriveJsonProtocol.File](httpSender, uploadRequest)
+        uploadResult <- executeQuery[GoogleDriveJsonProtocol.FileReference](httpSender, uploadRequest)
       } yield uploadResult.id
   }
 

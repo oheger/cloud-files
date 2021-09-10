@@ -20,7 +20,7 @@ import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{Accept, Location, `Content-Type`}
+import akka.http.scaladsl.model.headers.{Accept, Location}
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
@@ -61,14 +61,8 @@ object GoogleDriveFileSystem {
   /** The header for accepting JSON responses. */
   private val AcceptJsonHeader = Accept(MediaRange(MediaTypes.`application/json`))
 
-  /** The header indicating a JSON request */
-  private val ContentJsonHeader = `Content-Type`(ContentTypes.`application/json`)
-
   /** A sequence with the standard headers to send for typical requests. */
   private val StdHeaders = List(AcceptJsonHeader)
-
-  /** A sequence with standard headers to send for typical update requests. */
-  private val StdUpdateHeaders = List(ContentJsonHeader)
 
   /**
    * Constant for the maximum page size supported by the Google Drive API.
@@ -343,8 +337,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
         optParents = Some(List(parent)))
       for {
         entity <- fileEntity(requestFile)
-        request = HttpRequest(method = HttpMethods.POST, uri = Uri(fileResourcePrefix), headers = StdUpdateHeaders,
-          entity = entity)
+        request = HttpRequest(method = HttpMethods.POST, uri = Uri(fileResourcePrefix), entity = entity)
         response <- executeQuery[GoogleDriveJsonProtocol.FileReference](httpSender, request)
       } yield response.id
   }
@@ -364,8 +357,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
 
       for {
         entity <- fileEntity(requestFile)
-        request = HttpRequest(method = HttpMethods.POST, uri = uploadTriggerUri, headers = StdUpdateHeaders,
-          entity = entity)
+        request = HttpRequest(method = HttpMethods.POST, uri = uploadTriggerUri, entity = entity)
         result <- sendUploadTriggerRequest(httpSender, request)
         uploadRequest <- createUploadRequest(result, file.size, content)
         uploadResult <- executeQuery[GoogleDriveJsonProtocol.FileReference](httpSender, uploadRequest)
@@ -394,8 +386,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
 
       for {
         entity <- fileEntity(requestFile)
-        request = HttpRequest(method = HttpMethods.PATCH, uri = uploadTriggerUri, headers = StdUpdateHeaders,
-          entity = entity)
+        request = HttpRequest(method = HttpMethods.PATCH, uri = uploadTriggerUri, entity = entity)
         uploadResult <- overwriteFileContent(httpSender, request, file.size, content)
       } yield uploadResult
   }
@@ -458,7 +449,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
         for {
           entity <- fileEntity(requestFile)
           request = HttpRequest(method = HttpMethods.PATCH, uri = Uri(s"$fileResourcePrefix/${element.id}"),
-            headers = StdUpdateHeaders, entity = entity)
+            entity = entity)
           response <- executeUpdate(httpSender, request)
         } yield response
     }

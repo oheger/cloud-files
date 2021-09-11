@@ -44,7 +44,7 @@ object GoogleDriveFileSystem {
    * Constant for the names of the fields that are requested for files.
    */
   private val FileFields = "id,name,size,createdTime,modifiedTime,mimeType,parents,properties,appProperties," +
-    "md5Checksum,description"
+    "md5Checksum,description,trashed,trashedTime"
 
   /**
    * Constant for the names of the fields that are requested when querying the
@@ -126,14 +126,28 @@ object GoogleDriveFileSystem {
    * Returns a map with all query parameters required to request the content of
    * the given folder.
    *
-   * @param folderID     the ID of the folder affected
-   * @param optPageToken the optional token pointing to the next page
+   * @param folderID       the ID of the folder affected
+   * @param optPageToken   the optional token pointing to the next page
+   * @param includeTrashed flag whether files in trash should be included
    * @return a map with the query parameters for this request
    */
-  private def folderContentQueryParams(folderID: String, optPageToken: Option[String]): Map[String, String] =
+  private def folderContentQueryParams(folderID: String, optPageToken: Option[String],
+                                       includeTrashed: Boolean): Map[String, String] =
     optPageToken.fold(QueryParamsFolderContent) { token =>
       QueryParamsFolderContent + (QueryParamNextPage -> token)
-    } + (QueryParamFilter -> s"'$folderID' in parents and trashed = false")
+    } + (QueryParamFilter -> trashFilter(s"'$folderID' in parents", includeTrashed))
+
+  /**
+   * Optionally adds a filter criterion to a query string depending on the
+   * flag whether trashed files should be included.
+   *
+   * @param query          the original query string
+   * @param includeTrashed the flag whether to include trashed files
+   * @return the resulting query string
+   */
+  private def trashFilter(query: String, includeTrashed: Boolean): String =
+    if (includeTrashed) query
+    else s"$query and trashed = false"
 
   /**
    * Creates a model object (file or folder) for the given Google File. The
@@ -212,12 +226,15 @@ object GoogleDriveFileSystem {
    * @param parent         the ID of the parent component
    * @param component      the name of the current component to resolve
    * @param tailComponents a sequence with remaining components
+   * @param includeTrashed flag whether to include trashed files
    * @return the query string for this resolve operation
    */
-  private def resolveQuery(parent: String, component: String, tailComponents: Seq[String]): String = {
-    val query = s"'$parent' in parents and trashed = false and name = '$component'"
-    if (tailComponents.isEmpty) query
+  private def resolveQuery(parent: String, component: String, tailComponents: Seq[String], includeTrashed: Boolean):
+  String = {
+    val query = s"'$parent' in parents and name = '$component'"
+    val folderQuery = if (tailComponents.isEmpty) query
     else s"$query and mimeType = '$MimeTypeFolder'"
+    trashFilter(folderQuery, includeTrashed)
   }
 }
 
@@ -267,19 +284,38 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   override def patchFile(source: Model.File[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFile =
     patchElement(source, Some(source.size), spec)(GoogleDriveModel.GoogleDriveFile)
 
-  override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[String] = {
+  /**
+   * Resolves the ID of an element (file or folder) that is specified by its
+   * path, allowing control whether to include trashed files. This is
+   * analogous to the overloaded function, but instead of using the
+   * ''includeTrashed'' flag from the configuration, the flag can be specified
+   * explicitly.
+   *
+   * @param path           the path to resolve
+   * @param includeTrashed the flag whether to include trashed files
+   * @param system         the actor system
+   * @return the ''Operation'' to resolve the path
+   */
+  def resolvePath(path: String, includeTrashed: Boolean)(implicit system: ActorSystem[_]): Operation[String] = {
     val components = if (path.isEmpty) Seq.empty
     else UriEncodingHelper.splitAndDecodeComponents(path)
-    resolvePathComponents(components)
+    resolvePathComponents(components, includeTrashed)
   }
 
-  override def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[String] =
-    Operation { httpSender =>
+  override def resolvePath(path: String)(implicit system: ActorSystem[_]): Operation[String] =
+    resolvePath(path, config.includeTrashed)
+
+  def resolvePathComponents(components: Seq[String], includeTrashed: Boolean)(implicit system: ActorSystem[_]):
+  Operation[String] = Operation {
+    httpSender =>
       val fullComponents = config.optRootPath.fold(components.toList) { _ =>
         rootPathComponents ::: components.toList
       }
-      resolvePathComponent(httpSender, RootFolder, fullComponents)
-    }
+      resolvePathComponent(httpSender, RootFolder, fullComponents, includeTrashed)
+  }
+
+  override def resolvePathComponents(components: Seq[String])(implicit system: ActorSystem[_]): Operation[String] =
+    resolvePathComponents(components, config.includeTrashed)
 
   override def rootID(implicit system: ActorSystem[_]): Operation[String] = config.optRootPath match {
     case Some(_) => resolvePathComponents(Seq.empty)
@@ -299,13 +335,25 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
       case _ => throw new IllegalArgumentException(s"Could not resolve element '$id' to a folder; it is a file.")
     }
 
-  override def folderContent(id: String)(implicit system: ActorSystem[_]):
+  /**
+   * Returns an object describing the content of the folder with the given ID,
+   * allowing control whether trashed files should be included. This is
+   * analogous to the overloaded function, but instead of using the
+   * ''includeTrashed'' flag from the configuration, the flag can be specified
+   * explicitly.
+   *
+   * @param id             the ID of the folder
+   * @param includeTrashed flag whether to include trashed files
+   * @param system         the actor system
+   * @return the ''Operation'' returning the content of this folder
+   */
+  def folderContent(id: String, includeTrashed: Boolean)(implicit system: ActorSystem[_]):
   Operation[Model.FolderContent[String, GoogleDriveModel.GoogleDriveFile, GoogleDriveModel.GoogleDriveFolder]] =
     Operation { httpSender =>
 
       def processPage(files: List[GoogleDriveJsonProtocol.File], nextToken: Option[String]):
       Future[List[GoogleDriveJsonProtocol.File]] = {
-        val uri = Uri(fileResourcePrefix).withQuery(Uri.Query(folderContentQueryParams(id, nextToken)))
+        val uri = Uri(fileResourcePrefix).withQuery(Uri.Query(folderContentQueryParams(id, nextToken, includeTrashed)))
         val request = HttpRequest(uri = uri, headers = StdHeaders)
         executeQuery[GoogleDriveJsonProtocol.FolderResponse](httpSender, request) flatMap { response =>
           val nextFiles = files ++ response.files
@@ -329,6 +377,10 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
         Model.FolderContent(id, files, folders)
       }
     }
+
+  override def folderContent(id: String)(implicit system: ActorSystem[_]):
+  Operation[Model.FolderContent[String, GoogleDriveModel.GoogleDriveFile, GoogleDriveModel.GoogleDriveFolder]] =
+    folderContent(id, config.includeTrashed)
 
   override def createFolder(parent: String, folder: Model.Folder[String])(implicit system: ActorSystem[_]):
   Operation[String] = Operation {
@@ -564,20 +616,22 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
    * component of a path to be resolved until the full path has been processed
    * or the remaining components cannot be resolved.
    *
-   * @param httpSender the actor for sending HTTP requests
-   * @param parent     the current parent ID
-   * @param components the remaining components to resolve
-   * @param system     the actor system
+   * @param httpSender     the actor for sending HTTP requests
+   * @param parent         the current parent ID
+   * @param components     the remaining components to resolve
+   * @param includeTrashed flag whether to include trashed files
+   * @param system         the actor system
    * @return a ''Future'' with the ID of the resolved path
    */
   private def resolvePathComponent(httpSender: ActorRef[HttpRequestSender.HttpCommand], parent: String,
-                                   components: List[String])(implicit system: ActorSystem[_]): Future[String] =
+                                   components: List[String], includeTrashed: Boolean)
+                                  (implicit system: ActorSystem[_]): Future[String] =
     components match {
       case h :: t =>
         val queryParams = Map(QueryParamFields -> ResolveFields, QueryParamPageSize -> MaxPageSize,
-          QueryParamFilter -> resolveQuery(parent, h, t))
+          QueryParamFilter -> resolveQuery(parent, h, t, includeTrashed))
         resolvePathComponentQuery(httpSender, queryParams, Nil, None) flatMap { files =>
-          resolvePathComponentAlternatives(httpSender, h, t, files)
+          resolvePathComponentAlternatives(httpSender, h, t, files, includeTrashed)
         }
 
       case _ => Future.successful(parent)
@@ -592,18 +646,21 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
    * @param currentComponent    the name of the current path component
    * @param remainingComponents the remaining components to resolve
    * @param files               the files in the current folder
+   * @param includeTrashed      flag whether to include trashed files
    * @param system              the actor system
    * @return a ''Future'' with the ID of the resolved path
    */
   private def resolvePathComponentAlternatives(httpSender: ActorRef[HttpRequestSender.HttpCommand],
                                                currentComponent: String,
                                                remainingComponents: List[String],
-                                               files: List[GoogleDriveJsonProtocol.FileReference])
+                                               files: List[GoogleDriveJsonProtocol.FileReference],
+                                               includeTrashed: Boolean)
                                               (implicit system: ActorSystem[_]): Future[String] =
     files match {
       case h :: t =>
-        resolvePathComponent(httpSender, h.id, remainingComponents) recoverWith {
-          case _ => resolvePathComponentAlternatives(httpSender, currentComponent, remainingComponents, t)
+        resolvePathComponent(httpSender, h.id, remainingComponents, includeTrashed) recoverWith {
+          case _ =>
+            resolvePathComponentAlternatives(httpSender, currentComponent, remainingComponents, t, includeTrashed)
         }
 
       case Nil =>

@@ -38,11 +38,14 @@ object GoogleDriveConfig {
  * implementation can be configured. Configuration is optional, meaningful
  * default values are set for all of the properties.
  *
- * @param serverUri   the root URI of the GoogleDrive API
- * @param optRootPath an optional root path; if defined, all paths are resolved
- *                    relatively to this root path
- * @param timeout     the timeout for server requests
+ * @param serverUri      the root URI of the GoogleDrive API
+ * @param optRootPath    an optional root path; if defined, all paths are
+ *                       resolved relatively to this root path
+ * @param timeout        the timeout for server requests
+ * @param includeTrashed flag whether files in the trash should be included in
+ *                       query results
  */
 case class GoogleDriveConfig(serverUri: String = GoogleDriveConfig.GoogleDriveServerUri,
                              optRootPath: Option[String] = None,
-                             timeout: Timeout = GoogleDriveConfig.DefaultTimeout)
+                             timeout: Timeout = GoogleDriveConfig.DefaultTimeout,
+                             includeTrashed: Boolean = false)

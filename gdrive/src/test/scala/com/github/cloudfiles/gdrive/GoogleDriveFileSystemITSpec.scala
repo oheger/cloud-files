@@ -42,7 +42,7 @@ object GoogleDriveFileSystemITSpec {
 
   /** The expected fields that are requested for a file. */
   private val ExpFileFields = "id,name,size,createdTime,modifiedTime,mimeType,parents,properties,appProperties," +
-    "md5Checksum,description"
+    "md5Checksum,description,trashed,trashedTime"
 
   /** The expected fields that are requested for a folder's content. */
   private val ExpFolderFields = s"nextPageToken,files($ExpFileFields)"
@@ -210,13 +210,15 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
   /**
    * Convenience function to create a ''GoogleDriveConfig'' with defaults.
    *
-   * @param timeout the timeout
-   * @param optRoot an optional root path
+   * @param timeout        the timeout
+   * @param optRoot        an optional root path
+   * @param includeTrashed flag to included trashed files
    * @return the initialized ''GoogleDriveConfig''
    */
-  private def createConfig(timeout: Timeout = GoogleDriveConfig.DefaultTimeout, optRoot: Option[String] = None):
+  private def createConfig(timeout: Timeout = GoogleDriveConfig.DefaultTimeout, optRoot: Option[String] = None,
+                           includeTrashed: Boolean = false):
   GoogleDriveConfig =
-    GoogleDriveConfig(timeout = timeout, optRootPath = optRoot,
+    GoogleDriveConfig(timeout = timeout, optRootPath = optRoot, includeTrashed = includeTrashed,
       serverUri = UriEncodingHelper.withTrailingSeparator(serverBaseUri))
 
   /**
@@ -265,22 +267,26 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
   /**
    * Helper function to stub a request to resolve a path component.
    *
-   * @param parent       the parent folder
-   * @param fileName     the name of the file to resolve
-   * @param response     the response to return
-   * @param optPageToken optional token for the next page
-   * @param foldersOnly  flag whether the request should filter for folders
+   * @param parent         the parent folder
+   * @param fileName       the name of the file to resolve
+   * @param response       the response to return
+   * @param optPageToken   optional token for the next page
+   * @param foldersOnly    flag whether the request should filter for folders
+   * @param includeTrashed flag whether to include trashed files
    */
   private def stubResolveRequest(parent: String, fileName: String, response: String,
-                                 optPageToken: Option[String] = None, foldersOnly: Boolean = false): Unit = {
-    val filterParam = s"'$parent' in parents and trashed = false and name = '$fileName'"
+                                 optPageToken: Option[String] = None, foldersOnly: Boolean = false,
+                                 includeTrashed: Boolean = false): Unit = {
+    val filterParam = s"'$parent' in parents and name = '$fileName'"
     val filterParamWithFolders = if (foldersOnly) filterParam + " and mimeType = 'application/vnd.google-apps.folder'"
     else filterParam
+    val filterParamsWithTrash = if (includeTrashed) filterParamWithFolders
+    else filterParamWithFolders + " and trashed = false"
     stubFor(get(urlPathEqualTo(DriveApiPrefix))
       .withHeader(HeaderAccept, equalTo(ContentJson))
       .withQueryParam("fields", equalTo(ExpResolveFields))
       .withQueryParam("pageSize", equalTo("1000"))
-      .withQueryParam("q", equalTo(filterParamWithFolders))
+      .withQueryParam("q", equalTo(filterParamsWithTrash))
       .withQueryParam("pageToken", optPageToken.fold(absent())(token => equalTo(token)))
       .willReturn(aJsonResponse().withBody(response)))
   }
@@ -839,6 +845,52 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     val fs = new GoogleDriveFileSystem(createConfig(optRoot = Some("the/root%20path")))
 
     val id = futureResult(runOp(fs.resolvePath("/data")))
+    id should be(TestFileID)
+  }
+
+  it should "query the content of a folder if trashed files should be included" in {
+    val queryParams = ExpFolderQueryParams + ("q" -> equalTo(s"'$TestFileID' in parents"))
+    stubFor(get(urlPathEqualTo(DriveApiPrefix))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
+      .withQueryParams(toQueryParams(queryParams))
+      .willReturn(aJsonResponse().withBodyFile("folderContentResponse.json")))
+    val fs = new GoogleDriveFileSystem(createConfig(includeTrashed = true))
+
+    val content = futureResult(runOp(fs.folderContent(TestFileID)))
+    checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+  }
+
+  it should "query the content of a folder, allowing to override the includeTrashed flag" in {
+    stubFor(get(urlPathEqualTo(DriveApiPrefix))
+      .withHeader(HeaderAccept, equalTo(ContentJson))
+      .withQueryParams(toQueryParams(ExpFolderQueryParams))
+      .willReturn(aJsonResponse().withBodyFile("folderContentResponse.json")))
+    val fs = new GoogleDriveFileSystem(createConfig(includeTrashed = true))
+
+    val content = futureResult(runOp(fs.folderContent(TestFileID, includeTrashed = false)))
+    checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+  }
+
+  it should "resolve a path if trashed files should be included" in {
+    stubResolveRequest("root", "my", resolveResponse(generateResolvedIDs("id1", "id_other")),
+      foldersOnly = true, includeTrashed = true)
+    stubResolveRequest("id1", "test", resolveResponse(generateResolvedIDs("id2")),
+      foldersOnly = true, includeTrashed = true)
+    stubResolveRequest("id2", "file.txt", resolveResponse(generateResolvedIDs(TestFileID)),
+      includeTrashed = true)
+    val fs = new GoogleDriveFileSystem(createConfig(includeTrashed = true))
+
+    val id = futureResult(runOp(fs.resolvePathComponents(List("my", "test", "file.txt"))))
+    id should be(TestFileID)
+  }
+
+  it should "resolve a path, allowing to override the includeTrashed flag" in {
+    val FileName = "SearchedFile.txt"
+    val response = resolveResponse(generateResolvedIDs(TestFileID, "anotherID", "oneMoreID"))
+    stubResolveRequest("root", FileName, response)
+    val fs = new GoogleDriveFileSystem(createConfig(includeTrashed = true))
+
+    val id = futureResult(runOp(fs.resolvePath(FileName, includeTrashed = false)))
     id should be(TestFileID)
   }
 }

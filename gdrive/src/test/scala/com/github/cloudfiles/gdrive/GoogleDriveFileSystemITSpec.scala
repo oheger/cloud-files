@@ -893,4 +893,20 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     val id = futureResult(runOp(fs.resolvePath(FileName, includeTrashed = false)))
     id should be(TestFileID)
   }
+
+  it should "update an element based on a WritableFile" in {
+    val updateSpec = GoogleDriveJsonProtocol.WritableFile(name = None, mimeType = None, parents = None,
+      createdTime = None, modifiedTime = Some(Instant.parse("2021-08-28T19:05:55.347Z")),
+      description = Some("new description"),
+      properties = Some(Map("newProperty" -> "newValue")),
+      appProperties = Some(Map("newAppProperty" -> "anotherNewValue")))
+    stubFor(patch(urlPathEqualTo(filePath(TestFileID)))
+      .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFileResponse.json")))
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    futureResult(runOp(fs.updateElement(TestFileID, updateSpec)))
+    verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
+      .withHeader(HeaderContent, equalTo(ContentJson))
+      .withRequestBody(equalToFile(updateSpec)))
+  }
 }

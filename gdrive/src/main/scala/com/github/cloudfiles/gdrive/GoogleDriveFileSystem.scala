@@ -395,7 +395,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   }
 
   override def updateFolder(folder: Model.Folder[String])(implicit system: ActorSystem[_]): Operation[Unit] =
-    updateElement(folder)
+    updateElement(folder.id, createWritableFile(folder))
 
   override def deleteFolder(folderID: String)(implicit system: ActorSystem[_]): Operation[Unit] =
     deleteElement(folderID)
@@ -417,7 +417,7 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   }
 
   override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
-    updateElement(file)
+    updateElement(file.id, createWritableFile(file))
 
   override def updateFileContent(fileID: String, size: Long, content: Source[ByteString, Any])
                                 (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
@@ -456,6 +456,30 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
     deleteElement(fileID)
 
   /**
+   * Updates the metadata of an element (file or folder) according to the given
+   * ''WritableFile'' object. This function can be easier to use than the
+   * default update() functions offered by the ''FileSystem'' trait, as a
+   * ''WritableFile'' object allows specifying the exact properties that should
+   * be updated.
+   *
+   * @param id     the ID of the element to update
+   * @param spec   a ''WritableFile'' with the properties to update
+   * @param system the actor system
+   * @return the ''Operation'' that updates the element
+   */
+  def updateElement(id: String, spec: GoogleDriveJsonProtocol.WritableFile)(implicit system: ActorSystem[_]):
+  Operation[Unit] = Operation {
+    httpSender =>
+      for {
+        entity <- fileEntity(spec)
+        request = HttpRequest(method = HttpMethods.PATCH, uri = Uri(s"$fileResourcePrefix/$id"),
+          entity = entity)
+        response <- executeUpdate(httpSender, request)
+      } yield response
+  }
+
+
+  /**
    * Returns an operation that requests the Google File with the given ID and
    * converts it to an [[GoogleDriveModel.GoogleDriveElement]], based on its
    * mime type.
@@ -484,27 +508,6 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
       val deleteRequest = HttpRequest(method = HttpMethods.DELETE, uri = s"$fileResourcePrefix/$id")
       executeUpdate(httpSender, deleteRequest)
   }
-
-  /**
-   * Performs an update of a file or folder based on the given element. A PATCH
-   * request is sent for the affected element that lists the properties to be
-   * updated.
-   *
-   * @param element the element to be updated
-   * @param system  the actor system
-   * @return a ''Future'' with the outcome of the operation
-   */
-  private def updateElement(element: Model.Element[String])(implicit system: ActorSystem[_]): Operation[Unit] =
-    Operation {
-      httpSender =>
-        val requestFile = createWritableFile(element)
-        for {
-          entity <- fileEntity(requestFile)
-          request = HttpRequest(method = HttpMethods.PATCH, uri = Uri(s"$fileResourcePrefix/${element.id}"),
-            entity = entity)
-          response <- executeUpdate(httpSender, request)
-        } yield response
-    }
 
   /**
    * Helper function to execute an HTTP request that is expected to yield a

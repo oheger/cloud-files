@@ -24,6 +24,9 @@ of the CloudFiles library.
   changed: The parameters for the discard mode and the request data have
   changed their position (because the discard mode seems to be used more
   frequently). The request data now has the default value *null*.
+* There is a new module _gdrive_ with a `FileSystem` implementation for the
+  https://developers.google.com/drive/api/v3/reference[Google Drive API]. Thus,
+  files and folders stored in Google Drive can now be manipulated.
 
 == Release 0.2 (2021-01-10)
 

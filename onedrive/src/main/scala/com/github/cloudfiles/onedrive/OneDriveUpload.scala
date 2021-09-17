@@ -217,10 +217,8 @@ private object OneDriveUpload {
           val chunkEnd = math.min(bytesUploaded + config.uploadChunkSize, fileSize) - 1
           log.debug("Uploading chunk {}-{}/{} to {}.", bytesUploaded, chunkEnd, fileSize, uploadUri)
           val dataSource = new UploadRequestSource(config, streamCoordinator)
-          val request = HttpRequest(method = HttpMethods.PUT, uri = uploadUri,
-            headers = List(ContentRangeHeader.fromChunk(bytesUploaded, chunkEnd, fileSize)),
-            entity = HttpEntity(ContentTypes.`application/octet-stream`, chunkEnd - bytesUploaded + 1,
-              Source.fromGraph(dataSource)))
+          val request = createUploadRequest(uploadUri, bytesUploaded, chunkEnd, fileSize,
+            Source.fromGraph(dataSource))
           bytesUploaded += config.uploadChunkSize
           request
         }
@@ -434,7 +432,7 @@ private object OneDriveUpload {
     val requestSource = createUploadRequestsSource(config, fileSize, fileSource, uploadUri)
     val sink = Sink.last[UploadChunkResponse]
     requestSource.mapAsync(1) { req =>
-      HttpRequestSender.sendRequestSuccess(httpSender, req, null)
+      HttpRequestSender.sendRequestSuccess(httpSender, req)
     }.mapAsync(1) { result =>
       Unmarshal(result.response).to[UploadChunkResponse]
     }.runWith(sink)
@@ -448,7 +446,9 @@ private object OneDriveUpload {
 
   /**
    * Generates a source that produces HTTP requests to upload the single chunks
-   * of the file which is the target of this upload operation.
+   * of the file which is the target of this upload operation. If the file fits
+   * into a single chunk, a simple source is created that yields only a single
+   * request. Otherwise, the complex chunking logic has to be applied.
    *
    * @param config     the OneDrive configuration
    * @param fileSize   the size of the file to be uploaded
@@ -462,5 +462,23 @@ private object OneDriveUpload {
                                          uploadUri: Uri)
                                         (implicit ec: ExecutionContext, system: ActorSystem[_]):
   Source[HttpRequest, Any] =
-    fileSource.via(new UploadBytesToRequestFlow(config, uploadUri, fileSize))
+    if (fileSize <= config.uploadChunkSize)
+      Source.single(createUploadRequest(uploadUri, 0, fileSize - 1, fileSize, fileSource))
+    else fileSource.via(new UploadBytesToRequestFlow(config, uploadUri, fileSize))
+
+  /**
+   * Creates a request to upload a specific chunk of data of a file.
+   *
+   * @param uploadUri  the upload URI
+   * @param chunkStart the start position of the current chunk
+   * @param chunkEnd   the end position of the current chunk
+   * @param totalSize  the total file size
+   * @param dataSource the source with the binary data of the chunk
+   * @return the upload request for this chunk
+   */
+  private def createUploadRequest(uploadUri: Uri, chunkStart: Long, chunkEnd: Long, totalSize: Long,
+                                  dataSource: Source[ByteString, Any]): HttpRequest =
+    HttpRequest(method = HttpMethods.PUT, uri = uploadUri,
+      headers = List(ContentRangeHeader.fromChunk(chunkStart, chunkEnd, totalSize)),
+      entity = HttpEntity(ContentTypes.`application/octet-stream`, chunkEnd - chunkStart + 1, dataSource))
 }

@@ -47,6 +47,9 @@ object OneDriveFileSystem {
   /** The suffix to request an upload session for a file. */
   private val UploadSessionSuffix = "/createUploadSession"
 
+  /** The suffix to address the content of a file. */
+  private val ContentSuffix = "/content"
+
   /** A query parameter to select only the ID field of a drive item. */
   private val SelectIDParam = "select=id"
 
@@ -253,28 +256,45 @@ class OneDriveFileSystem(val config: OneDriveConfig)
     deleteItem(folderID)
 
   override def createFile(parent: String, file: Model.File[String], content: Source[ByteString, Any])
-                         (implicit system: ActorSystem[_]): Operation[String] =
-    uploadFileWithProperties(s"${itemUri(parent)}:/${UriEncodingHelper.encode(file.name)}:$UploadSessionSuffix",
-      file, content)
+                         (implicit system: ActorSystem[_]): Operation[String] = {
+    if (file.size <= 0) {
+      val uploadUri = s"${itemUri(parent)}:/${UriEncodingHelper.encode(file.name)}:"
+      for {
+        id <- emptyUpload(uploadUri)
+        _ <- updateElement(file, Some(id))
+      } yield id
+    } else
+      uploadFileWithProperties(s"${itemUri(parent)}:/${UriEncodingHelper.encode(file.name)}:$UploadSessionSuffix",
+        file, content)
+  }
 
   override def updateFile(file: Model.File[String])(implicit system: ActorSystem[_]): Operation[Unit] =
     updateElement(file)
 
   override def updateFileContent(fileID: String, size: Long, content: Source[ByteString, Any])
-                                (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
-    httpSender =>
-      val uri = s"${itemUri(fileID)}$UploadSessionSuffix"
-      val uploadSessionRequest = jsonRequest(uri = uri, method = HttpMethods.POST)
-      uploadFile(uploadSessionRequest, size, content, httpSender) map (_ => ())
+                                (implicit system: ActorSystem[_]): Operation[Unit] = {
+    val uploadOp = if (size > 0)
+      Operation { httpSender =>
+        val uri = s"${itemUri(fileID)}$UploadSessionSuffix"
+        val uploadSessionRequest = jsonRequest(uri = uri, method = HttpMethods.POST)
+        uploadFile(uploadSessionRequest, size, content, httpSender)
+      } else emptyUpload(itemUri(fileID))
+    uploadOp map (_ => ())
   }
 
   override def updateFileAndContent(file: Model.File[String], content: Source[ByteString, Any])
-                                   (implicit system: ActorSystem[_]): Operation[Unit] =
-    uploadFileWithProperties(s"${itemUri(file.id)}$UploadSessionSuffix", file, content) map (_ => ())
+                                   (implicit system: ActorSystem[_]): Operation[Unit] = {
+    if (file.size > 0)
+      uploadFileWithProperties(s"${itemUri(file.id)}$UploadSessionSuffix", file, content) map (_ => ())
+    else for {
+      _ <- emptyUpload(itemUri(file.id))
+      _ <- updateElement(file)
+    } yield ()
+  }
 
   override def downloadFile(fileID: String)(implicit system: ActorSystem[_]): Operation[HttpEntity] = Operation {
     httpSender =>
-      val downloadUriRequest = HttpRequest(uri = itemUri(fileID) + "/content")
+      val downloadUriRequest = HttpRequest(uri = itemUri(fileID) + ContentSuffix)
       for {
         uriResult <- executeRequest(httpSender, downloadUriRequest)
         downloadResult <- sendDownloadRequest(httpSender, uriResult)
@@ -398,19 +418,37 @@ class OneDriveFileSystem(val config: OneDriveConfig)
    * associated with the element get updated.
    *
    * @param element the element to be updated
+   * @param optID   an optional ID overriding the one of the element
    * @param system  the actor system
    * @return the operation to update this element
    */
-  private def updateElement(element: Model.Element[String])(implicit system: ActorSystem[_]):
-  Operation[Unit] = Operation {
+  private def updateElement(element: Model.Element[String], optID: Option[String] = None)
+                           (implicit system: ActorSystem[_]): Operation[Unit] = Operation {
     httpSender =>
       val writableItem = toWritableItem(itemFor(element))
       for {
         entity <- prepareJsonRequestEntity(writableItem)
-        request = jsonRequest(method = HttpMethods.PATCH, uri = itemUri(element.id), entity = entity)
+        request = jsonRequest(method = HttpMethods.PATCH, uri = itemUri(optID getOrElse element.id), entity = entity)
         _ <- executeJsonRequest[DriveItem](httpSender, request)
       } yield ()
   }
+
+  /**
+   * Returns an operation that executes an empty upload to the given URI. This
+   * is needed for files of size 0, which cannot be uploaded via the standard
+   * mechanism.
+   *
+   * @param uploadPath the path where to upload the file
+   * @param system     the actor system
+   * @return the operation to do the empty upload
+   */
+  private def emptyUpload(uploadPath: String)(implicit system: ActorSystem[_]): Operation[String] =
+    Operation { httpSender =>
+      val entity = HttpEntity(ContentTypes.`application/octet-stream`, 0, Source.empty)
+      val uploadRequest = HttpRequest(method = HttpMethods.PUT, uri = uploadPath + ContentSuffix,
+        headers = StdHeaders, entity = entity)
+      executeJsonRequest[DriveItem](httpSender, uploadRequest) map (_.id)
+    }
 
   /**
    * Sends the request to actually download a file. File downloads are a

@@ -162,7 +162,7 @@ object HttpRequestSender {
    *
    * @param response the failed response
    */
-  final case class FailedResponseException(response: HttpResponse) extends Exception
+  final case class FailedResponseException(response: HttpResponse) extends Exception(response.status.toString())
 
   /**
    * An internal message class to process responses when they arrive from the

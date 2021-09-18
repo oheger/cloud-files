@@ -138,4 +138,12 @@ class HttpRequestSenderSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLi
     result.ensureResponseEntityDiscarded() should be(result)
     verify(entity, never()).discardBytes()
   }
+
+  "FailedResponseException" should "initialize the exception message with the response status" in {
+    val response = HttpResponse(status = StatusCodes.BadRequest)
+
+    val exception = FailedResponseException(response)
+    exception.getMessage should include(response.status.value)
+    exception.getMessage should include(response.status.reason())
+  }
 }

@@ -27,6 +27,9 @@ of the CloudFiles library.
 * There is a new module _gdrive_ with a `FileSystem` implementation for the
   https://developers.google.com/drive/api/v3/reference[Google Drive API]. Thus,
   files and folders stored in Google Drive can now be manipulated.
+* Fixed a bug in the OneDrive FileSystem implementation related to files with a
+  size of 0. Such files could not be uploaded, causing file create or update
+  operations to fail.
 
 == Release 0.2 (2021-01-10)
 

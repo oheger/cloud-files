@@ -17,10 +17,11 @@
 package com.github.cloudfiles.webdav
 
 import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.{HttpResponse, StatusCode, Uri}
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
 import com.github.cloudfiles.core.Model
+import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.cloudfiles.core.http.UriEncodingHelper
 import org.slf4j.LoggerFactory
 
@@ -31,7 +32,7 @@ import java.time.temporal.TemporalQuery
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-import scala.xml.{Node, NodeSeq, XML}
+import scala.xml.{Elem, Node, NodeSeq, XML}
 
 object DavParser {
   /**
@@ -79,12 +80,21 @@ object DavParser {
   /** Name of the XML is collection element. */
   private val ElemCollection = "collection"
 
+  /** Name of the XML status element. */
+  private val ElemStatus = "status"
+
   /**
    * A set with element attributes that are directly accessible from properties
    * of a folder or file. These are filtered out from the object with
    * additional attributes.
    */
   private val StandardAttributes = Set(AttrCreatedAt, AttrModifiedAt, AttrName, AttrSize)
+
+  /**
+   * A regular expression to extract the status code from an XML status
+   * element.
+   */
+  private val RegStatus = """.*\s(\d+)\s.*""".r
 
   /** The logger. */
   private val log = LoggerFactory.getLogger(classOf[DavParser])
@@ -148,6 +158,47 @@ object DavParser {
     } yield elem
 
   /**
+   * Parses a multi-status response and extracts the single status values
+   * contained therein.
+   *
+   * @param xml the XML string with the multi-status response
+   * @param ec  the execution context
+   * @return a ''Future'' with the extracted status codes
+   */
+  private def parseMultiStatusXml(xml: ByteString)(implicit ec: ExecutionContext): Future[Iterable[StatusCode]] =
+    Future.sequence(parseStatusCodes(parseResponses(xml) \ ElemPropStat))
+
+  /**
+   * Parses the single status codes elements contained in a multi-status
+   * response and returns a collection with the future results.
+   *
+   * @param propStats the sequence of ''propstat'' nodes to parse
+   * @return a collection with the future parsed status codes
+   */
+  private def parseStatusCodes(propStats: NodeSeq): Iterable[Future[StatusCode]] =
+    propStats.map { node =>
+      elemText(node, ElemStatus) match {
+        case RegStatus(code) =>
+          Future.fromTry(Try(StatusCode.int2StatusCode(code.toInt)))
+        case t =>
+          Future.failed(new IllegalStateException(s"Invalid HTTP status in multi-status response: '$t'"))
+      }
+    }
+
+  /**
+   * Checks whether all the status codes of a multi-status response are
+   * successful. If so, a successful ''Future'' is returned; otherwise an
+   * exception for the first failed response status is generated.
+   *
+   * @param codes the codes to be checked
+   * @return a ''Future'' with the outcome of the check
+   */
+  private def checkMultiStatusCodes(codes: Iterable[StatusCode]): Future[Unit] =
+    codes.find(_.isFailure()).map { code =>
+      FailedResponseException(HttpResponse(status = code))
+    }.fold(Future.successful(()))(Future.failed(_))
+
+  /**
    * Reads the source from the response of a folder request completely and
    * returns the resulting ''ByteString''.
    *
@@ -168,10 +219,18 @@ object DavParser {
    * @param xml the XML response from the server
    * @return a sequence with the response elements
    */
-  private def parseResponses(xml: ByteString): NodeSeq = {
+  private def parseResponses(xml: ByteString): NodeSeq =
+    parseXml(xml) \ ElemResponse
+
+  /**
+   * Parses a ''ByteString'' to an XML element.
+   *
+   * @param xml the XML string
+   * @return the resulting ''Elem''
+   */
+  private def parseXml(xml: ByteString): Elem = {
     val xmlStream = new ByteArrayInputStream(xml.toArray)
-    val elem = XML.load(xmlStream)
-    elem \ ElemResponse
+    XML.load(xmlStream)
   }
 
   /**
@@ -371,5 +430,26 @@ private class DavParser(optDescriptionKey: Option[DavModel.AttributeKey] = None)
       xml <- readSource(source)
       elem <- Future.fromTry(parseElementXml(xml, optDescriptionKey))
     } yield elem
+  }
+
+  /**
+   * Parses a response from a WebDav server that contains a multi-status
+   * document. This function does not actually extract any data from the
+   * document, but only checks whether all operation results encoded in it
+   * indicate success. If this is the case, result is a successful ''Future'';
+   * otherwise, the ''Future'' fails with a ''FailedResponseException'' with
+   * the first non-success status code that was encountered.
+   *
+   * @param source the source with the response from the server
+   * @param system the actor system
+   * @return a ''Future'' indicating whether the response is successful
+   */
+  def parseMultiStatus(source: Source[ByteString, Any])(implicit system: ActorSystem[_]): Future[Unit] = {
+    implicit val ec: ExecutionContext = system.executionContext
+    for {
+      xml <- readSource(source)
+      codes <- parseMultiStatusXml(xml)
+      check <- checkMultiStatusCodes(codes)
+    } yield check
   }
 }

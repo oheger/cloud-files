@@ -17,9 +17,10 @@
 package com.github.cloudfiles.webdav
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.{StatusCodes, Uri}
 import akka.stream.scaladsl.{FileIO, Source}
 import akka.util.ByteString
+import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.cloudfiles.webdav.DavModel.AttributeKey
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -212,5 +213,46 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val parser = new DavParser()
 
     expectFailedFuture[Throwable](parser.parseElement(source))
+  }
+
+  it should "parse a successful multi-status response" in {
+    val testResponse = resourceFile("/__files/multi_status_success.xml")
+    val source = FileIO.fromPath(testResponse)
+    val parser = new DavParser
+
+    futureResult(parser.parseMultiStatus(source))
+  }
+
+  it should "parse a failed multi-status response" in {
+    val testResponse = resourceFile("/__files/multi_status_failed.xml")
+    val source = FileIO.fromPath(testResponse)
+    val parser = new DavParser
+
+    val exception = expectFailedFuture[FailedResponseException](parser.parseMultiStatus(source))
+    exception.response.status should be(StatusCodes.Conflict)
+  }
+
+  it should "handle an invalid status code in a multi-status response" in {
+    val testResponse = resourceFile("/__files/multi_status_invalid.xml")
+    val source = FileIO.fromPath(testResponse)
+    val parser = new DavParser
+
+    val exception = expectFailedFuture[IllegalStateException](parser.parseMultiStatus(source))
+    exception.getMessage should include("an_invalid_response_code")
+  }
+
+  it should "handle an empty multi-status response" in {
+    val testResponse = resourceFile("/__files/multi_status_empty.xml")
+    val source = FileIO.fromPath(testResponse)
+    val parser = new DavParser
+
+    futureResult(parser.parseMultiStatus(source))
+  }
+
+  it should "handle a non XML multi-status response" in {
+    val source = Source.single(ByteString("This is not an XML response"))
+    val parser = new DavParser
+
+    expectFailedFuture[SAXParseException](parser.parseMultiStatus(source))
   }
 }

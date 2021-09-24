@@ -30,8 +30,10 @@ of the CloudFiles library.
 * Fixed a bug in the OneDrive FileSystem implementation related to files with a
   size of 0. Such files could not be uploaded, causing file create or update
   operations to fail.
+* `DavFileSystem` now handles multi-status responses received for _PROPPATCH_
+  requests correctly; failures reported in such a response are now detected.
 
-== Release 0.2 (2021-01-10)
+== Release 0.2 (2021-07-10)
 
 * File systems now support HTTP proxies.
 * A new module has been added that allows access to the local file system via

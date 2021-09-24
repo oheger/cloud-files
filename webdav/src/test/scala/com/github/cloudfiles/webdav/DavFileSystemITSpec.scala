@@ -465,6 +465,62 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .withRequestBody(equalToXml(expPatch)))
   }
 
+  it should "handle a successful multi-status response when creating a file with additional attributes" in {
+    val FileName = "fileWithAttributes.dat"
+    val ParentUri = Uri(RootPath + "/parent")
+    val FileUri = ParentUri.withPath(ParentUri.path / FileName)
+    val keyAdd = DavModel.AttributeKey(NS_TEST, "someAttr")
+    val attributes = DavModel.Attributes(Map(keyAdd -> "some value"))
+    val newFile = DavModel.newFile(name = FileName, attributes = attributes, size = FileContentSize)
+    stubFor(put(urlPathEqualTo(FileUri.path.toString()))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
+    stubFor(request("PROPPATCH", urlPathEqualTo(FileUri.path.toString()))
+      .willReturn(aResponse().withStatus(StatusCodes.MultiStatus.intValue)
+      .withBodyFile("multi_status_success.xml")))
+    val fs = new DavFileSystem(createConfig())
+
+    val resultUri = futureResult(runOp(fs.createFile(ParentUri, newFile, fileContentSource)))
+    resultUri should be(FileUri)
+  }
+
+  it should "handle a failure multi-status response when creating a file with additional attributes" in {
+    val FileName = "fileWithInvalidAttributes.dat"
+    val ParentUri = Uri(RootPath + "/parent")
+    val FileUri = ParentUri.withPath(ParentUri.path / FileName)
+    val keyAdd = DavModel.AttributeKey(NS_TEST, "someStrangeAttr")
+    val attributes = DavModel.Attributes(Map(keyAdd -> "some strange and invalid value"))
+    val newFile = DavModel.newFile(name = FileName, attributes = attributes, size = FileContentSize)
+    stubFor(put(urlPathEqualTo(FileUri.path.toString()))
+      .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
+    stubFor(request("PROPPATCH", urlPathEqualTo(FileUri.path.toString()))
+      .willReturn(aResponse().withStatus(StatusCodes.MultiStatus.intValue)
+        .withBodyFile("multi_status_failed.xml")))
+    val fs = new DavFileSystem(createConfig())
+
+    val ex = expectFailedFuture[FailedResponseException](runOp(fs.createFile(ParentUri, newFile, fileContentSource)))
+    ex.response.status should be(StatusCodes.Conflict)
+  }
+
+  it should "discard response entities when handling multi-status responses" in {
+    val RequestCount = 16
+    val ParentUri = Uri(RootPath + "/parent")
+    val keyAdd = DavModel.AttributeKey(NS_TEST, "someAttr")
+    val attributes = DavModel.Attributes(Map(keyAdd -> "testFile"))
+    stubFor(put(anyUrl())
+    .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
+    stubFor(request("PROPPATCH", anyUrl())
+    .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
+    .withBodyFile("folder.xml")))
+    val fs = new DavFileSystem(createConfig())
+
+    val futResults = (1 to RequestCount) map { idx =>
+      val newFile = DavModel.newFile(name = s"FileName$idx", attributes = attributes, size = FileContentSize)
+      runOp(fs.createFile(ParentUri, newFile, fileContentSource))
+    }
+    implicit val ec: ExecutionContext = system.executionContext
+    futureResult(Future.sequence(futResults))
+  }
+
   it should "create a file if the parent URI ends on a slash" in {
     val file = mock[Model.File[Uri]]
     val FileName = "importantData.txt"

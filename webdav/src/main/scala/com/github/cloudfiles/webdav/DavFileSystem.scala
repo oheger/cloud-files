@@ -347,7 +347,7 @@ class DavFileSystem(val config: DavConfig)
       .map { xml =>
         val patchRequest = HttpRequest(method = MethodPropPatch, uri = uri,
           entity = HttpEntity(ContentTypes.`text/xml(UTF-8)`, xml))
-        executeAndDiscardEntity(httpSender, patchRequest)
+        executeMultiStatusRequest(httpSender, patchRequest)
       } getOrElse Future.successful(())
 
   /**
@@ -365,6 +365,29 @@ class DavFileSystem(val config: DavConfig)
     val entity = HttpEntity(ContentTypes.`application/octet-stream`, size, content)
     val uploadRequest = HttpRequest(method = HttpMethods.PUT, entity = entity, uri = uri)
     executeAndDiscardEntity(httpSender, uploadRequest) map (_ => uri)
+  }
+
+  /**
+   * Sends a request, which might return a 207 multi-status response. If such a
+   * response is detected, it is parsed and checked for error codes. All other
+   * successful responses are accepted as well, and their entity is discarded.
+   *
+   * @param httpSender the request sender actor
+   * @param request    the request to be sent
+   * @param system     the actor system
+   * @return a ''Future'' with the result of the operation
+   */
+  private def executeMultiStatusRequest(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
+                                       (implicit system: ActorSystem[_]): Future[Unit] = {
+    HttpRequestSender.sendRequestSuccess(httpSender, request) flatMap { result =>
+      result.response.status match {
+        case StatusCodes.MultiStatus =>
+          davParser.parseMultiStatus(result.response.entity.dataBytes)
+        case _ =>
+          HttpRequestSender.discardEntityBytes(result)
+          Future.successful(())
+      }
+    }
   }
 
   /**

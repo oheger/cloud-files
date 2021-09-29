@@ -105,30 +105,29 @@ object OAuthExtension {
                              oauthConfig: OAuthConfig,
                              currentTokens: OAuthTokenData):
   Behavior[HttpRequestSender.HttpCommand] =
-    Behaviors.receive { (context, message) =>
-      (message: @unchecked) match {
-        case request: SendRequest =>
-          val authorizedHttpRequest = addAuthorization(request.request, currentTokens.accessToken)
-          val authorizedRequest = request.copy(request = authorizedHttpRequest)
-          HttpRequestSender.forwardRequest(context, requestSender, authorizedHttpRequest, authorizedRequest)
+    Behaviors.receivePartial {
+      case (context, request: SendRequest) =>
+        val authorizedHttpRequest = addAuthorization(request.request, currentTokens.accessToken)
+        val authorizedRequest = request.copy(request = authorizedHttpRequest)
+        HttpRequestSender.forwardRequest(context, requestSender, authorizedHttpRequest,
+          requestData = authorizedRequest, discardMode = request.discardEntityMode)
+        Behaviors.same
+
+      case (context, HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(request,
+      data: SendRequest, _, _), exception: FailedResponseException)))
+        if exception.response.status == StatusCodes.Unauthorized =>
+        if (usesCurrentToken(request, currentTokens.accessToken)) {
+          refreshing(requestSender, idpRequestSender, oauthConfig, currentTokens, List(data))
+        } else {
+          context.self ! data
           Behaviors.same
+        }
 
-        case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(request,
-        data: SendRequest, _, _), exception: FailedResponseException))
-          if exception.response.status == StatusCodes.Unauthorized =>
-          if (usesCurrentToken(request, currentTokens.accessToken)) {
-            refreshing(requestSender, idpRequestSender, oauthConfig, currentTokens, List(data))
-          } else {
-            context.self ! data
-            Behaviors.same
-          }
+      case (_, HttpRequestSender.ForwardedResult(result)) =>
+        propagateResult(result)
 
-        case HttpRequestSender.ForwardedResult(result) =>
-          propagateResult(result)
-
-        case HttpRequestSender.Stop =>
-          handleStop(requestSender, idpRequestSender)
-      }
+      case (_, HttpRequestSender.Stop) =>
+        handleStop(requestSender, idpRequestSender)
     }
 
   /**
@@ -171,43 +170,43 @@ object OAuthExtension {
                               oauthConfig: OAuthConfig,
                               currentTokens: OAuthTokenData,
                               pendingRequests: List[SendRequest]): Behaviors.Receive[HttpRequestSender.HttpCommand] = {
-    Behaviors.receive { (context, message) =>
-      (message: @unchecked) match {
-        case request: SendRequest =>
-          context.log.info("Queuing request until token refresh is complete.")
-          refreshBehavior(requestSender, idpRequestSender, oauthConfig, currentTokens,
-            request :: pendingRequests)
+    Behaviors.receivePartial {
+      case (context, request: SendRequest) =>
+        context.log.info("Queuing request until token refresh is complete.")
+        refreshBehavior(requestSender, idpRequestSender, oauthConfig, currentTokens,
+          request :: pendingRequests)
 
-        case HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_, null, _, _), response)) =>
-          extractNewTokens(context, response, currentTokens)
+      case (context, HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_, null, _, _),
+      response))) =>
+        extractNewTokens(context, response, currentTokens)
 
-        case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_, null, _, _), cause)) =>
-          context.log.error("Got failed response for refresh token request.", cause)
-          handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, currentTokens, pendingRequests, cause)
+      case (context, HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_, null, _, _),
+      cause))) =>
+        context.log.error("Got failed response for refresh token request.", cause)
+        handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, currentTokens, pendingRequests, cause)
 
-        case HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_,
-        tokens: ExtractTokenResult, _, _), _)) =>
-          tokens.tokens match {
-            case Failure(exception) =>
-              context.log.error("Could not parse refresh token response from IDP.", exception)
-              handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, currentTokens, pendingRequests,
-                exception)
-            case Success(newTokens) =>
-              context.log.info("Successfully refreshed access token.")
-              updateTokens(context, requestSender, idpRequestSender, oauthConfig, pendingRequests, newTokens)
-          }
+      case (context, HttpRequestSender.ForwardedResult(HttpRequestSender.SuccessResult(SendRequest(_,
+      tokens: ExtractTokenResult, _, _), _))) =>
+        tokens.tokens match {
+          case Failure(exception) =>
+            context.log.error("Could not parse refresh token response from IDP.", exception)
+            handleFailedTokenRefresh(requestSender, idpRequestSender, oauthConfig, currentTokens, pendingRequests,
+              exception)
+          case Success(newTokens) =>
+            context.log.info("Successfully refreshed access token.")
+            updateTokens(context, requestSender, idpRequestSender, oauthConfig, pendingRequests, newTokens)
+        }
 
-        case HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_,
-        data: SendRequest, _, _), exception: FailedResponseException))
-          if exception.response.status == StatusCodes.Unauthorized =>
-          refreshBehavior(requestSender, idpRequestSender, oauthConfig, currentTokens, data :: pendingRequests)
+      case (_, HttpRequestSender.ForwardedResult(HttpRequestSender.FailedResult(SendRequest(_,
+      data: SendRequest, _, _), exception: FailedResponseException)))
+        if exception.response.status == StatusCodes.Unauthorized =>
+        refreshBehavior(requestSender, idpRequestSender, oauthConfig, currentTokens, data :: pendingRequests)
 
-        case HttpRequestSender.ForwardedResult(result) =>
-          propagateResult(result)
+      case (_, HttpRequestSender.ForwardedResult(result)) =>
+        propagateResult(result)
 
-        case HttpRequestSender.Stop =>
-          handleStop(requestSender, idpRequestSender)
-      }
+      case (_, HttpRequestSender.Stop) =>
+        handleStop(requestSender, idpRequestSender)
     }
   }
 

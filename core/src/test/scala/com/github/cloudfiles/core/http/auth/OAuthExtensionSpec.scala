@@ -26,7 +26,8 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken, `Cont
 import akka.http.scaladsl.model._
 import akka.stream.scaladsl.Sink
 import akka.util.ByteString
-import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
+import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
+import com.github.cloudfiles.core.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
 import com.github.cloudfiles.core.http.{HttpRequestSender, Secret}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -93,11 +94,13 @@ object OAuthExtensionSpec {
    * @param result          the result to sent
    * @param formData        flag whether this is a form data request
    * @param optDelay        an optional delay
+   * @param expDiscardMode  the expected entity discard mode
    */
   case class StubData(expectedRequest: HttpRequest,
                       result: HttpRequestSender.Result,
                       formData: Boolean = false,
-                      optDelay: Option[FiniteDuration] = None) {
+                      optDelay: Option[FiniteDuration] = None,
+                      expDiscardMode: DiscardEntityMode = DiscardEntityMode.OnFailure) {
     /**
      * Returns the result to return for the current request, injecting this
      * request.
@@ -162,23 +165,21 @@ object OAuthExtensionSpec {
    */
   object HttpStubActor {
     def apply(stubs: List[StubData]): Behavior[HttpRequestSender.HttpCommand] =
-      Behaviors.receive { (context, message) =>
-        (message: @unchecked) match {
-          case request: HttpRequestSender.SendRequest =>
-            context.log.info("Serving request {}.", request)
-            val expected = stubs.head
-            if (expected.formData) {
-              handleFormDataRequests(context, request, expected)
+      Behaviors.receivePartial {
+        case (context, request: HttpRequestSender.SendRequest) =>
+          context.log.info("Serving request {}.", request)
+          val expected = stubs.head
+          if (expected.formData) {
+            handleFormDataRequests(context, request, expected)
+          } else {
+            if (request.request == expected.expectedRequest && request.discardEntityMode == expected.expDiscardMode) {
+              sendResponse(context, request, expected)
             } else {
-              if (request.request == expected.expectedRequest) {
-                sendResponse(context, request, expected)
-              } else {
-                throw new IllegalStateException(s"Unexpected request. Expected $expected, got $request.")
-              }
+              throw new IllegalStateException(s"Unexpected request. Expected $expected, got $request.")
             }
+          }
 
-            apply(stubs.tail)
-        }
+          apply(stubs.tail)
       }
 
     /**
@@ -269,6 +270,19 @@ class OAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
     helper.sendTestRequest(request)
     val response = probe.expectMessageType[HttpRequestSender.SuccessResult]
     checkRequest(request, response.request)
+    response.response should be(result.response)
+  }
+
+  it should "take the discard mode into account" in {
+    val probe = testKit.createTestProbe[HttpRequestSender.Result]()
+    val request = createSendRequest(probe).copy(discardEntityMode = DiscardEntityMode.Always)
+    val fwdRequest = request.copy(data = request)
+    val result = HttpRequestSender.SuccessResult(fwdRequest, HttpResponse(status = StatusCodes.Accepted))
+    val stubs = List(StubData(createAuthorizedTestRequest(), result, expDiscardMode = DiscardEntityMode.Always))
+    val helper = new ExtensionTestHelper(stubs, Nil)
+
+    helper.sendTestRequest(request)
+    val response = probe.expectMessageType[HttpRequestSender.SuccessResult]
     response.response should be(result.response)
   }
 

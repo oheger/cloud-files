@@ -40,27 +40,26 @@ object HttpRequestSenderSpec {
   object TestExtension {
     def apply(requestActor: ActorRef[HttpRequestSender.HttpCommand], optTimeout: Option[Timeout] = None):
     Behavior[HttpRequestSender.HttpCommand] =
-      Behaviors.receive { (context, message) =>
-        (message: @unchecked) match {
-          case request: HttpRequestSender.SendRequest =>
-            optTimeout match {
-              case Some(timeout) =>
-                HttpRequestSender.forwardRequest(context, requestActor, request.request, request, timeout = timeout)
-              case None =>
-                HttpRequestSender.forwardRequest(context, requestActor, request.request, request,
-                  discardMode = DiscardEntityMode.Never)
-            }
+      Behaviors.receivePartial {
+        case (context, request: HttpRequestSender.SendRequest) =>
+          optTimeout match {
+            case Some(timeout) =>
+              HttpRequestSender.forwardRequest(context, requestActor, request.request, request, timeout = timeout)
+            case None =>
+              HttpRequestSender.forwardRequest(context, requestActor, request.request, request,
+                discardMode = DiscardEntityMode.Never)
+          }
+          Behaviors.same
 
-          case HttpRequestSender.ForwardedResult(result@HttpRequestSender.SuccessResult(
-          HttpRequestSender.SendRequest(_, orgRequest: HttpRequestSender.SendRequest, _, _), _)) =>
-            orgRequest.replyTo ! result
+        case (_, HttpRequestSender.ForwardedResult(result@HttpRequestSender.SuccessResult(
+        HttpRequestSender.SendRequest(_, orgRequest: HttpRequestSender.SendRequest, _, _), _))) =>
+          orgRequest.replyTo ! result
+          Behaviors.same
 
-          case HttpRequestSender.ForwardedResult(result@HttpRequestSender.FailedResult(
-          HttpRequestSender.SendRequest(_, orgRequest: HttpRequestSender.SendRequest, _, _), _)) =>
-            orgRequest.replyTo ! result
-        }
-
-        Behaviors.same
+        case (_, HttpRequestSender.ForwardedResult(result@HttpRequestSender.FailedResult(
+        HttpRequestSender.SendRequest(_, orgRequest: HttpRequestSender.SendRequest, _, _), _))) =>
+          orgRequest.replyTo ! result
+          Behaviors.same
       }
   }
 

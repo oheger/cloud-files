@@ -25,7 +25,7 @@ import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSyst
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, Model}
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{any, eq => argEq}
+import org.mockito.ArgumentMatchers.{any, eq => argEq}
 import org.mockito.Mockito.{doReturn, verify, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -107,8 +107,9 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
   it should "decrypt file content on download" in {
     val cryptSource = Source(ShiftCryptAlgorithm.CipherText.grouped(16).toList)
     val cryptEntity = HttpEntity(ContentTypes.`application/octet-stream`, cryptSource)
+    val operation = stubOperation(cryptEntity)
     val fs = createCryptFileSystem()
-    doReturn(stubOperation(cryptEntity)).when(fs.delegate).downloadFile(FileID)
+    doReturn(operation, null).when(fs.delegate).downloadFile(FileID)
 
     val fileSource = runOp(testKit, fs.downloadFile(FileID))
     val fileContent = futureResult(ShiftCryptAlgorithm.concatStream(fileSource.dataBytes))

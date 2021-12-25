@@ -26,11 +26,9 @@ lazy val VersionScala213 = "2.13.7"
 lazy val VersionScala212 = "2.12.13"
 lazy val VersionScalaXml = "2.0.1"
 lazy val VersionSlf4j = "1.7.32"
-lazy val VersionScalaTest = "3.2.9"
+lazy val VersionScalaTest = "3.2.10"
 lazy val VersionWireMock = "2.27.2"
-lazy val VersionMockito = "1.9.5"
-lazy val VersionScalaTestMockito = "1.0.0-M2"
-lazy val VersionJunit = "4.13.2" // needed by mockito
+lazy val VersionScalaTestMockito = "3.2.10.0"
 
 lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
 
@@ -45,11 +43,9 @@ lazy val akkaDependencies = Seq(
 
 lazy val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % VersionScalaTest % Test,
-  "org.scalatestplus" %% "scalatestplus-mockito" % VersionScalaTestMockito % Test,
+  "org.scalatestplus" %% "mockito-3-12" % VersionScalaTestMockito % Test,
   "com.typesafe.akka" %% "akka-actor-testkit-typed" % AkkaVersion % Test,
   "com.github.tomakehurst" % "wiremock" % VersionWireMock % Test,
-  "org.mockito" % "mockito-core" % VersionMockito % Test,
-  "junit" % "junit" % VersionJunit % Test,
   "org.slf4j" % "slf4j-simple" % VersionSlf4j % Test
 )
 

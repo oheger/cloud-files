@@ -23,7 +23,7 @@ import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, Model}
 import com.github.cloudfiles.crypt.fs.resolver.PathResolver
-import org.mockito.Mockito.{verify, verifyZeroInteractions, when}
+import org.mockito.Mockito.{verify, verifyNoInteractions, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
@@ -174,7 +174,7 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     when(fs.delegate.rootID).thenReturn(operation)
 
     fs.resolvePath("") should be(operation)
-    verifyZeroInteractions(resolver)
+    verifyNoInteractions(resolver)
   }
 
   it should "close the resolver in its close() implementation" in {

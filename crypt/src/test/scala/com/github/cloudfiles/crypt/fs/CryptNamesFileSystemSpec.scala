@@ -28,6 +28,8 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.io.IOException
+
 /**
  * Test class for ''CryptNamesFileSystem''.
  */
@@ -81,6 +83,16 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     runOp(testKit, fs.resolveFolder(FileID)) should be(folder)
   }
 
+  it should "fail to resolve a folder with an invalid name with a meaningful exception" in {
+    val InvalidFolderName = "invalid.folder.name"
+    val folder = createFolderMock(1, InvalidFolderName)
+    val fs = createCryptFileSystem()
+    when(fs.delegate.resolveFolder(FileID)).thenReturn(stubOperation(folder))
+
+    val exception = expectFailedFuture[IOException](runOpFuture(testKit, fs.resolveFolder(FileID)))
+    exception.getMessage should include(InvalidFolderName)
+  }
+
   it should "resolve a file" in {
     val file = createFileMock(1, fileName(1))
     val cryptFile = createFileMock(1, encryptName(file.name))
@@ -90,6 +102,16 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .thenReturn(file)
 
     runOp(testKit, fs.resolveFile(FileID)) should be(file)
+  }
+
+  it should "fail to resolve a file with an invalid name with a meaningful exception" in {
+    val InvalidFileName = "NotEncoded.file"
+    val file = createFileMock(1, InvalidFileName)
+    val fs = createCryptFileSystem()
+    when(fs.delegate.resolveFile(FileID)).thenReturn(stubOperation(file))
+
+    val exception = expectFailedFuture[IOException](runOpFuture(testKit, fs.resolveFile(FileID)))
+    exception.getMessage should include(InvalidFileName)
   }
 
   it should "create a new folder" in {
@@ -144,6 +166,32 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     when(fs.delegate.folderContent(FileID)).thenReturn(stubOperation(cryptContent))
 
     runOp(testKit, fs.folderContent(FileID)) should be(content)
+  }
+
+  it should "handle invalid file names when querying the content of a folder" in {
+    val InvalidFileName = "README.MD"
+    val files = Map(fileID(1) -> createFileMock(1, encryptName(fileName(1))),
+      fileID(2) -> createFileMock(2, InvalidFileName))
+    val folders = Map(folderID(1) -> createFolderMock(1, encryptName(folderName(1))))
+    val cryptContent = Model.FolderContent(FileID, files, folders)
+    val fs = createCryptFileSystem()
+    when(fs.delegate.folderContent(FileID)).thenReturn(stubOperation(cryptContent))
+
+    val exception = expectFailedFuture[IOException](runOpFuture(testKit, fs.folderContent(FileID)))
+    exception.getMessage should include(InvalidFileName)
+  }
+
+  it should "handle invalid folder names when querying the content of a folder" in {
+    val InvalidFolderName = "non.encrypted.folder"
+    val files = Map(fileID(1) -> createFileMock(1, encryptName(fileName(1))))
+    val folders = Map(folderID(1) -> createFolderMock(1, encryptName(folderName(1))),
+      folderID(2) -> createFolderMock(2, InvalidFolderName))
+    val cryptContent = Model.FolderContent(FileID, files, folders)
+    val fs = createCryptFileSystem()
+    when(fs.delegate.folderContent(FileID)).thenReturn(stubOperation(cryptContent))
+
+    val exception = expectFailedFuture[IOException](runOpFuture(testKit, fs.folderContent(FileID)))
+    exception.getMessage should include(InvalidFolderName)
   }
 
   it should "resolve path components using the resolver" in {

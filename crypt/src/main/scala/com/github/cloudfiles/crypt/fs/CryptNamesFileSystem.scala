@@ -27,6 +27,7 @@ import com.github.cloudfiles.crypt.alg.CryptAlgorithm
 import com.github.cloudfiles.crypt.fs.resolver.{PathComponentsResolver, PathResolver}
 import com.github.cloudfiles.crypt.service.CryptService
 
+import java.io.IOException
 import java.security.SecureRandom
 
 object CryptNamesFileSystem {
@@ -149,13 +150,20 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
   }
 
   /**
-   * Returns the decrypted name of the passed in element.
+   * Returns the decrypted name of the passed in element. If this fails -
+   * because the element name is not properly encoded -, an ''IOException''
+   * with a meaningful message is thrown.
    *
    * @param elem the element
    * @return the decrypted name of this element
    */
   private def decryptElementName(elem: Model.Element[ID]): String =
-    CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, elem.name)
+    try {
+      CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, elem.name)
+    } catch {
+      case e: IllegalArgumentException =>
+        throw new IOException(s"Failed to decrypt element name '${elem.name}', since it is not properly encoded.", e)
+    }
 
   /**
    * Returns the encrypted name of the passed in element.

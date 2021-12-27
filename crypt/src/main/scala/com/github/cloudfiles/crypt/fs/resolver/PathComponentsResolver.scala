@@ -23,6 +23,7 @@ import com.github.cloudfiles.crypt.fs.CryptConfig
 import com.github.cloudfiles.crypt.service.CryptService
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 /**
  * A specialized ''PathResolver'' implementation that resolves paths directly
@@ -110,15 +111,17 @@ class PathComponentsResolver[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[
    */
   private def findPathComponent[A <: Model.Element[ID]](elements: Map[ID, A], name: String, config: CryptConfig):
   Option[ID] =
-    elements.find(e => decryptElementName(e._2, config) == name) map (_._1)
+    elements.find(e => decryptElementName(e._2, config).toOption.contains(name)) map (_._1)
 
   /**
-   * Returns the decrypted name of the passed in element.
+   * Returns the decrypted name of the passed in element. As this operation can
+   * fail for wrongly encoding element names, result is a ''Try''.
    *
    * @param elem   the element
    * @param config the cryptography-related configuration
-   * @return the decrypted name of this element
+   * @return a ''Try'' with the decrypted name of this element
    */
-  private def decryptElementName(elem: Model.Element[ID], config: CryptConfig): String =
+  private def decryptElementName(elem: Model.Element[ID], config: CryptConfig): Try[String] = Try {
     CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, elem.name)(config.secRandom)
+  }
 }

@@ -130,6 +130,25 @@ class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatS
     runOp(testKit, resolver.resolve(components, fs, DefaultCryptConfig)) should be(fileID(3))
   }
 
+  it should "ignore invalid element names when resolving a path" in {
+    val RootID = "rootFolderOfStrangeContent"
+    val components = Seq("the", "file.doc")
+    val rootFolders = Map(folderID(1) -> createFolderMock(1, encryptName(folderName(1))),
+      folderID(2) -> createFolderMock(2, "not.encrypted"),
+      folderID(3) -> createFolderMock(3, encryptName("the")))
+    val rootContent = Model.FolderContent(RootID, Map.empty[String, FileType], rootFolders)
+    val level1Folders = Map(folderID(4) -> createFolderMock(4, encryptName(folderName(4))))
+    val level1Files = Map(fileID(1) -> createFileMock(1, encryptName("file.doc")))
+    val level1Content = Model.FolderContent(folderID(3), level1Files, level1Folders)
+    val fs = createFileSystemMock()
+    when(fs.rootID).thenReturn(stubOperation(RootID))
+    when(fs.folderContent(RootID)).thenReturn(stubOperation(rootContent))
+    when(fs.folderContent(level1Content.folderID)).thenReturn(stubOperation(level1Content))
+    val resolver = createResolver()
+
+    runOp(testKit, resolver.resolve(components, fs, DefaultCryptConfig)) should be(fileID(1))
+  }
+
   it should "handle a path that cannot be resolved" in {
     val RootID = "theRootFolder"
     val components = Seq("the", "desired", "folder")

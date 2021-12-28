@@ -18,6 +18,7 @@ package com.github.cloudfiles.core
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Try}
 
 /**
  * A module defining basic types to represent files and folders in a cloud
@@ -159,30 +160,68 @@ object Model {
     def mapContentParallel(mapFiles: Option[FILE => FILE] = None,
                            mapFolders: Option[FOLDER => FOLDER] = None)
                           (implicit ec: ExecutionContext): Future[FolderContent[ID, FILE, FOLDER]] = {
-      val futFiles = mapFiles.fold(Future.successful(files))(f => mapInParallel(files)(f))
-      val futFolders = mapFolders.fold(Future.successful(folders))(f => mapInParallel(folders)(f))
-      for {
-        mappedFiles <- futFiles
-        mappedFolders <- futFolders
-      } yield copy(files = mappedFiles, folders = mappedFolders)
+      def mapTried[T](optFunc: Option[T => T]): Option[T => Try[T]] =
+        optFunc map { func =>
+          elem: T => Try(func(elem))
+        }
+
+      mapContentParallelTried(mapTried(mapFiles), mapTried(mapFolders)) flatMap { result =>
+        result._2.headOption match {
+          case Some(failure) => Future.failed(failure.exception)
+          case None => Future.successful(result._1)
+        }
+      }
     }
 
     /**
-     * Applies the specified mapping function to all elements of the given map
-     * in parallel.
+     * Applies mappings in parallel to the content stored in this object that
+     * can fail. This function is analogous to ''mapContentParallel()'', but
+     * the passed in mapping functions return a ''Try''. Result is a ''Future''
+     * with a tuple that contains a ''FolderContent'' object with all the
+     * files and folders that could be mapped successfully, and a list with
+     * failures that occurred during mapping.
+     *
+     * @param mapFiles   optional mapping function on files
+     * @param mapFolders optional mapping function on folders
+     * @param ec         the execution context
+     * @return a ''Future'' with the results of the mapping
+     */
+    def mapContentParallelTried(mapFiles: Option[FILE => Try[FILE]] = None,
+                                mapFolders: Option[FOLDER => Try[FOLDER]] = None)
+                               (implicit ec: ExecutionContext):
+    Future[(FolderContent[ID, FILE, FOLDER], List[Failure[ID]])] = {
+      val NoFailures = List.empty[Failure[ID]]
+      val futFiles = mapFiles.fold(Future.successful((files, NoFailures)))(f => mapInParallel(files)(f))
+      val futFolders = mapFolders.fold(Future.successful((folders, NoFailures)))(f => mapInParallel(folders)(f))
+      for {
+        mappedFiles <- futFiles
+        mappedFolders <- futFolders
+      } yield (copy(files = mappedFiles._1, folders = mappedFolders._1), mappedFiles._2 ::: mappedFolders._2)
+    }
+
+    /**
+     * Applies the specified mapping function, which can fail, to all elements
+     * of the given map in parallel.
      *
      * @param elements the map with elements
      * @param f        the mapping function
      * @param ec       the execution context
      * @tparam A the value type of the map
-     * @return a ''Future'' with the processed map
+     * @return a ''Future'' with the processed map and the encountered failures
      */
-    private def mapInParallel[A](elements: Map[ID, A])(f: A => A)(implicit ec: ExecutionContext): Future[Map[ID, A]] =
+    private def mapInParallel[A](elements: Map[ID, A])(f: A => Try[A])(implicit ec: ExecutionContext):
+    Future[(Map[ID, A], List[Failure[ID]])] =
       Future.sequence(elements.toList map { e =>
         Future {
           (e._1, f(e._2))
         }
-      }) map (_.toMap)
+      }) map { mapTried =>
+        val (success, failures) = mapTried.partition(_._2.isSuccess)
+        val successMap = success.map { e => (e._1, e._2.get) }.toMap
+        val failureList = failures.collect {
+          case (_, Failure(exception)) => Failure[ID](exception)
+        }
+        (successMap, failureList)
+      }
   }
-
 }

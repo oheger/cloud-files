@@ -16,16 +16,19 @@
 
 package com.github.cloudfiles.core
 
+import com.github.cloudfiles.core.Model.Folder
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Failure, Success, Try}
 
 object ModelSpec {
   /**
    * Generates the name of a file that has been mapped by a mapping function.
+   *
    * @param file the original file
    * @return the mapped name of this file
    */
@@ -34,6 +37,7 @@ object ModelSpec {
 
   /**
    * Generates the name of a folder that has been mapped by a mapping function.
+   *
    * @param folder the original folder
    * @return the mapped name of this folder
    */
@@ -45,6 +49,7 @@ object ModelSpec {
  * Test class for ''Model'' and the classes it defines.
  */
 class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTestHelper {
+
   import ModelSpec._
 
   /**
@@ -87,6 +92,7 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
 
   /**
    * A test mapping function for files that updates the file name.
+   *
    * @param file the file to map
    * @return the mapped file
    */
@@ -95,6 +101,7 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
 
   /**
    * A test mapping function for folders that updates the folder name.
+   *
    * @param folder the folder to map
    * @return the mapped folder
    */
@@ -164,5 +171,95 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
     mappedContent should be(content)
     mappedContent.files shouldBe theSameInstanceAs(content.files)
     mappedContent.folders shouldBe theSameInstanceAs(content.folders)
+  }
+
+  it should "return a failed future if a parallel mapping fails" in {
+    val file = fileMock("f1", "file1")
+    val folder = folderMock("fo1", "folder1")
+    val content = Model.FolderContent("someFolderID",
+      Map(file.id -> file),
+      Map(folder.id -> folder))
+    val expectedException = new IllegalArgumentException("Unsupported mapping")
+
+    def mapFileFailure(file: Model.File[String]): Model.File[String] = throw expectedException
+
+    val exception = expectFailedFuture[IllegalArgumentException](content.mapContentParallel(Some(mapFileFailure)))
+    exception should be(expectedException)
+  }
+
+  it should "map files and folders with Try in parallel if mapping is successful" in {
+    val file1 = fileMock("f1", "file1")
+    val file2 = fileMock("f2", "file2")
+    val folder1 = folderMock("fo1", "folder1")
+    val folder2 = folderMock("fo2", "folder2")
+    val folder3 = folderMock("fo3", "folder3")
+    val content = Model.FolderContent("someFolderID",
+      Map(file1.id -> file1, file2.id -> file2),
+      Map(folder1.id -> folder1, folder2.id -> folder2, folder3.id -> folder3))
+
+    def mapFileTried(file: Model.File[String]): Try[Model.File[String]] = Try {
+      mapFile(file)
+    }
+
+    def mapFolderTried(folder: Model.Folder[String]): Try[Model.Folder[String]] = Try {
+      mapFolder(folder)
+    }
+
+    val (mappedContent, failures) =
+      futureResult(content.mapContentParallelTried(mapFiles = Some(mapFileTried), mapFolders = Some(mapFolderTried)))
+    mappedContent.folderID should be(content.folderID)
+    mappedContent.files should have size 2
+    mappedContent.files(file1.id).name should be(mappedFileName(file1))
+    mappedContent.files(file2.id).name should be(mappedFileName(file2))
+    mappedContent.folders should have size 3
+    mappedContent.folders(folder1.id).name should be(mappedFolderName(folder1))
+    mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
+    mappedContent.folders(folder3.id).name should be(mappedFolderName(folder3))
+    failures shouldBe empty
+  }
+
+  it should "map files and folders with Try in parallel if mappings fail" in {
+    val ErrorName = "Error"
+
+    def mapFileTried(file: Model.File[String]): Try[Model.File[String]] =
+      if (file.name.contains(ErrorName)) Failure(new IllegalArgumentException(file.name))
+      else Success(mapFile(file))
+
+    def mapFolderTried(folder: Model.Folder[String]): Try[Model.Folder[String]] =
+      if (folder.name.contains(ErrorName)) Failure(new IllegalArgumentException(folder.name))
+      else Success(mapFolder(folder))
+
+    val file1 = fileMock("f1", "file1")
+    val file2 = fileMock("f2", ErrorName + ".txt")
+    val folder1 = folderMock("fo1", ErrorName)
+    val folder2 = folderMock("fo2", "folder2")
+    val content = Model.FolderContent("someFolderID",
+      Map(file1.id -> file1, file2.id -> file2),
+      Map(folder1.id -> folder1, folder2.id -> folder2))
+
+    val (mappedContent, failures) =
+      futureResult(content.mapContentParallelTried(mapFiles = Some(mapFileTried), mapFolders = Some(mapFolderTried)))
+    mappedContent.folderID should be(content.folderID)
+    mappedContent.files should have size 1
+    mappedContent.files(file1.id).name should be(mappedFileName(file1))
+    mappedContent.folders should have size 1
+    mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
+    failures should have size 2
+    failures.forall(_.exception.isInstanceOf[IllegalArgumentException])
+    failures.map(_.exception.getMessage) should contain only(ErrorName, ErrorName + ".txt")
+  }
+
+  it should "deal with undefined mapping functions when mapping with Try in parallel" in {
+    val content = Model.FolderContent("someFolderID",
+      Map("fi1" -> fileMock("fi1", "oneFile.txt"),
+        "fi2" -> fileMock("fi2", "anotherFile.doc")),
+      Map("fo1" -> folderMock("fo1", "someFolder"),
+        "fo2" -> folderMock("fo2", "oneMoreFolder")))
+
+    val (mappedContent, failures) = futureResult(content.mapContentParallelTried())
+    mappedContent should be(content)
+    mappedContent.files shouldBe theSameInstanceAs(content.files)
+    mappedContent.folders shouldBe theSameInstanceAs(content.folders)
+    failures shouldBe empty
   }
 }

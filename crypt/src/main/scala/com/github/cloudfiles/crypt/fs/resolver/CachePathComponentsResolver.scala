@@ -559,7 +559,7 @@ object CachePathComponentsResolver {
   private def decryptElementNames[ID, ELEM <: Model.Element[ID]](config: CryptConfig, elements: Map[ID, ELEM]):
   Map[String, ID] = elements map { e =>
     val name = CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, e._2.name)(config.secRandom)
-    (name, e._1)
+    (name.get, e._1)
   }
 
   /**

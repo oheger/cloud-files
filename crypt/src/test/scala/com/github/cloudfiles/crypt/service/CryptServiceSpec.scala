@@ -25,7 +25,9 @@ import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm.CipherText
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
+import java.io.IOException
 import java.security.SecureRandom
+import scala.util.{Failure, Success}
 
 object CryptServiceSpec {
   /** The source of randomness. */
@@ -54,7 +56,7 @@ class CryptServiceSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike wi
 
     val base64 = CryptService.encodeBase64(sampleData)
     val decoded = CryptService.decodeBase64(base64)
-    decoded should be(sampleData)
+    decoded should be(Success(sampleData))
     base64 should not be SampleData
     checkBase64Encoding(base64)
   }
@@ -77,8 +79,18 @@ class CryptServiceSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike wi
       FileTestHelper.TestData)
     val plain = CryptService.decryptTextFromBase64(ShiftCryptAlgorithm, ShiftCryptAlgorithm.decryptKey, base64)
 
-    plain should be(FileTestHelper.TestData)
+    plain should be(Success(FileTestHelper.TestData))
     checkBase64Encoding(base64)
+  }
+
+  it should "handle illegal characters when decrypting from Base64" in {
+    val InvalidInput = "This is not Base64-encoded?!"
+
+    CryptService.decryptTextFromBase64(ShiftCryptAlgorithm, ShiftCryptAlgorithm.decryptKey, InvalidInput) match {
+      case Failure(exception: IOException) =>
+        exception.getMessage should include(InvalidInput)
+      case res => fail("Unexpected result: " + res)
+    }
   }
 
   /**

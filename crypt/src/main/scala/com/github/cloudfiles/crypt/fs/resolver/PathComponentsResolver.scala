@@ -121,7 +121,6 @@ class PathComponentsResolver[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[
    * @param config the cryptography-related configuration
    * @return a ''Try'' with the decrypted name of this element
    */
-  private def decryptElementName(elem: Model.Element[ID], config: CryptConfig): Try[String] = Try {
+  private def decryptElementName(elem: Model.Element[ID], config: CryptConfig): Try[String] =
     CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, elem.name)(config.secRandom)
-  }
 }

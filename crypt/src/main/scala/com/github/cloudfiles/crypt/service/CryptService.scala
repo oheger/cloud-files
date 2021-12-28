@@ -20,8 +20,10 @@ import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import com.github.cloudfiles.crypt.alg.{CryptAlgorithm, CryptCipher}
 
+import java.io.IOException
 import java.security.{Key, SecureRandom}
 import java.util.Base64
+import scala.util.{Failure, Try}
 
 /**
  * A module offering functionality related to cryptographic operations.
@@ -42,14 +44,19 @@ object CryptService {
 
   /**
    * Decodes the given Base64 string to its original byte chunk representation.
-   * Throws an ''IllegalArgumentException'' exception if the input String
-   * contain unexpected characters.
+   * Returns a ''Failure'' with a meaningful exception message if the input
+   * string contains unexpected characters.
    *
    * @param textBase64 the Base64-encoded string
-   * @return the decoded data
+   * @return a ''Try'' with the decoded data
    */
-  def decodeBase64(textBase64: String): ByteString =
+  def decodeBase64(textBase64: String): Try[ByteString] = Try {
     ByteString(Base64.getUrlDecoder.decode(textBase64))
+  } recoverWith {
+    case e: IllegalArgumentException =>
+      Failure(
+        new IOException(s"Cannot Base64-decode input string '$textBase64', since it contains invalid characters.", e))
+  }
 
   /**
    * Encrypts the given string using a specific algorithm and key.
@@ -110,19 +117,19 @@ object CryptService {
 
   /**
    * Decrypts the given Base64-encoded input data using a specific algorithm
-   * and key. The input string must contain only expected characters;
-   * otherwise, an ''IllegalArgumentException'' exception is thrown. This is a
-   * convenience function that combined the decode with the decrypt operation.
+   * and key. This operation can fail if the input string contains unexpected
+   * characters; therefore, this function returns a ''Try''. In case of a
+   * failure, the exception contains a meaningful message.
    *
    * @param algorithm    the ''CryptAlgorithm''
    * @param key          the key for decryption
    * @param textBase64   the Base64-encoded input string
    * @param secureRandom the random object
-   * @return the resulting decrypted string
+   * @return a ''Try'' with the resulting decrypted string
    */
   def decryptTextFromBase64(algorithm: CryptAlgorithm, key: Key, textBase64: String)
-                           (implicit secureRandom: SecureRandom): String =
-    decryptText(algorithm, key, decodeBase64(textBase64))
+                           (implicit secureRandom: SecureRandom): Try[String] =
+    decodeBase64(textBase64) map (decryptText(algorithm, key, _))
 
   /**
    * Returns a source derived from the provided one, but with decryption added

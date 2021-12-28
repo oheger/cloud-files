@@ -27,6 +27,7 @@ import com.github.cloudfiles.core.utils.LRUCache
 import com.github.cloudfiles.core.{FileSystem, Model}
 import com.github.cloudfiles.crypt.fs.CryptConfig
 import com.github.cloudfiles.crypt.service.CryptService
+import org.slf4j.Logger
 
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -533,7 +534,8 @@ object CachePathComponentsResolver {
       case (ctx, GotFolderContent(request, Success(content))) =>
         ctx.log.info("Decrypting element names of folder {}.", request.folderID)
         (content.folders ++ content.files).grouped(request.chunkSize) foreach { chunk =>
-          val result = ResolveFolderResult(request, decryptElementNames(request.pathRequest.cryptConfig, chunk))
+          val result = ResolveFolderResult(request,
+            decryptElementNames(request.pathRequest.cryptConfig, chunk, ctx.log))
           request.client ! result
         }
         request.client ! ResolveFolderDone(request)
@@ -552,15 +554,21 @@ object CachePathComponentsResolver {
    *
    * @param config   the configuration for decryption
    * @param elements the elements to process
+   * @param log      the logger
    * @tparam ID   the ID type
    * @tparam ELEM the type of elements
    * @return a map with decrypted element names
    */
-  private def decryptElementNames[ID, ELEM <: Model.Element[ID]](config: CryptConfig, elements: Map[ID, ELEM]):
-  Map[String, ID] = elements map { e =>
-    val name = CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, e._2.name)(config.secRandom)
-    (name.get, e._1)
-  }
+  private def decryptElementNames[ID, ELEM <: Model.Element[ID]](config: CryptConfig, elements: Map[ID, ELEM],
+                                                                 log: Logger): Map[String, ID] =
+    elements.foldRight(Map.empty[String, ID]) { (e, map) =>
+      CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, e._2.name)(config.secRandom) match {
+        case Success(decryptedName) => map + (decryptedName -> e._1)
+        case Failure(exception) =>
+          log.warn("Ignoring file, since its name cannot be decrypted.", exception)
+          map
+      }
+    }
 
   /**
    * Returns an updated cache to which the given resolved element names have

@@ -123,7 +123,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
     initMock(mock[FolderType], folderID(idx), name)
 
   /**
-   * Create a ''FolderContent'' object with a number of mock elements.
+   * Creates a ''FolderContent'' object with a number of mock elements.
    *
    * @param fileIdx     the start index of file mocks
    * @param folderIdx   the start index of folder mocks
@@ -183,6 +183,17 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
   "CachePathComponentsResolver" should "resolve an element in the root folder" in {
     val rootContent = createFolderContent(RootID)
+    val helper = new ResolverTestHelper
+
+    helper.prepareRootID()
+      .prepareFolderContent(rootContent)
+      .resolveAndExpect(Seq(fileName(1)), fileID(1))
+  }
+
+  it should "ignore elements with invalid names when processing folder content" in {
+    val baseRootContent = createFolderContent(RootID)
+    val invalidFile = createFileMock(42, "notEncoded.file")
+    val rootContent = baseRootContent.copy(files = baseRootContent.files + (invalidFile.id -> invalidFile))
     val helper = new ResolverTestHelper
 
     helper.prepareRootID()

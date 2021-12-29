@@ -26,8 +26,11 @@ import com.github.cloudfiles.core.http.UriEncodingHelper
 import com.github.cloudfiles.crypt.alg.CryptAlgorithm
 import com.github.cloudfiles.crypt.fs.resolver.{PathComponentsResolver, PathResolver}
 import com.github.cloudfiles.crypt.service.CryptService
+import org.slf4j.LoggerFactory
 
 import java.security.SecureRandom
+import scala.concurrent.Future
+import scala.util.Try
 
 object CryptNamesFileSystem {
   /**
@@ -74,6 +77,9 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
   /** Allows direct access to cryptography-related configuration. */
   private val config = namesConfig.cryptConfig
 
+  /** The logger. */
+  private val log = LoggerFactory.getLogger(getClass)
+
   import CryptNamesFileSystem._
 
   /**
@@ -81,14 +87,18 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
    *             underlying file system and then decrypts its name.
    */
   override def resolveFolder(id: ID)(implicit system: ActorSystem[_]): Operation[FOLDER] =
-    super.resolveFolder(id) map folderWithDecryptedName
+    super.resolveFolder(id) flatMap { folder =>
+      Operation(_ => Future.fromTry(folderWithDecryptedName(folder)))
+    }
 
   /**
    * @inheritdoc This implementation obtains the file to be resolved from the
    *             underlying file system and then decrypts its name.
    */
   override def resolveFile(id: ID)(implicit system: ActorSystem[_]): Operation[FILE] =
-    super.resolveFile(id) map fileWithDecryptedName
+    super.resolveFile(id) flatMap { file =>
+      Operation(_ => Future.fromTry(fileWithDecryptedName(file)))
+    }
 
   /**
    * @inheritdoc This implementation encrypts the name of the folder before
@@ -119,8 +129,16 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
   override def folderContent(id: ID)(implicit system: ActorSystem[_]):
   Operation[Model.FolderContent[ID, FILE, FOLDER]] = super.folderContent(id) flatMap { cryptContent =>
     Operation { _ =>
-      cryptContent.mapContentParallel(mapFiles = Some(fileWithDecryptedName),
-        mapFolders = Some(folderWithDecryptedName))
+      cryptContent.mapContentParallelTried(mapFiles = Some(fileWithDecryptedName),
+        mapFolders = Some(folderWithDecryptedName)) flatMap { result =>
+        if (result._2.nonEmpty && log.isWarnEnabled) {
+          val failureMsg = result._2.map("- " + _.exception.getMessage)
+            .mkString(System.lineSeparator(), System.lineSeparator(), "")
+          log.warn(s"Folder '$id' contains elements with names which could not be decrypted: $failureMsg.")
+        }
+        if (result._2.isEmpty || namesConfig.ignoreUnencrypted) Future.successful(result._1)
+        else Future.failed(result._2.head.exception)
+      }
     }
   }
 
@@ -152,15 +170,15 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
   }
 
   /**
-   * Returns the decrypted name of the passed in element. If this fails -
-   * because the element name is not properly encoded -, an ''IOException''
-   * with a meaningful message is thrown.
+   * Returns the decrypted name of the passed in element. As this operation can
+   * fail - because the element name is not properly encoded -, result is a
+   * ''Try'' with the decrypted name.
    *
    * @param elem the element
-   * @return the decrypted name of this element
+   * @return a ''Try'' the decrypted name of this element
    */
-  private def decryptElementName(elem: Model.Element[ID]): String =
-    CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, elem.name).get
+  private def decryptElementName(elem: Model.Element[ID]): Try[String] =
+    CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, elem.name)
 
   /**
    * Returns the encrypted name of the passed in element.
@@ -193,22 +211,23 @@ class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID
 
   /**
    * Returns a folder based on the passed in one with the folder name
-   * decrypted.
+   * decrypted or a failure if decryption fails.
    *
    * @param folder the original folder
-   * @return the folder with the decrypted name
+   * @return a ''Try'' with the folder with the decrypted name
    */
-  private def folderWithDecryptedName(folder: FOLDER): FOLDER =
-    patchFolder(folder, decryptElementName(folder))
+  private def folderWithDecryptedName(folder: FOLDER): Try[FOLDER] =
+    decryptElementName(folder) map (patchFolder(folder, _))
 
   /**
-   * Returns a file based on the passed in one with the file name decrypted.
+   * Returns a file based on the passed in one with the file name decrypted or
+   * a failure if decryption fails.
    *
    * @param file the original file
-   * @return the file with the decrypted name
+   * @return a ''Try'' with the file with the decrypted name
    */
-  private def fileWithDecryptedName(file: FILE): FILE =
-    patchFile(file, decryptElementName(file))
+  private def fileWithDecryptedName(file: FILE): Try[FILE] =
+    decryptElementName(file) map (patchFile(file, _))
 
   /**
    * Returns the source of randomness in implicit scope.

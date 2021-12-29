@@ -196,6 +196,27 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     exception.getMessage should include(InvalidFolderName)
   }
 
+  it should "ignore invalid element names when querying the content of a folder if configured" in {
+    val cryptFile = createFileMock(1, encryptName(fileName(1)))
+    val plainFile = createFileMock(1, fileName(1))
+    val cryptFolder = createFolderMock(1, encryptName(folderName(1)))
+    val plainFolder = createFolderMock(1, folderName(1))
+    val files = Map(fileID(1) -> cryptFile,
+      fileID(2) -> createFileMock(2, "invalid.file"))
+    val folders = Map(folderID(1) -> cryptFolder,
+      folderID(2) -> createFolderMock(2, "invalid.folder"))
+    val cryptContent = Model.FolderContent(FileID, files, folders)
+    val fs = createCryptFileSystem(ignoreUnencrypted = true)
+    when(fs.delegate.folderContent(FileID)).thenReturn(stubOperation(cryptContent))
+    when(fs.delegate.patchFile(cryptFile, ElementPatchSpec(patchName = Some(plainFile.name)))).thenReturn(plainFile)
+    when(fs.delegate.patchFolder(cryptFolder, ElementPatchSpec(patchName = Some(plainFolder.name))))
+      .thenReturn(plainFolder)
+
+    val content = runOp(testKit, fs.folderContent(FileID))
+    content.files should contain only (plainFile.id -> plainFile)
+    content.folders should contain only (plainFolder.id -> plainFolder)
+  }
+
   it should "resolve path components using the resolver" in {
     val components = Seq("the", "desired", "folder")
     val resolver = mock[PathResolver[String, FileType, FolderType]]

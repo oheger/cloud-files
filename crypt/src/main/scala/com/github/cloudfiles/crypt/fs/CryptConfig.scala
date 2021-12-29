@@ -36,3 +36,21 @@ case class CryptConfig(algorithm: CryptAlgorithm,
                        keyEncrypt: Key,
                        keyDecrypt: Key,
                        secRandom: SecureRandom)
+
+/**
+ * A data class representing the configuration of [[CryptNamesFileSystem]].
+ *
+ * The configuration consists of properties related to the actual encryption
+ * plus additional properties to control the behavior of the file system.
+ *
+ * @param cryptConfig       the cryptography-related configuration
+ * @param ignoreUnencrypted flag whether elements with unencrypted names should
+ *                          be ignored; if '''false''', the file system expects
+ *                          that all element names are encrypted and properly
+ *                          encoded; a name not holding this assumption causes
+ *                          an exception; if '''true''', such elements are
+ *                          ignored, e.g. when loading the content of a folder
+ *                          or resolving paths
+ */
+case class CryptNamesConfig(cryptConfig: CryptConfig,
+                            ignoreUnencrypted: Boolean)

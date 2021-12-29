@@ -44,11 +44,13 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
    * @param optResolver an optional ''PathResolver'' to set
    * @return the new file system test instance
    */
-  private def createCryptFileSystem(optResolver: Option[PathResolver[String, FileType, FolderType]] = None):
+  private def createCryptFileSystem(optResolver: Option[PathResolver[String, FileType, FolderType]] = None,
+                                    ignoreUnencrypted: Boolean = false):
   CryptNamesFileSystem[String, FileType, FolderType] = {
+    val config = CryptNamesConfig(DefaultCryptConfig, ignoreUnencrypted)
     val delegate = mock[ExtensibleFileSystem[String, FileType, FolderType, ContentType]]
-    optResolver.fold(new CryptNamesFileSystem[String, FileType, FolderType](delegate, DefaultCryptConfig)) { res =>
-      new CryptNamesFileSystem[String, FileType, FolderType](delegate, DefaultCryptConfig, res)
+    optResolver.fold(new CryptNamesFileSystem[String, FileType, FolderType](delegate, config)) { res =>
+      new CryptNamesFileSystem[String, FileType, FolderType](delegate, config, res)
     }
   }
 

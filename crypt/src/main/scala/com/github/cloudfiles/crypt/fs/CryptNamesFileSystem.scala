@@ -58,18 +58,21 @@ object CryptNamesFileSystem {
  * constructor. It is then possible to choose a specific resolver
  * implementation that fits the usage scheme of the file system best.
  *
- * @param delegate the underlying file system
- * @param config   the cryptography-related configuration
- * @param resolver the object that handles path resolve operations
+ * @param delegate    the underlying file system
+ * @param namesConfig the configuration for this file system
+ * @param resolver    the object that handles path resolve operations
  * @tparam ID     the type of element IDs
  * @tparam FILE   the type to represent a file
  * @tparam FOLDER the type to represent a folder
  */
 class CryptNamesFileSystem[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID]]
 (override val delegate: ExtensibleFileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
- val config: CryptConfig,
+ val namesConfig: CryptNamesConfig,
  resolver: PathResolver[ID, FILE, FOLDER] = new PathComponentsResolver[ID, FILE, FOLDER])
   extends DelegateFileSystem[ID, FILE, FOLDER] {
+
+  /** Allows direct access to cryptography-related configuration. */
+  private val config = namesConfig.cryptConfig
 
   import CryptNamesFileSystem._
 

@@ -5,6 +5,18 @@ of the CloudFiles library.
 
 == Release 0.4 (TBD)
 
+* Improved `CryptNamesFileSystem` with regard to the handling of unencrypted
+  file names. If a file system contained elements with unencrypted (or not
+  properly Base64-encoded) names, these elements caused exceptions with cryptic
+  messages or sometimes even crashes of certain components. The handling of
+  such unexpected names has been improved in general: Exception messages now
+  contain the problematic names. In the configuration of
+  `CryptNamesFileSystem`, it is now possible to set a flag to ignore such
+  names; they are then filtered out when listing the content of folders. To
+  make the file system configurable in this regard, a new configuration class,
+  `CryptNamesConfig` has been introduced; an instance of this new class is now
+  expected by `CryptNamesFileSystem` rather than the generic `CryptConfig`
+  class.
 * Fixed a bug in OAuthExtension with the propagation of the
   `DiscardEntityMode` when forwarding requests. This parameter was not taken
   into account (causing the default mode to be used instead) when requests were

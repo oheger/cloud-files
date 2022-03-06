@@ -19,32 +19,36 @@ import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
 /** The version of this project. */
 lazy val CloudFilesVersion = "0.5-SNAPSHOT"
 
-/** Definition of dependency versions. */
-lazy val AkkaVersion = "2.6.18"
-lazy val AkkaHttpVersion = "10.2.9"
+/** Supported Scala versions. */
 lazy val VersionScala213 = "2.13.8"
 lazy val VersionScala212 = "2.12.15"
+
+/** Versions of compile-time dependencies. */
+lazy val VersionAkka = "2.6.18"
+lazy val VersionAkkaHttp = "10.2.9"
 lazy val VersionScalaXml = "2.0.1"
 lazy val VersionSlf4j = "1.7.36"
+
+/** Versions of test dependencies. */
 lazy val VersionScalaTest = "3.2.11"
-lazy val VersionWireMock = "2.32.0"
 lazy val VersionScalaTestMockito = "3.2.11.0"
+lazy val VersionWireMock = "2.32.0"
 
 lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
 
 lazy val ITest = config("integrationTest") extend Test
 
 lazy val akkaDependencies = Seq(
-  "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
-  "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
-  "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
-  "com.typesafe.akka" %% "akka-http-spray-json" % AkkaHttpVersion
+  "com.typesafe.akka" %% "akka-actor-typed" % VersionAkka,
+  "com.typesafe.akka" %% "akka-stream" % VersionAkka,
+  "com.typesafe.akka" %% "akka-http" % VersionAkkaHttp,
+  "com.typesafe.akka" %% "akka-http-spray-json" % VersionAkkaHttp
 )
 
 lazy val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % VersionScalaTest % Test,
   "org.scalatestplus" %% "mockito-4-2" % VersionScalaTestMockito % Test,
-  "com.typesafe.akka" %% "akka-actor-testkit-typed" % AkkaVersion % Test,
+  "com.typesafe.akka" %% "akka-actor-testkit-typed" % VersionAkka % Test,
   "com.github.tomakehurst" % "wiremock-jre8" % VersionWireMock % Test,
   "org.slf4j" % "slf4j-simple" % VersionSlf4j % Test
 )

@@ -565,7 +565,8 @@ object CachePathComponentsResolver {
       CryptService.decryptTextFromBase64(config.algorithm, config.keyDecrypt, e._2.name)(config.secRandom) match {
         case Success(decryptedName) => map + (decryptedName -> e._1)
         case Failure(exception) =>
-          log.warn("Ignoring file, since its name cannot be decrypted.", exception)
+          log.warn("Ignoring file '{}', since its name cannot be decrypted.", e._2.name)
+          log.debug("Decryption of file name failed.", exception)
           map
       }
     }

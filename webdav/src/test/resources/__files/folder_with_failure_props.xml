@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:oc="http://owncloud.org/ns"
+               xmlns:nc="http://nextcloud.org/ns">
+    <d:response>
+        <d:href>/test/folder1/</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getlastmodified>Fri, 18 Feb 2022 20:28:33 GMT</d:getlastmodified>
+                <d:resourcetype>
+                    <d:collection/>
+                </d:resourcetype>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:creationdate/>
+                <d:getcontentlength/>
+                <d:displayname/>
+                <x1:Win32LastModifiedTime xmlns:x1="urn:schemas-microsoft-com:"/>
+            </d:prop>
+            <d:status>HTTP/1.1 404 Not Found</d:status>
+        </d:propstat>
+    </d:response>
+    <d:response>
+        <d:href>/test%20data/subFolder%20%281%29/</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getlastmodified>Mon, 30 Mar 2020 09:25:18 GMT</d:getlastmodified>
+                <x1:Win32LastModifiedTime xmlns:x1="urn:schemas-microsoft-com:">Tue, 8 Mar 2022 20:35:10 GMT
+                </x1:Win32LastModifiedTime>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:resourcetype>
+                    <d:collection/>
+                </d:resourcetype>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:creationdate/>
+                <d:getcontentlength/>
+                <d:displayname/>
+                <x1:Win32LastModifiedTime xmlns:x1="urn:schemas-microsoft-com:"/>
+            </d:prop>
+            <d:status>HTTP/1.1 404 Not Found</d:status>
+        </d:propstat>
+    </d:response>
+    <d:response>
+        <d:href>/test%20data/folder%20%281%29/file%20%281%29.mp3</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:getlastmodified>Fri, 18 Feb 2022 20:28:33 GMT</d:getlastmodified>
+                <d:getcontentlength>1090</d:getcontentlength>
+                <d:displayname>testFile</d:displayname>
+                <x1:Win32LastModifiedTime xmlns:x1="urn:schemas-microsoft-com:">Sat, 12 Feb 2022 16:09:07 GMT
+                </x1:Win32LastModifiedTime>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:creationdate/>
+                <d:displayname/>
+                <d:resourcetype/>
+            </d:prop>
+            <d:status>HTTP/1.1 404 Not Found</d:status>
+        </d:propstat>
+    </d:response>
+    <d:response>
+        <d:href>/test%20data/folder%20%281%29/file%20%282%29.mp3</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:creationdate/>
+                <d:getcontentlength/>
+                <d:displayname/>
+                <x1:Win32LastModifiedTime xmlns:x1="urn:schemas-microsoft-com:"/>
+            </d:prop>
+            <d:status>HTTP/1.1 404 Not Found</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:displayname>testFile2</d:displayname>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:getlastmodified>Fri, 18 Feb 2022 20:24:15 GMT</d:getlastmodified>
+                <d:resourcetype/>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>

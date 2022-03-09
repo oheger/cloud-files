@@ -176,6 +176,21 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     expectFailedFuture[SAXParseException](parser.parseFolderContent(source))
   }
 
+  it should "handle multiple propstat elements per element" in {
+    val testResponse = resourceFile("/__files/folder_with_failure_props.xml")
+    val source = FileIO.fromPath(testResponse)
+    val parser = new DavParser
+
+    val result = futureResult(parser.parseFolderContent(source))
+    val file1 = result.files(Uri("/test%20data/folder%20%281%29/file%20%281%29.mp3"))
+    file1.name should be("testFile")
+    val file2 = result.files(Uri("/test%20data/folder%20%281%29/file%20%282%29.mp3"))
+    file2.name should be("testFile2")
+    val folder = result.folders(Uri("/test%20data/subFolder%20%281%29/"))
+    folder.attributes.values(AttributeKey(NS_MICROSOFT,
+      "Win32LastModifiedTime")) should be("Tue, 8 Mar 2022 20:35:10 GMT")
+  }
+
   it should "parse a folder element" in {
     val testResponse = resourceFile("/__files/empty_folder.xml")
     val source = FileIO.fromPath(testResponse)

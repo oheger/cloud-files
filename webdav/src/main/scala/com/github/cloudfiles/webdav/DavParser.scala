@@ -62,6 +62,9 @@ object DavParser {
   /** Standard attribute for the name attribute. */
   final val AttrName = davAttribute("displayname")
 
+  /** Standard attribute for the resource type (collection or element). */
+  final val AttrResourceType = davAttribute("resourcetype")
+
   /** Name of the XML response element. */
   private val ElemResponse = "response"
 
@@ -73,9 +76,6 @@ object DavParser {
 
   /** Name of the XML prop element. */
   private val ElemProp = "prop"
-
-  /** Name of the XML resource type element. */
-  private val ElemResourceType = "resourcetype"
 
   /** Name of the XML is collection element. */
   private val ElemCollection = "collection"
@@ -176,13 +176,21 @@ object DavParser {
    * @return a collection with the future parsed status codes
    */
   private def parseStatusCodes(propStats: NodeSeq): Iterable[Future[StatusCode]] =
-    propStats.map { node =>
-      elemText(node, ElemStatus) match {
-        case RegStatus(code) =>
-          Future.fromTry(Try(StatusCode.int2StatusCode(code.toInt)))
-        case t =>
-          Future.failed(new IllegalStateException(s"Invalid HTTP status in multi-status response: '$t'"))
-      }
+    propStats.map { node => Future.fromTry(extractStatus(node)) }
+
+  /**
+   * Tries to extract the HTTP status code from the ''status'' child element of
+   * the given node. Result is a ''Failure'' if the status cannot be parsed.
+   *
+   * @param node the node in question
+   * @return a ''Try'' with the extracted HTTP status
+   */
+  private def extractStatus(node: Node): Try[StatusCode] =
+    elemText(node, ElemStatus) match {
+      case RegStatus(code) =>
+        Try(StatusCode.int2StatusCode(code.toInt))
+      case t =>
+        Failure(new IllegalStateException(s"Invalid HTTP status in multi-status response: '$t'"))
     }
 
   /**
@@ -244,18 +252,35 @@ object DavParser {
   private def extractElement(node: Node, optDescriptionKey: Option[DavModel.AttributeKey]): Try[Model.Element[Uri]] =
     Try {
       val elemUri = Uri(elemText(node, ElemHref))
-      val propNode = (node \ ElemPropStat \ ElemProp).head
-      val attributes = extractElementAttributes(propNode)
+      val attributeNodes = collectPropStats(node)
+      val attributes = attributeNodes.map(e => (e._1, nodeText(e._2)))
 
       val name = attributes.getOrElse(AttrName, nameFromUri(elemUri))
       val createdAt = parseTimeAttribute(attributes.getOrElse(AttrCreatedAt, UndefinedDate.toString))
       val lastModified = parseTimeAttribute(attributes.getOrElse(AttrModifiedAt, UndefinedDate.toString))
       val desc = optDescriptionKey flatMap attributes.get
       val elemAttributes: DavModel.Attributes = constructElementAttributes(attributes, optDescriptionKey)
-      if (isCollection(propNode))
+      if (isCollection(attributeNodes))
         DavModel.DavFolder(withTrailingSlash(elemUri), name, desc, createdAt, lastModified, elemAttributes)
       else
         DavModel.DavFile(elemUri, name, desc, createdAt, lastModified, parseFileSize(attributes), elemAttributes)
+    }
+
+  /**
+   * Processes all the ''propstat'' elements under the current node that could
+   * be retrieved successfully and aggregates their properties.
+   *
+   * @param node the current node
+   * @return a map with the property nodes of this node
+   */
+  private def collectPropStats(node: Node): Map[DavModel.AttributeKey, Node] =
+    (node \ ElemPropStat).filter { propStat =>
+      extractStatus(propStat) match {
+        case Success(status) if status.isSuccess() => true
+        case _ => false
+      }
+    }.foldLeft(Map.empty[DavModel.AttributeKey, Node]) { (attributes, stat) =>
+      attributes ++ extractElementAttributes((stat \ ElemProp).head)
     }
 
   /**
@@ -264,11 +289,10 @@ object DavParser {
    * @param propNode the nodes representing the element's properties
    * @return a map with the attributes extracted
    */
-  private def extractElementAttributes(propNode: Node): Map[DavModel.AttributeKey, String] = {
-    propNode.child.foldLeft(Map.empty[DavModel.AttributeKey, String]) { (attributes, node) =>
+  private def extractElementAttributes(propNode: Node): Map[DavModel.AttributeKey, Node] = {
+    propNode.child.foldLeft(Map.empty[DavModel.AttributeKey, Node]) { (attributes, node) =>
       val attrKey = DavModel.AttributeKey(node.namespace, node.label)
-      val value = nodeText(node)
-      attributes + (attrKey -> value)
+      attributes + (attrKey -> node)
     }
   }
 
@@ -363,13 +387,14 @@ object DavParser {
    * Checks whether an element is a collection. In this case the element
    * represents a folder rather than a single file.
    *
-   * @param propNode the top-level node for the current element
+   * @param attributeNodes the map with attribute nodes of this node
    * @return a flag whether this element is a collection
    */
-  private def isCollection(propNode: NodeSeq): Boolean = {
-    val elemCollection = propNode \ ElemResourceType \ ElemCollection
-    elemCollection.nonEmpty
-  }
+  private def isCollection(attributeNodes: Map[DavModel.AttributeKey, Node]): Boolean =
+    attributeNodes.get(AttrResourceType).exists { resTypeNode =>
+      val elemCollection = resTypeNode \ ElemCollection
+      elemCollection.nonEmpty
+    }
 
   /**
    * Generates the key of an attribute belonging to the core DAV namespace.

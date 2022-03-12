@@ -77,6 +77,13 @@ class DavFileSystem(val config: DavConfig)
   /** The parser for DAV responses. */
   private val davParser = new DavParser(config.optDescriptionKey)
 
+  /**
+   * Stores the body to be used for ''PROPFIND'' requests. It depends on
+   * additional properties specified in the configuration.
+   */
+  private val optPropFindEntity =
+    PropRequestGenerator.generatePropFind(config.additionalAttributes, config.optDescriptionKey)
+
   /** The implicit timeout for HTTP requests. */
   private implicit val requestTimeout: Timeout = config.timeout
 
@@ -115,7 +122,7 @@ class DavFileSystem(val config: DavConfig)
   Operation[Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder]] = Operation {
     httpSender =>
       val contentRequest = HttpRequest(uri = withTrailingSlash(id), method = MethodPropFind,
-        headers = List(HeaderAccept, HeaderDepthContent))
+        headers = List(HeaderAccept, HeaderDepthContent), entity = propFindEntity)
       for {
         response <- HttpRequestSender.sendRequestSuccess(httpSender, contentRequest)
         content <- davParser.parseFolderContent(response.response.entity.dataBytes)
@@ -180,7 +187,7 @@ class DavFileSystem(val config: DavConfig)
   private def resolveElement(uri: Uri, httpSender: ActorRef[HttpRequestSender.HttpCommand])
                             (implicit system: ActorSystem[_]): Future[Model.Element[Uri]] = {
     val folderRequest = HttpRequest(uri = uri, method = MethodPropFind,
-      headers = List(HeaderAccept, HeaderDepthElement))
+      headers = List(HeaderAccept, HeaderDepthElement), entity = propFindEntity)
     for {
       response <- HttpRequestSender.sendRequestSuccess(httpSender, folderRequest)
       elem <- davParser.parseElement(response.response.entity.dataBytes)
@@ -403,6 +410,15 @@ class DavFileSystem(val config: DavConfig)
   private def executeAndDiscardEntity(httpSender: ActorRef[HttpRequestSender.HttpCommand], request: HttpRequest)
                                      (implicit system: ActorSystem[_]): Future[Unit] =
     HttpRequestSender.sendRequestSuccess(httpSender, request, DiscardEntityMode.Always) map (_ => ())
+
+  /**
+   * Returns the request entity for ''PROPFIND'' requests based on
+   * precalculated information.
+   *
+   * @return the entity for ''PROPFIND'' requests
+   */
+  private def propFindEntity: RequestEntity =
+    optPropFindEntity map (body => HttpEntity(body)) getOrElse HttpEntity.Empty
 }
 
 /**

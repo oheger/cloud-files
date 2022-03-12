@@ -19,21 +19,39 @@ package com.github.cloudfiles.webdav
 import org.slf4j.LoggerFactory
 
 /**
- * An internal helper object that generates the requests to patch the
- * properties of elements.
+ * An internal helper object that generates the requests to patch or retrieve
+ * the properties of elements.
  *
  * Files and folders on a WebDav server can be assigned arbitrary properties.
  * To set these properties, special requests using the `PROPPATCH` method need
- * to be sent. The request entities are rather complex XML documents listing
- * the properties to be modified; the fact that there can be multiple
- * namespaces involved does not make them easier.
+ * to be sent. Also, when retrieving the content of folders via `PROPFIND`
+ * requests, the attributes to add to the result can be specified. The request
+ * entities are rather complex XML documents listing the properties affected;
+ * the fact that there can be multiple namespaces involved does not make them
+ * easier.
  *
  * The module offers a function to generate such requests based on the
  * attributes the user has set for a file or folder.
  */
-private object PropPatchGenerator {
+private object PropRequestGenerator {
+  /**
+   * A set with the standard attributes that are included in a PROPFIND request
+   * per default unless the user explicitly overrides them.
+   */
+  final val StandardAttributes = Set(DavParser.AttrName, DavParser.AttrSize, DavParser.AttrCreatedAt,
+    DavParser.AttrModifiedAt, DavParser.AttrSize, DavParser.AttrResourceType)
+
+  /** Type alias for a mapping from a namespace prefix to the full name. */
+  private type NamespaceMapping = Map[String, String]
+
   /** A prefix for generated namespace prefixes. */
   private val NamespacePrefix = "ns"
+
+  /**
+   * A string with the elements representing the standard WebDav attributes to
+   * be retrieved by every PROPFIND request.
+   */
+  private val StandardElements = StandardAttributes.map(attr => s"<D:${attr.key}/>").mkString("")
 
   /** The logger. */
   private val log = LoggerFactory.getLogger(getClass)
@@ -64,8 +82,7 @@ private object PropPatchGenerator {
     if (setCommands.isEmpty && attributes.keysToDelete.isEmpty) None
     else {
       val namespaces = generateNamespaceMapping(setCommands.map(_._1) ++ attributes.keysToDelete)
-      val namespaceHeaders = namespaces.map(e => s"""xmlns:${e._2}="${e._1}"""")
-        .mkString(" ", " ", "")
+      val namespaceHeaders = generateNamespacesHeader(namespaces)
       val setXml = generateSetElements(setCommands, namespaces)
       val removeXml = generateRemoveElements(attributes.keysToDelete, namespaces)
       Some(
@@ -79,6 +96,38 @@ private object PropPatchGenerator {
   }
 
   /**
+   * Creates the XML body of a request for retrieving the content of a folder.
+   * Here the attributes of elements that should be retrieved are specified. If
+   * no attributes are defined, result is ''None'', indicating that the default
+   * properties returned by the server should be used. Otherwise, at least the
+   * standard attributes are requested.
+   *
+   * @param attributes        additional attributes to retrieve
+   * @param optDescriptionKey the optional attribute for the description
+   * @return an ''Option'' with the XML content of the request
+   */
+  def generatePropFind(attributes: Iterable[DavModel.AttributeKey],
+                       optDescriptionKey: Option[DavModel.AttributeKey]): Option[String] = {
+    val additionalAttributes = optDescriptionKey.fold(attributes)(a => attributes.toSet + a)
+      .filterNot(StandardAttributes)
+
+    if (additionalAttributes.isEmpty && optDescriptionKey.isEmpty && attributes.isEmpty) None
+    else {
+      val nsMapping = generateNamespaceMapping(additionalAttributes)
+      val elements = additionalAttributes.map(elem => s"<${elementName(elem, nsMapping)}/>").mkString("")
+      val namespaceHeaders = generateNamespacesHeader(nsMapping)
+      Some(
+        s"""<?xml version="1.0" encoding="utf-8" ?>
+           |<D:propfind xmlns:D="DAV:">
+           |<D:prop$namespaceHeaders>
+           |$StandardElements$elements
+           |</D:prop>
+           |</D:propfind>
+           |""".stripMargin)
+    }
+  }
+
+  /**
    * Returns a map with prefixes and namespace URIs based on the passed in
    * attribute keys. The keys of the map are the unique namespace URIs, the
    * values are the prefixes to reference these namespaces.
@@ -86,10 +135,21 @@ private object PropPatchGenerator {
    * @param keys the attribute keys
    * @return the namespace mapping
    */
-  private def generateNamespaceMapping(keys: Iterable[DavModel.AttributeKey]): Map[String, String] = {
+  private def generateNamespaceMapping(keys: Iterable[DavModel.AttributeKey]): NamespaceMapping = {
     val namespaces = keys.map(_.namespace).toSet
     namespaces.zipWithIndex.map(t => (t._1, NamespacePrefix + t._2)).toMap
   }
+
+  /**
+   * Returns a string with the ''xmlns'' attributes corresponding to the
+   * namespaces in the given mapping.
+   *
+   * @param namespaces the namespace mapping
+   * @return the namespace attributes for this mapping
+   */
+  private def generateNamespacesHeader(namespaces: NamespaceMapping): String =
+    namespaces.map(e => s"""xmlns:${e._2}="${e._1}"""")
+      .mkString(" ", " ", "")
 
   /**
    * Generates the part of the patch request that deals with setting attribute
@@ -100,7 +160,7 @@ private object PropPatchGenerator {
    * @return the XML fragment to set attributes
    */
   private def generateSetElements(setCommands: List[(DavModel.AttributeKey, String)],
-                                  namespaces: Map[String, String]): String =
+                                  namespaces: NamespaceMapping): String =
     setCommands.map { e =>
       s"""<D:set>
          |  <D:prop>
@@ -118,8 +178,8 @@ private object PropPatchGenerator {
    * @return the XML fragment to set this attribute
    */
   private def generateSetElement(key: DavModel.AttributeKey, value: String,
-                                 namespaces: Map[String, String]): String = {
-    val elem = s"${namespaces(key.namespace)}:${key.key}"
+                                 namespaces: NamespaceMapping): String = {
+    val elem = elementName(key, namespaces)
     s"<$elem>${xml.Utility.escape(value)}</$elem>"
   }
 
@@ -131,10 +191,21 @@ private object PropPatchGenerator {
    * @param namespaces the namespace mapping
    * @return the XML fragment to remove attributes
    */
-  private def generateRemoveElements(keys: Iterable[DavModel.AttributeKey], namespaces: Map[String, String]): String =
+  private def generateRemoveElements(keys: Iterable[DavModel.AttributeKey], namespaces: NamespaceMapping): String =
     keys.map { key =>
       s"""<D:remove>
-         |  <D:prop><${namespaces(key.namespace)}:${key.key}/></D:prop>
+         |  <D:prop><${elementName(key, namespaces)}/></D:prop>
          |</D:remove>""".stripMargin
     }.mkString("\n")
+
+  /**
+   * Generates the fully-qualified name of the element with the given key using
+   * the specified mapping of namespaces.
+   *
+   * @param key        the element key
+   * @param namespaces the namespace mapping
+   * @return the fully-qualified element name
+   */
+  private def elementName(key: DavModel.AttributeKey, namespaces: NamespaceMapping): String =
+    s"${namespaces(key.namespace)}:${key.key}"
 }

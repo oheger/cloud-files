@@ -229,7 +229,7 @@ class DavFileSystem(val config: DavConfig)
       val newFolderUri = childElementUri(parent, folder.name)
       val createFolderRequest = HttpRequest(method = MethodMkCol, uri = newFolderUri)
       executeAndDiscardEntity(httpSender, createFolderRequest) flatMap { _ =>
-        PropPatchGenerator.generatePropPatch(folder.attributes, folder.description, config.optDescriptionKey) match {
+        PropRequestGenerator.generatePropPatch(folder.attributes, folder.description, config.optDescriptionKey) match {
           case Some(patchBody) =>
             val patchRequest = HttpRequest(method = MethodPropPatch, uri = withTrailingSlash(newFolderUri),
               entity = HttpEntity(ContentTypes.`text/xml(UTF-8)`, patchBody))
@@ -343,7 +343,7 @@ class DavFileSystem(val config: DavConfig)
    */
   private def executePatchRequest(httpSender: ActorRef[HttpRequestSender.HttpCommand], uri: Uri, desc: Option[String],
                                   attributes: DavModel.Attributes)(implicit system: ActorSystem[_]): Future[Unit] =
-    PropPatchGenerator.generatePropPatch(attributes, desc, config.optDescriptionKey)
+    PropRequestGenerator.generatePropPatch(attributes, desc, config.optDescriptionKey)
       .map { xml =>
         val patchRequest = HttpRequest(method = MethodPropPatch, uri = uri,
           entity = HttpEntity(ContentTypes.`text/xml(UTF-8)`, xml))

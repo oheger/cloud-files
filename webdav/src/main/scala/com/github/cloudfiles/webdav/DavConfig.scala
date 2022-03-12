@@ -31,7 +31,26 @@ import scala.concurrent.duration._
  * behavior when overriding files, and timeouts when waiting for server
  * responses.
  *
+ * When querying the content of folders using ''PROPFIND'' requests, servers
+ * can behave differently with regards to the properties included in the
+ * responses by default: Some servers always return the full set of properties
+ * available, while others limit responses to the set of standard DAV
+ * properties. When working with custom properties it is therefore necessary to
+ * explicitly list the fully-qualified names of these properties in requests.
+ * This can be achieved by passing them as ''additionalAttributes''. The
+ * parameter defaults to the set of standard properties, causing requests to
+ * select only these properties. If custom properties are to be taken into
+ * account, provide a collection with their fully-qualified names here. (The
+ * collection does not need to include the standard properties; they are always
+ * retrieved. Also, the optional description key - if provided - is taken into
+ * account automatically.) By explicitly setting the ''additionalAttributes''
+ * parameter to an empty list and passing ''None'' for the description key, no
+ * body is generated for ''PROPFIND'' requests; the results then depend on a
+ * concrete server.
+ *
  * @param rootUri              the root URI of the WebDav file system
+ * @param additionalAttributes a collection with the keys for custom properties
+ *                             to retrieve from the server
  * @param optDescriptionKey    optional key for the description attribute
  * @param deleteBeforeOverride flag whether files should be deleted before
  *                             they are uploaded again; set to '''true''' if
@@ -41,6 +60,7 @@ import scala.concurrent.duration._
  * @param timeout              the timeout for server requests
  */
 case class DavConfig(rootUri: Uri,
+                     additionalAttributes: Iterable[DavModel.AttributeKey] = Nil,
                      optDescriptionKey: Option[DavModel.AttributeKey] = None,
                      deleteBeforeOverride: Boolean = false,
                      timeout: Timeout = Timeout(30.seconds))

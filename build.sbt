@@ -20,13 +20,13 @@ import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
 lazy val CloudFilesVersion = "0.6-SNAPSHOT"
 
 /** Supported Scala versions. */
-lazy val VersionScala213 = "2.13.8"
-lazy val VersionScala212 = "2.12.15"
+lazy val VersionScala213 = "2.13.12"
+lazy val VersionScala212 = "2.12.18"
 
 /** Versions of compile-time dependencies. */
-lazy val VersionAkka = "2.6.18"
-lazy val VersionAkkaHttp = "10.2.9"
-lazy val VersionScalaXml = "2.0.1"
+lazy val VersionAkka = "2.6.20"
+lazy val VersionAkkaHttp = "10.2.10"
+lazy val VersionScalaXml = "2.2.0"
 lazy val VersionSlf4j = "1.7.36"
 
 /** Versions of test dependencies. */

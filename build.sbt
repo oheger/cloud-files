@@ -30,9 +30,9 @@ lazy val VersionScalaXml = "2.2.0"
 lazy val VersionSlf4j = "1.7.36"
 
 /** Versions of test dependencies. */
-lazy val VersionScalaTest = "3.2.11"
-lazy val VersionScalaTestMockito = "3.2.11.0"
-lazy val VersionWireMock = "2.32.0"
+lazy val VersionScalaTest = "3.2.17"
+lazy val VersionScalaTestMockito = "3.2.17.0"
+lazy val VersionWireMock = "2.35.1"
 
 lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
 
@@ -47,7 +47,7 @@ lazy val akkaDependencies = Seq(
 
 lazy val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % VersionScalaTest % Test,
-  "org.scalatestplus" %% "mockito-4-2" % VersionScalaTestMockito % Test,
+  "org.scalatestplus" %% "mockito-4-11" % VersionScalaTestMockito % Test,
   "com.typesafe.akka" %% "akka-actor-testkit-typed" % VersionAkka % Test,
   "com.github.tomakehurst" % "wiremock-jre8" % VersionWireMock % Test,
   "org.slf4j" % "slf4j-simple" % VersionSlf4j % Test

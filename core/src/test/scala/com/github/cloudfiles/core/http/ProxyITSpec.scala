@@ -26,6 +26,7 @@ import com.github.cloudfiles.core.http.ProxySupport.ProxySpec
 import com.github.cloudfiles.core.http.factory.{HttpRequestSenderConfig, HttpRequestSenderFactoryImpl, Spawner}
 import com.github.cloudfiles.core.{AsyncTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.proxy.{ConnectHandler, ProxyServlet}
 import org.eclipse.jetty.server.{NetworkConnector, Server}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
@@ -34,7 +35,6 @@ import org.scalatest.matchers.should.Matchers
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue, TimeUnit}
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.concurrent.duration._
 
 object ProxyITSpec {

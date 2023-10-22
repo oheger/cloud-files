@@ -21,10 +21,10 @@ import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import org.apache.pekko.http.scaladsl.settings.ConnectionPoolSettings
 import org.apache.pekko.http.scaladsl.{ClientTransport, Http, HttpExt}
-import org.apache.pekko.stream.scaladsl.{Flow, Keep, Sink, Source, SourceQueueWithComplete}
-import org.apache.pekko.stream.{OverflowStrategy, QueueOfferResult}
+import org.apache.pekko.stream.scaladsl.{Flow, Keep, Sink, Source}
+import org.apache.pekko.stream.{BoundedSourceQueue, QueueOfferResult}
 
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success, Try}
 
 private object RequestQueue {
@@ -131,8 +131,8 @@ private class RequestQueue(uri: Uri, queueSize: Int, proxy: ProxySelectorFunc)(i
     createPoolClientFlow[Promise[HttpResponse]](uri, proxy, Http())
 
   /** The queue acting as source for the stream of requests and a kill switch. */
-  val queue: SourceQueueWithComplete[(HttpRequest, Promise[HttpResponse])] =
-    Source.queue[(HttpRequest, Promise[HttpResponse])](queueSize, OverflowStrategy.dropNew)
+  val queue: BoundedSourceQueue[(HttpRequest, Promise[HttpResponse])] =
+    Source.queue[(HttpRequest, Promise[HttpResponse])](queueSize)
       .via(poolClientFlow)
       .toMat(Sink.foreach({
         case (Success(resp), p) => p.success(resp)
@@ -148,9 +148,8 @@ private class RequestQueue(uri: Uri, queueSize: Int, proxy: ProxySelectorFunc)(i
    * @return a ''Future'' with the response
    */
   def queueRequest(request: HttpRequest): Future[HttpResponse] = {
-    implicit val ec: ExecutionContext = system.executionContext
     val responsePromise = Promise[HttpResponse]()
-    queue.offer(request -> responsePromise).flatMap {
+    queue.offer(request -> responsePromise) match {
       case QueueOfferResult.Enqueued =>
         responsePromise.future
       case QueueOfferResult.Dropped =>

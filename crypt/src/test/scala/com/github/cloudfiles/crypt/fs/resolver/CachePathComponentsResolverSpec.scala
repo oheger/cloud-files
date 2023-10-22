@@ -229,7 +229,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
   it should "handle a failed request for the root folder" in {
     val exceptionRootFolder = new IOException("Test exception: Could not locate root folder!")
-    val promiseRoot = Promise[String]
+    val promiseRoot = Promise[String]()
     val helper = new ResolverTestHelper
 
     helper.prepareRootID(futID = promiseRoot.future)

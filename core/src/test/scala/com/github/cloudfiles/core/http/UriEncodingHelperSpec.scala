@@ -207,7 +207,7 @@ class UriEncodingHelperSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "generate a URI from its components after encoding them" in {
-    val components = Array("a", "test uri", "to be", "split")
+    val components = Seq("a", "test uri", "to be", "split")
     val ExpectedUri = "/a/test%20uri/to%20be/split"
 
     UriEncodingHelper.fromComponentsWithEncode(components) should be(ExpectedUri)

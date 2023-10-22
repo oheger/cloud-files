@@ -154,7 +154,7 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
     val CryptFileSize = ShiftCryptAlgorithm.encryptedSize(FileSize)
     val fs = createCryptFileSystem()
     when(fs.delegate.updateFileContent(argEq(FileID), argEq(CryptFileSize), any())(any()))
-      .thenReturn(stubOperation())
+      .thenReturn(stubOperation(()))
 
     runOp(testKit, fs.updateFileContent(FileID, FileSize, fileContentSource))
     val captSource = ArgumentCaptor.forClass(classOf[Source[ByteString, Any]])

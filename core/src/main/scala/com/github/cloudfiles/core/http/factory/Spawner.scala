@@ -16,10 +16,10 @@
 
 package com.github.cloudfiles.core.http.factory
 
-import akka.actor.typed.scaladsl.ActorContext
-import akka.{actor => classic}
-import akka.actor.typed.{ActorRef, Behavior, Props}
-import akka.actor.typed.scaladsl.adapter._
+import org.apache.pekko.actor.typed.scaladsl.ActorContext
+import org.apache.pekko.actor.typed.scaladsl.adapter._
+import org.apache.pekko.actor.typed.{ActorRef, Behavior, Props}
+import org.apache.pekko.{actor => classic}
 
 import scala.language.implicitConversions
 

@@ -16,18 +16,18 @@
 
 package com.github.cloudfiles.webdav
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.{StatusCodes, Uri}
-import akka.stream.scaladsl.{Sink, Source}
-import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.Model.Folder
-import com.github.cloudfiles.core.delegate.ElementPatchSpec
-import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
-import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.cloudfiles.core._
+import com.github.cloudfiles.core.delegate.ElementPatchSpec
+import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
+import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
 import com.github.cloudfiles.webdav.DavModel.AttributeKey
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.matching.{AbsentPattern, ContentPattern}
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.http.scaladsl.model.{StatusCodes, Uri}
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
+import org.apache.pekko.util.{ByteString, Timeout}
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers

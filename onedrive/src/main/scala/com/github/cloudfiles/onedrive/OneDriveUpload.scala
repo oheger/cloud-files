@@ -16,20 +16,20 @@
 
 package com.github.cloudfiles.onedrive
 
-import akka.actor.typed.scaladsl.AskPattern._
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{ModeledCustomHeader, ModeledCustomHeaderCompanion}
-import akka.http.scaladsl.unmarshalling.Unmarshal
-import akka.stream._
-import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.stage._
-import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 import com.github.cloudfiles.onedrive.OneDriveUpload.UploadStreamCoordinatorActor.{NextUploadChunk, UploadChunk, UploadStreamCoordinationMessage}
+import org.apache.pekko.actor.typed.scaladsl.AskPattern._
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
+import org.apache.pekko.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.http.scaladsl.model.headers.{ModeledCustomHeader, ModeledCustomHeaderCompanion}
+import org.apache.pekko.http.scaladsl.unmarshalling.Unmarshal
+import org.apache.pekko.stream._
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
+import org.apache.pekko.stream.stage._
+import org.apache.pekko.util.{ByteString, Timeout}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.{ExecutionContext, Future}

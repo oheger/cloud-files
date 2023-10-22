@@ -24,8 +24,8 @@ lazy val VersionScala213 = "2.13.12"
 lazy val VersionScala212 = "2.12.18"
 
 /** Versions of compile-time dependencies. */
-lazy val VersionAkka = "2.6.20"
-lazy val VersionAkkaHttp = "10.2.10"
+lazy val VersionPekko = "1.0.1"
+lazy val VersionPekkoHttp = "1.0.0"
 lazy val VersionScalaXml = "2.2.0"
 lazy val VersionSlf4j = "1.7.36"
 
@@ -39,16 +39,16 @@ lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
 lazy val ITest = config("integrationTest") extend Test
 
 lazy val akkaDependencies = Seq(
-  "com.typesafe.akka" %% "akka-actor-typed" % VersionAkka,
-  "com.typesafe.akka" %% "akka-stream" % VersionAkka,
-  "com.typesafe.akka" %% "akka-http" % VersionAkkaHttp,
-  "com.typesafe.akka" %% "akka-http-spray-json" % VersionAkkaHttp
+  "org.apache.pekko" %% "pekko-actor-typed" % VersionPekko,
+  "org.apache.pekko" %% "pekko-stream" % VersionPekko,
+  "org.apache.pekko" %% "pekko-http" % VersionPekkoHttp,
+  "org.apache.pekko" %% "pekko-http-spray-json" % VersionPekkoHttp
 )
 
 lazy val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % VersionScalaTest % Test,
   "org.scalatestplus" %% "mockito-4-11" % VersionScalaTestMockito % Test,
-  "com.typesafe.akka" %% "akka-actor-testkit-typed" % VersionAkka % Test,
+  "org.apache.pekko" %% "pekko-actor-testkit-typed" % VersionPekko % Test,
   "org.wiremock" % "wiremock" % VersionWireMock % Test,
   "org.slf4j" % "slf4j-simple" % VersionSlf4j % Test
 )

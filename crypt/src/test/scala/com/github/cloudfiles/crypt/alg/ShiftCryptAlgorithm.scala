@@ -16,10 +16,10 @@
 
 package com.github.cloudfiles.crypt.alg
 
-import akka.stream.Materializer
-import akka.stream.scaladsl.{Sink, Source}
-import akka.util.ByteString
 import com.github.cloudfiles.core.FileTestHelper
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
+import org.apache.pekko.util.ByteString
 
 import java.nio.charset.StandardCharsets
 import java.security.{Key, SecureRandom}

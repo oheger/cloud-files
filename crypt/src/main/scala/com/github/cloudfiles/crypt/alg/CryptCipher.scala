@@ -16,7 +16,7 @@
 
 package com.github.cloudfiles.crypt.alg
 
-import akka.util.ByteString
+import org.apache.pekko.util.ByteString
 
 import java.security.SecureRandom
 

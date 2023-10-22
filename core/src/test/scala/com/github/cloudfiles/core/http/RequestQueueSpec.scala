@@ -16,10 +16,10 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
-import akka.http.scaladsl.{Http, HttpExt}
-import akka.stream.scaladsl.Flow
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
+import org.apache.pekko.http.scaladsl.{Http, HttpExt}
+import org.apache.pekko.stream.scaladsl.Flow
 import org.mockito.ArgumentMatchers.{any, eq => eqArg}
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike

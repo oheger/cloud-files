@@ -16,8 +16,8 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.http.scaladsl.model.Uri
-import akka.http.scaladsl.model.headers.HttpCredentials
+import org.apache.pekko.http.scaladsl.model.Uri
+import org.apache.pekko.http.scaladsl.model.headers.HttpCredentials
 
 import java.net.{InetSocketAddress, ProxySelector, URI}
 import scala.annotation.tailrec

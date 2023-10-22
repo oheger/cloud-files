@@ -16,10 +16,10 @@
 
 package com.github.cloudfiles.crypt.fs.resolver
 
-import akka.actor.typed.ActorSystem
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.{FileSystem, Model}
 import com.github.cloudfiles.crypt.fs.CryptConfig
+import org.apache.pekko.actor.typed.ActorSystem
 
 /**
  * A trait defining a component that can resolve paths on a file system with

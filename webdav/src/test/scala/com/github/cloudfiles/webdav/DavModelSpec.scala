@@ -16,8 +16,8 @@
 
 package com.github.cloudfiles.webdav
 
-import akka.http.scaladsl.model.Uri
 import com.github.cloudfiles.webdav.DavModel.{AttributeKey, Attributes}
+import org.apache.pekko.http.scaladsl.model.Uri
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

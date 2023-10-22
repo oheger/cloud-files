@@ -16,8 +16,8 @@
 
 package com.github.cloudfiles.webdav
 
-import akka.http.scaladsl.model.Uri
-import akka.util.Timeout
+import org.apache.pekko.http.scaladsl.model.Uri
+import org.apache.pekko.util.Timeout
 
 import scala.concurrent.duration._
 

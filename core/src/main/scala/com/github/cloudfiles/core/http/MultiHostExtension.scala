@@ -16,11 +16,11 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.typed.scaladsl.{ActorContext, Behaviors, LoggerOps}
-import akka.actor.typed.{ActorRef, Behavior}
-import akka.http.scaladsl.model.Uri
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResult
 import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemProxy}
+import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, LoggerOps}
+import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.http.scaladsl.model.Uri
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}

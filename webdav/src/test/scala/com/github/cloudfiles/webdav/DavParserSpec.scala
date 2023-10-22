@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.webdav
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.{StatusCodes, Uri}
-import akka.stream.scaladsl.{FileIO, Source}
-import akka.util.ByteString
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
-import com.github.cloudfiles.webdav.DavModel.AttributeKey
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
+import com.github.cloudfiles.webdav.DavModel.AttributeKey
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.http.scaladsl.model.{StatusCodes, Uri}
+import org.apache.pekko.stream.scaladsl.{FileIO, Source}
+import org.apache.pekko.util.ByteString
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

@@ -16,7 +16,7 @@
 
 package com.github.cloudfiles.core
 
-import akka.actor.testkit.typed.scaladsl.ActorTestKit
+import org.apache.pekko.actor.testkit.typed.scaladsl.ActorTestKit
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Promise, TimeoutException}

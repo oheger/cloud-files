@@ -16,11 +16,11 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
-import akka.http.scaladsl.model.headers.{RetryAfterDateTime, RetryAfterDuration, `Retry-After`}
-import akka.http.scaladsl.model.{DateTime, HttpResponse, StatusCodes}
 import com.github.cloudfiles.core.http.HttpRequestSender.{FailedResponseException, FailedResult, ForwardedResult}
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
+import org.apache.pekko.http.scaladsl.model.headers.{RetryAfterDateTime, RetryAfterDuration, `Retry-After`}
+import org.apache.pekko.http.scaladsl.model.{DateTime, HttpResponse, StatusCodes}
 
 import scala.concurrent.duration._
 

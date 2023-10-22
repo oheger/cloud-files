@@ -16,14 +16,14 @@
 
 package com.github.cloudfiles.crypt.fs.resolver
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior, Props}
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.factory.Spawner
 import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, Model}
 import com.github.cloudfiles.crypt.fs.resolver.CachePathComponentsResolver.PathLookupCommand
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.{ActorRef, Behavior, Props}
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers

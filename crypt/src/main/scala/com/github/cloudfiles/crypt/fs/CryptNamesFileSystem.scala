@@ -16,9 +16,6 @@
 
 package com.github.cloudfiles.crypt.fs
 
-import akka.actor.typed.ActorSystem
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{DelegateFileSystem, ElementPatchSpec, ExtensibleFileSystem}
@@ -26,6 +23,9 @@ import com.github.cloudfiles.core.http.UriEncodingHelper
 import com.github.cloudfiles.crypt.alg.CryptAlgorithm
 import com.github.cloudfiles.crypt.fs.resolver.{PathComponentsResolver, PathResolver}
 import com.github.cloudfiles.crypt.service.CryptService
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
 import org.slf4j.LoggerFactory
 
 import java.security.SecureRandom

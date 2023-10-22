@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.webdav
 
-import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.model.{HttpResponse, StatusCode, Uri}
-import akka.stream.scaladsl.{Sink, Source}
-import akka.util.ByteString
 import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.cloudfiles.core.http.UriEncodingHelper
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCode, Uri}
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
+import org.apache.pekko.util.ByteString
 import org.slf4j.LoggerFactory
 
 import java.io.ByteArrayInputStream

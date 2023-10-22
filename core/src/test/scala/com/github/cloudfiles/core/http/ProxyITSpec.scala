@@ -16,11 +16,11 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.typed.{ActorRef, Behavior, Props}
-import akka.http.scaladsl.model.headers.BasicHttpCredentials
-import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
-import akka.util.Timeout
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.actor.typed.{ActorRef, Behavior, Props}
+import org.apache.pekko.http.scaladsl.model.headers.BasicHttpCredentials
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, StatusCodes}
+import org.apache.pekko.util.Timeout
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.ProxySupport.ProxySpec
 import com.github.cloudfiles.core.http.factory.{HttpRequestSenderConfig, HttpRequestSenderFactoryImpl, Spawner}

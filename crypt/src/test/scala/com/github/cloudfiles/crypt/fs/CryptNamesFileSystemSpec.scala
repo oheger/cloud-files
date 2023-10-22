@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.crypt.fs
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, Model}
 import com.github.cloudfiles.crypt.fs.resolver.PathResolver
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
 import org.mockito.Mockito.{verify, verifyNoInteractions, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers

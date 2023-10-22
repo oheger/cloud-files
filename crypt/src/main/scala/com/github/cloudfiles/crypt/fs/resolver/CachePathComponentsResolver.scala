@@ -16,22 +16,22 @@
 
 package com.github.cloudfiles.crypt.fs.resolver
 
-import akka.actor.typed.scaladsl.AskPattern._
-import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
-import akka.util.Timeout
 import com.github.cloudfiles.core.FileSystem.Operation
-import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
 import com.github.cloudfiles.core.http.factory.Spawner
+import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
 import com.github.cloudfiles.core.utils.LRUCache
 import com.github.cloudfiles.core.{FileSystem, Model}
 import com.github.cloudfiles.crypt.fs.CryptConfig
 import com.github.cloudfiles.crypt.service.CryptService
+import org.apache.pekko.actor.typed.scaladsl.AskPattern._
+import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
+import org.apache.pekko.util.Timeout
 import org.slf4j.Logger
 
 import scala.annotation.tailrec
-import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
 /**

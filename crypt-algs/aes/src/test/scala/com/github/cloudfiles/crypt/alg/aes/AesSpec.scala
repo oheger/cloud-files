@@ -16,9 +16,9 @@
 
 package com.github.cloudfiles.crypt.alg.aes
 
-import akka.util.ByteString
 import com.github.cloudfiles.core.FileTestHelper
 import com.github.cloudfiles.crypt.alg.CryptCipher
+import org.apache.pekko.util.ByteString
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

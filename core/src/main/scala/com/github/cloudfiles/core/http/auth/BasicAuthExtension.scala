@@ -16,10 +16,10 @@
 
 package com.github.cloudfiles.core.http.auth
 
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior}
-import akka.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials}
 import com.github.cloudfiles.core.http.HttpRequestSender
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials}
 
 /**
  * An actor implementation that adds basic authentication to HTTP requests.

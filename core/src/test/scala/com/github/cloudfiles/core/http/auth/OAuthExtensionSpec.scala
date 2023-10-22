@@ -16,19 +16,19 @@
 
 package com.github.cloudfiles.core.http.auth
 
-import akka.actor.{ActorSystem, DeadLetter}
-import akka.actor.testkit.typed.scaladsl.{ScalaTestWithActorTestKit, TestProbe}
-import akka.actor.typed.scaladsl.adapter.TypedActorSystemOps
-import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
-import akka.actor.typed.{ActorRef, Behavior}
-import akka.http.scaladsl.model.Uri.Query
-import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken, `Content-Type`}
-import akka.http.scaladsl.model._
-import akka.stream.scaladsl.Sink
-import akka.util.ByteString
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
 import com.github.cloudfiles.core.http.{HttpRequestSender, Secret}
+import org.apache.pekko.actor.testkit.typed.scaladsl.{ScalaTestWithActorTestKit, TestProbe}
+import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
+import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
+import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.actor.{ActorSystem, DeadLetter}
+import org.apache.pekko.http.scaladsl.model.Uri.Query
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken, `Content-Type`}
+import org.apache.pekko.stream.scaladsl.Sink
+import org.apache.pekko.util.ByteString
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

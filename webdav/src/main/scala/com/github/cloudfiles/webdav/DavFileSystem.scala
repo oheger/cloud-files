@@ -16,17 +16,17 @@
 
 package com.github.cloudfiles.webdav
 
-import akka.actor.typed.{ActorRef, ActorSystem}
-import akka.http.scaladsl.model.Uri.Path
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{Accept, ModeledCustomHeader, ModeledCustomHeaderCompanion}
-import akka.stream.scaladsl.Source
-import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem}
+import org.apache.pekko.http.scaladsl.model.Uri.Path
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.http.scaladsl.model.headers.{Accept, ModeledCustomHeader, ModeledCustomHeaderCompanion}
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.{ByteString, Timeout}
 
 import scala.concurrent.Future
 import scala.util.Try

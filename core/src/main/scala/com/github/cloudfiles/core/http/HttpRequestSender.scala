@@ -16,15 +16,15 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.Done
-import akka.actor.typed.scaladsl.AskPattern._
-import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
-import akka.stream.Materializer
-import akka.util.Timeout
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemProxy}
+import org.apache.pekko.Done
+import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
+import org.apache.pekko.actor.typed.scaladsl.AskPattern.{Askable, schedulerFromActorSystem}
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior, PostStop}
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.util.Timeout
 
 import java.io.IOException
 import scala.concurrent.duration._

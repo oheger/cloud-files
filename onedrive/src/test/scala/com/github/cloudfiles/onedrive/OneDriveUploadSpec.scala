@@ -16,17 +16,17 @@
 
 package com.github.cloudfiles.onedrive
 
-import akka.Done
-import akka.actor.DeadLetter
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.typed.{ActorRef, ActorSystem}
-import akka.http.scaladsl.model.HttpRequest
-import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.stage.AsyncCallback
-import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
 import com.github.cloudfiles.onedrive.OneDriveUpload.UploadRequestSource
 import com.github.cloudfiles.onedrive.OneDriveUpload.UploadStreamCoordinatorActor.{NextUploadChunk, UploadStreamCoordinationMessage}
+import org.apache.pekko.Done
+import org.apache.pekko.actor.DeadLetter
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem}
+import org.apache.pekko.http.scaladsl.model.HttpRequest
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
+import org.apache.pekko.stream.stage.AsyncCallback
+import org.apache.pekko.util.{ByteString, Timeout}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

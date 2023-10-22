@@ -16,11 +16,11 @@
 
 package com.github.cloudfiles.core.http.auth
 
-import akka.actor.DeadLetter
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials, `Content-Type`}
-import akka.http.scaladsl.model.{ContentTypes, HttpMethods, HttpRequest, Uri}
 import com.github.cloudfiles.core.http.{HttpRequestSender, Secret, auth}
+import org.apache.pekko.actor.DeadLetter
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials, `Content-Type`}
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpMethods, HttpRequest, Uri}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

@@ -16,15 +16,15 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.Done
-import akka.actor.DeadLetter
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model._
-import akka.util.Timeout
 import com.github.cloudfiles.core.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.Fault
+import org.apache.pekko.Done
+import org.apache.pekko.actor.DeadLetter
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.util.Timeout
 import org.mockito.Mockito
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -32,8 +32,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.io.IOException
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 object HttpRequestSenderITSpec {
   /** A data object passed with the request. */

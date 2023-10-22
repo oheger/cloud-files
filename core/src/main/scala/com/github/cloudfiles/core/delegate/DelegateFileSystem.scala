@@ -16,12 +16,12 @@
 
 package com.github.cloudfiles.core.delegate
 
-import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.model.HttpEntity
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.Model
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.http.scaladsl.model.HttpEntity
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
 
 /**
  * A trait implementing an ''ExtensibleFileSystem'' that delegates all

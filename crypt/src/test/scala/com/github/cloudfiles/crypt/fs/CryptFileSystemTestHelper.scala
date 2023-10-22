@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.crypt.fs
 
-import akka.actor.testkit.typed.scaladsl.ActorTestKit
-import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
-import com.github.cloudfiles.core.{AsyncTestHelper, Model}
 import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.{AsyncTestHelper, Model}
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
 import com.github.cloudfiles.crypt.service.CryptService
+import org.apache.pekko.actor.testkit.typed.scaladsl.ActorTestKit
+import org.apache.pekko.util.ByteString
 import org.mockito.Mockito.when
 import org.scalatest.matchers.should.Matchers
 

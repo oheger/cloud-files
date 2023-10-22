@@ -16,8 +16,8 @@
 
 package com.github.cloudfiles.crypt.alg.aes
 
-import akka.util.ByteString
 import com.github.cloudfiles.crypt.alg.{CryptAlgorithm, CryptCipher}
+import org.apache.pekko.util.ByteString
 
 import java.nio.charset.StandardCharsets
 import java.security.{Key, SecureRandom}

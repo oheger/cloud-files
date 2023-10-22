@@ -16,17 +16,17 @@
 
 package com.github.cloudfiles.gdrive
 
-import akka.NotUsed
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.{ContentTypes, StatusCode, StatusCodes}
-import akka.stream.scaladsl.{Sink, Source}
-import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core._
 import com.github.cloudfiles.core.delegate.ElementPatchSpec
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
 import com.github.cloudfiles.core.http.{MultiHostExtension, UriEncodingHelper}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.matching.StringValuePattern
+import org.apache.pekko.NotUsed
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, StatusCode, StatusCodes}
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
+import org.apache.pekko.util.{ByteString, Timeout}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import spray.json._

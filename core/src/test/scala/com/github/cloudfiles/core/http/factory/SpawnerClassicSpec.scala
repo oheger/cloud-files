@@ -16,11 +16,11 @@
 
 package com.github.cloudfiles.core.http.factory
 
-import akka.actor.testkit.typed.scaladsl.ActorTestKit
-import akka.actor.{Actor, ActorSystem, Props}
-import akka.testkit.{ImplicitSender, TestKit}
 import com.github.cloudfiles.core.http.factory.SpawnerClassicSpec.{Check, CheckSuccess}
 import com.github.cloudfiles.core.http.factory.SpawnerTestActor.checkSpawner
+import org.apache.pekko.actor.testkit.typed.scaladsl.ActorTestKit
+import org.apache.pekko.actor.{Actor, ActorSystem, Props}
+import org.apache.pekko.testkit.{ImplicitSender, TestKit}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -65,7 +65,7 @@ class SpawnerClassicSpec(testSystem: ActorSystem) extends TestKit(testSystem) wi
    * @param optName an optional name for the spawned actor
    * @return the client actor to test the ''Spawner'' for the context
    */
-  private def clientActor(optName: Option[String] = None): akka.actor.ActorRef =
+  private def clientActor(optName: Option[String] = None): org.apache.pekko.actor.ActorRef =
     system.actorOf(Props(new Actor {
       override def receive: Receive = {
         case Check =>

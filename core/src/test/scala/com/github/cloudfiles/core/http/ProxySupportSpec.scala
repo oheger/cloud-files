@@ -16,18 +16,18 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.http.scaladsl.model.Uri
-import akka.http.scaladsl.model.headers.BasicHttpCredentials
 import com.github.cloudfiles.core.http.ProxySupport.ProxySpec
+import org.apache.pekko.http.scaladsl.model.Uri
+import org.apache.pekko.http.scaladsl.model.headers.BasicHttpCredentials
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
-import java.{net, util}
 import java.net.Proxy.Type
 import java.net.{InetSocketAddress, ProxySelector, URI}
 import java.util.Collections
+import java.{net, util}
 
 object ProxySupportSpec {
   /** A test URI used by test cases. */

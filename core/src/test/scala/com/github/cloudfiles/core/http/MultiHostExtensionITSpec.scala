@@ -16,12 +16,12 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit, TestProbe}
-import akka.actor.typed.scaladsl.Behaviors
-import akka.http.scaladsl.model.{HttpRequest, StatusCodes}
 import com.github.cloudfiles.core.http.auth.{BasicAuthConfig, BasicAuthExtension}
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
+import org.apache.pekko.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit, TestProbe}
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, StatusCodes}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatestplus.mockito.MockitoSugar
 

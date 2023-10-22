@@ -16,9 +16,9 @@
 
 package com.github.cloudfiles
 
-import akka.http.scaladsl.model.Uri
-import akka.http.scaladsl.model.Uri.Path
 import com.github.cloudfiles.core.http.UriEncodingHelper
+import org.apache.pekko.http.scaladsl.model.Uri
+import org.apache.pekko.http.scaladsl.model.Uri.Path
 
 package object webdav {
   /**

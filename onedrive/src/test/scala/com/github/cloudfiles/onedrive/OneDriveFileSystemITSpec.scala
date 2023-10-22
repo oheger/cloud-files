@@ -16,18 +16,18 @@
 
 package com.github.cloudfiles.onedrive
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.{Sink, Source}
-import akka.util.ByteString
 import com.github.cloudfiles.core._
 import com.github.cloudfiles.core.delegate.ElementPatchSpec
-import com.github.cloudfiles.core.http.{MultiHostExtension, ProxyITSpec, ProxySupport, Secret}
 import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthTokenData}
+import com.github.cloudfiles.core.http.{MultiHostExtension, ProxyITSpec, ProxySupport, Secret}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol.WritableFileSystemInfo
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.matching.AbsentPattern
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.http.scaladsl.model.StatusCodes
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
+import org.apache.pekko.util.ByteString
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -35,8 +35,8 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.time.Instant
 import java.util.concurrent.TimeoutException
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 object OneDriveFileSystemITSpec {
   /** Test OneDrive ID. */

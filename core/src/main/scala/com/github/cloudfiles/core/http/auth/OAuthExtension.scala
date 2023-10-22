@@ -16,16 +16,16 @@
 
 package com.github.cloudfiles.core.http.auth
 
-import akka.actor.ActorSystem
-import akka.actor.typed.scaladsl.adapter.TypedActorSystemOps
-import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
-import akka.actor.typed.{ActorRef, Behavior}
-import akka.http.scaladsl.model.{FormData, HttpMethods, HttpRequest, HttpResponse, StatusCodes}
-import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
-import akka.stream.scaladsl.Sink
-import akka.util.ByteString
-import com.github.cloudfiles.core.http.HttpRequestSender.{FailedResponseException, SendRequest}
 import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.HttpRequestSender.{FailedResponseException, SendRequest}
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
+import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
+import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.stream.scaladsl.Sink
+import org.apache.pekko.util.ByteString
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}

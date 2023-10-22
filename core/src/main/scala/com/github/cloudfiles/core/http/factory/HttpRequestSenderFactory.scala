@@ -16,10 +16,10 @@
 
 package com.github.cloudfiles.core.http.factory
 
-import akka.actor.typed.ActorRef
-import akka.http.scaladsl.model.Uri
-import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension}
 import com.github.cloudfiles.core.http.MultiHostExtension.RequestActorFactory
+import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension}
+import org.apache.pekko.actor.typed.ActorRef
+import org.apache.pekko.http.scaladsl.model.Uri
 
 /**
  * A trait to simplify the creation and configuration of actors for sending

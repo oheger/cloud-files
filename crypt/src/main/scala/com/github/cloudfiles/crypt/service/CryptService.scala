@@ -16,9 +16,9 @@
 
 package com.github.cloudfiles.crypt.service
 
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import com.github.cloudfiles.crypt.alg.{CryptAlgorithm, CryptCipher}
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
 
 import java.io.IOException
 import java.security.{Key, SecureRandom}

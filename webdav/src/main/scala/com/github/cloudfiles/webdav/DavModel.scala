@@ -16,8 +16,8 @@
 
 package com.github.cloudfiles.webdav
 
-import akka.http.scaladsl.model.Uri
 import com.github.cloudfiles.core.Model
+import org.apache.pekko.http.scaladsl.model.Uri
 
 import java.time.Instant
 

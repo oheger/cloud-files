@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
-import akka.http.scaladsl.settings.ConnectionPoolSettings
-import akka.http.scaladsl.{ClientTransport, Http, HttpExt}
-import akka.stream.scaladsl.{Flow, Keep, Sink, Source, SourceQueueWithComplete}
-import akka.stream.{OverflowStrategy, QueueOfferResult}
 import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, ProxySpec}
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
+import org.apache.pekko.http.scaladsl.settings.ConnectionPoolSettings
+import org.apache.pekko.http.scaladsl.{ClientTransport, Http, HttpExt}
+import org.apache.pekko.stream.scaladsl.{Flow, Keep, Sink, Source, SourceQueueWithComplete}
+import org.apache.pekko.stream.{OverflowStrategy, QueueOfferResult}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}

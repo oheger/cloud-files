@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior}
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse, ResponseEntity, StatusCodes, Uri}
-import akka.util.Timeout
 import com.github.cloudfiles.core.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
 import com.github.cloudfiles.core.http.HttpRequestSenderSpec.TestExtension
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.util.Timeout
 import org.mockito.Mockito.{never, verify}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers

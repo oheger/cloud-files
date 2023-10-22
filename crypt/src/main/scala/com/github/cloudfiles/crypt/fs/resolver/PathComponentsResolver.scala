@@ -16,11 +16,11 @@
 
 package com.github.cloudfiles.crypt.fs.resolver
 
-import akka.actor.typed.ActorSystem
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.{FileSystem, Model}
 import com.github.cloudfiles.crypt.fs.CryptConfig
 import com.github.cloudfiles.crypt.service.CryptService
+import org.apache.pekko.actor.typed.ActorSystem
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try

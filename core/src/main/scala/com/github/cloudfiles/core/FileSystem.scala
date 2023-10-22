@@ -16,12 +16,12 @@
 
 package com.github.cloudfiles.core
 
-import akka.actor.typed.{ActorRef, ActorSystem}
-import akka.http.scaladsl.model.HttpEntity
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.http.{HttpRequestSender, UriEncodingHelper}
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem}
+import org.apache.pekko.http.scaladsl.model.HttpEntity
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
 
 import scala.concurrent.{ExecutionContext, Future}
 

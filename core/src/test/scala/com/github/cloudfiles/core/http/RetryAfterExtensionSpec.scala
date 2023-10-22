@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.core.http
 
-import akka.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit}
-import akka.actor.typed.scaladsl.Behaviors
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.`Retry-After`
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
 import com.github.cloudfiles.core.http.RetryAfterExtension.RetryAfterConfig
+import org.apache.pekko.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit}
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.http.scaladsl.model.headers.`Retry-After`
 import org.mockito.Mockito.{never, verify}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers

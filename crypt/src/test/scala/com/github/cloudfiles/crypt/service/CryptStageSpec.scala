@@ -16,13 +16,13 @@
 
 package com.github.cloudfiles.crypt.service
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.stream.FlowShape
-import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.stage.GraphStage
-import akka.util.ByteString
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.stream.FlowShape
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
+import org.apache.pekko.stream.stage.GraphStage
+import org.apache.pekko.util.ByteString
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

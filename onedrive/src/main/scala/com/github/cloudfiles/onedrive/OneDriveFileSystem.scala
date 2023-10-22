@@ -16,14 +16,6 @@
 
 package com.github.cloudfiles.onedrive
 
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.marshalling.{Marshal, Marshaller}
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{Accept, Location}
-import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
-import akka.stream.scaladsl.Source
-import akka.util.{ByteString, Timeout}
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
@@ -33,6 +25,14 @@ import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemPr
 import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthExtension}
 import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, UriEncodingHelper}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
+import org.apache.pekko.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import org.apache.pekko.http.scaladsl.marshalling.{Marshal, Marshaller}
+import org.apache.pekko.http.scaladsl.model._
+import org.apache.pekko.http.scaladsl.model.headers.{Accept, Location}
+import org.apache.pekko.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.{ByteString, Timeout}
 
 import scala.concurrent.Future
 import scala.reflect.ClassTag

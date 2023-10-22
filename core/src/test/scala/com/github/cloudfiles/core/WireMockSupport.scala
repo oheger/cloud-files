@@ -16,17 +16,17 @@
 
 package com.github.cloudfiles.core
 
-import akka.actor.testkit.typed.scaladsl.ActorTestKit
-import akka.http.scaladsl.model.headers.Authorization
-import akka.http.scaladsl.model.{HttpResponse, StatusCode, StatusCodes}
-import akka.stream.Materializer
-import akka.stream.scaladsl.Sink
-import akka.util.ByteString
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.client.{MappingBuilder, ResponseDefinitionBuilder}
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder
+import org.apache.pekko.actor.testkit.typed.scaladsl.ActorTestKit
+import org.apache.pekko.http.scaladsl.model.headers.Authorization
+import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCode, StatusCodes}
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.Sink
+import org.apache.pekko.util.ByteString
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 
 import scala.concurrent.Future

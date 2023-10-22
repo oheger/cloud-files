@@ -16,8 +16,8 @@
 
 package com.github.cloudfiles.crypt.fs.resolver
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import com.github.cloudfiles.core.{FileSystem, Model}
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers

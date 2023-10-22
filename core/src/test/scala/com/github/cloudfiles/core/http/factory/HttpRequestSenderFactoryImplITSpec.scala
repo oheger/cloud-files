@@ -16,10 +16,6 @@
 
 package com.github.cloudfiles.core.http.factory
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.typed.{ActorRef, Behavior, Props}
-import akka.http.scaladsl.model.{HttpRequest, StatusCodes, Uri}
-import akka.util.Timeout
 import com.github.cloudfiles.core.WireMockSupport.{BasicAuthFunc, TokenAuthFunc}
 import com.github.cloudfiles.core.http.MultiHostExtension.RequestActorFactory
 import com.github.cloudfiles.core.http.RetryAfterExtension.RetryAfterConfig
@@ -28,6 +24,10 @@ import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, S
 import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
 import com.github.tomakehurst.wiremock.stubbing.Scenario
+import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.apache.pekko.actor.typed.{ActorRef, Behavior, Props}
+import org.apache.pekko.http.scaladsl.model.{HttpRequest, StatusCodes, Uri}
+import org.apache.pekko.util.Timeout
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 

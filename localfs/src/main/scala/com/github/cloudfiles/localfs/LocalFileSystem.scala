@@ -16,16 +16,16 @@
 
 package com.github.cloudfiles.localfs
 
-import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
-import akka.stream.IOResult
-import akka.stream.scaladsl.{FileIO, Source}
-import akka.util.ByteString
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
 import com.github.cloudfiles.core.http.UriEncodingHelper
 import com.github.cloudfiles.localfs.LocalFsModel.{LocalFile, LocalFolder}
+import org.apache.pekko.actor.typed.ActorSystem
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity}
+import org.apache.pekko.stream.IOResult
+import org.apache.pekko.stream.scaladsl.{FileIO, Source}
+import org.apache.pekko.util.ByteString
 
 import java.nio.file.attribute.{BasicFileAttributes, FileTime}
 import java.nio.file.{FileSystemException, Files, NotDirectoryException, Path}

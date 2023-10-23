@@ -17,7 +17,7 @@
 import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
 
 /** The version of this project. */
-lazy val CloudFilesVersion = "0.6"
+lazy val CloudFilesVersion = "0.7-SNAPSHOT"
 
 /** Supported Scala versions. */
 lazy val VersionScala213 = "2.13.12"

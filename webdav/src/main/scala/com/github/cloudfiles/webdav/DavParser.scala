@@ -24,12 +24,17 @@ import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCode, Uri}
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
 import org.slf4j.LoggerFactory
+import org.xml.sax.Attributes
+import org.xml.sax.helpers.DefaultHandler
 
 import java.io.ByteArrayInputStream
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalQuery
+import javax.xml.parsers.SAXParserFactory
 import scala.annotation.tailrec
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import scala.xml.{Elem, Node, NodeSeq, XML}
@@ -50,6 +55,9 @@ object DavParser {
   /** The namespace URI for elements belonging to the core DAV namespace. */
   final val NS_DAV = "DAV:"
 
+  /** Standard attribute for the href element. */
+  final val AttrHref = davAttribute("href")
+
   /** Standard attribute for the creation date. */
   final val AttrCreatedAt = davAttribute("creationdate")
 
@@ -64,6 +72,12 @@ object DavParser {
 
   /** Standard attribute for the resource type (collection or element). */
   final val AttrResourceType = davAttribute("resourcetype")
+
+  /**
+   * An artificial attribute that is used to indicate whether the current
+   * element is a collection.
+   */
+  final val AttrCollection = davAttribute("collection")
 
   /** Name of the XML response element. */
   private val ElemResponse = "response"
@@ -122,22 +136,24 @@ object DavParser {
    */
   private def parseFolderContentXml(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
   Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder] = {
-    val responses = parseResponses(xml)
-    val folderUri = Uri(UriEncodingHelper withTrailingSeparator elemText(responses.head, ElemHref))
+    val parserFactory = SAXParserFactory.newInstance()
+    parserFactory.setNamespaceAware(true)
+    val parser = parserFactory.newSAXParser()
+    val handler = new FolderHandler(optDescriptionKey)
 
-    val folderElements = responses.drop(1) // first element is the folder itself
-      .foldLeft((Map.empty[Uri, DavModel.DavFolder], Map.empty[Uri, DavModel.DavFile])) { (maps, node) =>
-        (extractElement(node, optDescriptionKey): @unchecked) match {
-          case Success(folder: DavModel.DavFolder) =>
+    parser.parse(new ByteArrayInputStream(xml.toArray), handler)
+
+    val elements = handler.folderElements
+    val folderElements = elements.drop(1) // first element is the folder itself
+      .foldLeft((Map.empty[Uri, DavModel.DavFolder], Map.empty[Uri, DavModel.DavFile])) { (maps, elem) =>
+        (elem: @unchecked) match {
+          case folder: DavModel.DavFolder =>
             (maps._1 + (folder.id -> folder), maps._2)
-          case Success(file: DavModel.DavFile) =>
+          case file: DavModel.DavFile =>
             (maps._1, maps._2 + (file.id -> file))
-          case Failure(exception) =>
-            log.error(s"Could not parse response for element $node.", exception)
-            maps
         }
       }
-    Model.FolderContent(folderUri, folderElements._2, folderElements._1)
+    Model.FolderContent(elements.head.id, folderElements._2, folderElements._1)
   }
 
   /**
@@ -187,6 +203,21 @@ object DavParser {
    */
   private def extractStatus(node: Node): Try[StatusCode] =
     elemText(node, ElemStatus) match {
+      case RegStatus(code) =>
+        Try(StatusCode.int2StatusCode(code.toInt))
+      case t =>
+        Failure(new IllegalStateException(s"Invalid HTTP status in multi-status response: '$t'"))
+    }
+
+  /**
+   * Tries to parse the given string as an HTTP status code. Result is a
+   * ''Failure'' if the status cannot be parsed.
+   *
+   * @param status the status string
+   * @return a ''Try'' with the extracted HTTP status
+   */
+  private def parseStatusString(status: String): Try[StatusCode] =
+    status match {
       case RegStatus(code) =>
         Try(StatusCode.int2StatusCode(code.toInt))
       case t =>
@@ -261,6 +292,23 @@ object DavParser {
       val desc = optDescriptionKey flatMap attributes.get
       val elemAttributes: DavModel.Attributes = constructElementAttributes(attributes, optDescriptionKey)
       if (isCollection(attributeNodes))
+        DavModel.DavFolder(withTrailingSlash(elemUri), name, desc, createdAt, lastModified, elemAttributes)
+      else
+        DavModel.DavFile(elemUri, name, desc, createdAt, lastModified, parseFileSize(attributes), elemAttributes)
+    }
+
+  private def createElement(attributes: Map[DavModel.AttributeKey, String],
+                            optDescriptionKey: Option[DavModel.AttributeKey]): Try[Model.Element[Uri]] =
+    Try {
+      val elemUri = attributes(AttrHref)
+      val name = attributes.getOrElse(AttrName, nameFromUri(elemUri))
+      val createdAt = parseTimeAttribute(attributes.getOrElse(AttrCreatedAt, UndefinedDate.toString))
+      val lastModified = parseTimeAttribute(attributes.getOrElse(AttrModifiedAt, UndefinedDate.toString))
+      val desc = optDescriptionKey flatMap attributes.get
+      val elemAttributes: DavModel.Attributes = constructElementAttributes(attributes, optDescriptionKey)
+      val isCollection = attributes(AttrCollection).toBoolean
+
+      if (isCollection)
         DavModel.DavFolder(withTrailingSlash(elemUri), name, desc, createdAt, lastModified, elemAttributes)
       else
         DavModel.DavFile(elemUri, name, desc, createdAt, lastModified, parseFileSize(attributes), elemAttributes)
@@ -404,6 +452,87 @@ object DavParser {
    */
   private def davAttribute(key: String): DavModel.AttributeKey =
     DavModel.AttributeKey(NS_DAV, key)
+
+  /**
+   * Handler implementation for processing events during XML SAX parsing of a
+   * WebDav folder structure. After processing, the elements that were found
+   * can be queried.
+   *
+   * @param optDescriptionKey optional key of the description element
+   */
+  private class FolderHandler(optDescriptionKey: Option[DavModel.AttributeKey]) extends DefaultHandler {
+    /** Stores the model elements extracted from the XML document. */
+    private val elements = ListBuffer.empty[Model.Element[Uri]]
+
+    /** Temporarily stores the properties of the current element. */
+    private val elemProperties = mutable.Map.empty[DavModel.AttributeKey, String]
+
+    /**
+     * Stores the properties of the current ''propstat'' element. This is
+     * needed for input consisting of multiple elements of this type.
+     */
+    private val propStatProperties = mutable.Map.empty[DavModel.AttributeKey, String]
+
+    /** Temporarily stores the text content of the current XML element. */
+    private val content = new StringBuilder
+
+    /**
+     * Returns a list with the encountered elements. This function can be
+     * called after XML parsing to obtain the elements of the processed folder.
+     *
+     * @return the elements found in the folder XML document
+     */
+    def folderElements: List[Model.Element[Uri]] = elements.toList
+
+    override def startElement(uri: String, localName: String, qName: String, attributes: Attributes): Unit = {
+      content.clear()
+
+      localName match {
+        case `ElemResponse` =>
+          elemProperties.clear()
+          elemProperties += AttrCollection -> false.toString
+        case `ElemPropStat` =>
+          propStatProperties.clear()
+        case _ =>
+      }
+    }
+
+    override def endElement(uri: String, localName: String, qName: String): Unit = {
+      localName match {
+        case `ElemResponse` =>
+          if (elemProperties.size > 2) {
+            createElement(elemProperties.toMap, optDescriptionKey) match {
+              case Success(element) => elements += element
+              case Failure(exception) =>
+                log.error(s"Could not parse response for element $elemProperties.", exception)
+            }
+          }
+        case `ElemCollection` =>
+          propStatProperties += AttrCollection -> true.toString
+        case `ElemStatus` =>
+          val successStatus = parseStatusString(currentElementContent).map(_.isSuccess()).getOrElse(false)
+          if (successStatus) {
+            elemProperties ++= propStatProperties
+          }
+        case `ElemHref` =>
+          elemProperties += AttrHref -> currentElementContent
+        case _ =>
+          val key = DavModel.AttributeKey(uri, localName)
+          propStatProperties += key -> currentElementContent
+      }
+    }
+
+    override def characters(ch: Array[Char], start: Int, length: Int): Unit = {
+      content.appendAll(ch, start, length)
+    }
+
+    /**
+     * Returns the (trimmed) content of the current XML element.
+     *
+     * @return the trimmed element content
+     */
+    private def currentElementContent: String = removeLF(content.toString())
+  }
 }
 
 /**

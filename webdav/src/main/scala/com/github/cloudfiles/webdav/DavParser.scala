@@ -88,9 +88,6 @@ object DavParser {
   /** Name of the XML propstat element. */
   private val ElemPropStat = "propstat"
 
-  /** Name of the XML prop element. */
-  private val ElemProp = "prop"
-
   /** Name of the XML is collection element. */
   private val ElemCollection = "collection"
 
@@ -122,10 +119,29 @@ object DavParser {
    * @param strDate the date as string
    * @return the resulting ''Instant''
    */
-  def parseTimeAttribute(strDate: String): Instant = Try {
+  private def parseTimeAttribute(strDate: String): Instant = Try {
     val query: TemporalQuery[Instant] = Instant.from _
     DateTimeFormatter.RFC_1123_DATE_TIME.parse(strDate, query)
   } orElse Try(Instant.parse(strDate)) getOrElse UndefinedDate
+
+  /**
+   * Parses the given XML string using a handler that is able to extract
+   * elements. This works with folder results and single element results.
+   *
+   * @param xml               the XML response as a string
+   * @param optDescriptionKey optional key of the description element
+   * @return the [[ElementHandler]] with the extracted elements
+   */
+  private def parseWithElementHandler(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
+  ElementHandler = {
+    val parserFactory = SAXParserFactory.newInstance()
+    parserFactory.setNamespaceAware(true)
+    val parser = parserFactory.newSAXParser()
+    val handler = new ElementHandler(optDescriptionKey)
+
+    parser.parse(new ByteArrayInputStream(xml.toArray), handler)
+    handler
+  }
 
   /**
    * Extracts the content of a folder from the given XML string.
@@ -136,14 +152,9 @@ object DavParser {
    */
   private def parseFolderContentXml(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
   Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder] = {
-    val parserFactory = SAXParserFactory.newInstance()
-    parserFactory.setNamespaceAware(true)
-    val parser = parserFactory.newSAXParser()
-    val handler = new FolderHandler(optDescriptionKey)
+    val handler = parseWithElementHandler(xml, optDescriptionKey)
 
-    parser.parse(new ByteArrayInputStream(xml.toArray), handler)
-
-    val elements = handler.folderElements
+    val elements = handler.elements
     val folderElements = elements.drop(1) // first element is the folder itself
       .foldLeft((Map.empty[Uri, DavModel.DavFolder], Map.empty[Uri, DavModel.DavFile])) { (maps, elem) =>
         (elem: @unchecked) match {
@@ -167,11 +178,7 @@ object DavParser {
    */
   private def parseElementXml(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
   Try[Model.Element[Uri]] =
-    for {
-      responses <- Try(parseResponses(xml))
-      respElem <- Try(responses.head)
-      elem <- extractElement(respElem, optDescriptionKey)
-    } yield elem
+    Try(parseWithElementHandler(xml, optDescriptionKey).elements.head)
 
   /**
    * Parses a multi-status response and extracts the single status values
@@ -272,31 +279,6 @@ object DavParser {
     XML.load(xmlStream)
   }
 
-  /**
-   * Extracts a model object from the given XML node. Depending on the node's
-   * content either a folder or file is constructed.
-   *
-   * @param node              the XML node to process
-   * @param optDescriptionKey optional key of the description element
-   * @return the element extracted from the node
-   */
-  private def extractElement(node: Node, optDescriptionKey: Option[DavModel.AttributeKey]): Try[Model.Element[Uri]] =
-    Try {
-      val elemUri = Uri(elemText(node, ElemHref))
-      val attributeNodes = collectPropStats(node)
-      val attributes = attributeNodes.map(e => (e._1, nodeText(e._2)))
-
-      val name = attributes.getOrElse(AttrName, nameFromUri(elemUri))
-      val createdAt = parseTimeAttribute(attributes.getOrElse(AttrCreatedAt, UndefinedDate.toString))
-      val lastModified = parseTimeAttribute(attributes.getOrElse(AttrModifiedAt, UndefinedDate.toString))
-      val desc = optDescriptionKey flatMap attributes.get
-      val elemAttributes: DavModel.Attributes = constructElementAttributes(attributes, optDescriptionKey)
-      if (isCollection(attributeNodes))
-        DavModel.DavFolder(withTrailingSlash(elemUri), name, desc, createdAt, lastModified, elemAttributes)
-      else
-        DavModel.DavFile(elemUri, name, desc, createdAt, lastModified, parseFileSize(attributes), elemAttributes)
-    }
-
   private def createElement(attributes: Map[DavModel.AttributeKey, String],
                             optDescriptionKey: Option[DavModel.AttributeKey]): Try[Model.Element[Uri]] =
     Try {
@@ -313,36 +295,6 @@ object DavParser {
       else
         DavModel.DavFile(elemUri, name, desc, createdAt, lastModified, parseFileSize(attributes), elemAttributes)
     }
-
-  /**
-   * Processes all the ''propstat'' elements under the current node that could
-   * be retrieved successfully and aggregates their properties.
-   *
-   * @param node the current node
-   * @return a map with the property nodes of this node
-   */
-  private def collectPropStats(node: Node): Map[DavModel.AttributeKey, Node] =
-    (node \ ElemPropStat).filter { propStat =>
-      extractStatus(propStat) match {
-        case Success(status) if status.isSuccess() => true
-        case _ => false
-      }
-    }.foldLeft(Map.empty[DavModel.AttributeKey, Node]) { (attributes, stat) =>
-      attributes ++ extractElementAttributes((stat \ ElemProp).head)
-    }
-
-  /**
-   * Extracts all attributes of a folder element from the given XML node seq.
-   *
-   * @param propNode the nodes representing the element's properties
-   * @return a map with the attributes extracted
-   */
-  private def extractElementAttributes(propNode: Node): Map[DavModel.AttributeKey, Node] = {
-    propNode.child.foldLeft(Map.empty[DavModel.AttributeKey, Node]) { (attributes, node) =>
-      val attrKey = DavModel.AttributeKey(node.namespace, node.label)
-      attributes + (attrKey -> node)
-    }
-  }
 
   /**
    * Returns the final ''Attributes'' instance for the current element based on
@@ -395,15 +347,6 @@ object DavParser {
     removeLF((node \ elemName).text)
 
   /**
-   * Extracts the text of the given XML node. Handles line breaks in the
-   * element text.
-   *
-   * @param node the node in question
-   * @return the text of this node
-   */
-  private def nodeText(node: Node): String = removeLF(node.text)
-
-  /**
    * Removes new line and special characters from the given string. Also
    * handles the case that indention after a new line will add additional
    * whitespace; this is collapsed to a single space.
@@ -432,19 +375,6 @@ object DavParser {
   }
 
   /**
-   * Checks whether an element is a collection. In this case the element
-   * represents a folder rather than a single file.
-   *
-   * @param attributeNodes the map with attribute nodes of this node
-   * @return a flag whether this element is a collection
-   */
-  private def isCollection(attributeNodes: Map[DavModel.AttributeKey, Node]): Boolean =
-    attributeNodes.get(AttrResourceType).exists { resTypeNode =>
-      val elemCollection = resTypeNode \ ElemCollection
-      elemCollection.nonEmpty
-    }
-
-  /**
    * Generates the key of an attribute belonging to the core DAV namespace.
    *
    * @param key the actual element key
@@ -455,14 +385,14 @@ object DavParser {
 
   /**
    * Handler implementation for processing events during XML SAX parsing of a
-   * WebDav folder structure. After processing, the elements that were found
-   * can be queried.
+   * WebDav folder or file structure. After processing, the elements that were
+   * found can be queried.
    *
    * @param optDescriptionKey optional key of the description element
    */
-  private class FolderHandler(optDescriptionKey: Option[DavModel.AttributeKey]) extends DefaultHandler {
+  private class ElementHandler(optDescriptionKey: Option[DavModel.AttributeKey]) extends DefaultHandler {
     /** Stores the model elements extracted from the XML document. */
-    private val elements = ListBuffer.empty[Model.Element[Uri]]
+    private val foundElements = ListBuffer.empty[Model.Element[Uri]]
 
     /** Temporarily stores the properties of the current element. */
     private val elemProperties = mutable.Map.empty[DavModel.AttributeKey, String]
@@ -478,11 +408,11 @@ object DavParser {
 
     /**
      * Returns a list with the encountered elements. This function can be
-     * called after XML parsing to obtain the elements of the processed folder.
+     * called after XML parsing to obtain the elements of the document.
      *
      * @return the elements found in the folder XML document
      */
-    def folderElements: List[Model.Element[Uri]] = elements.toList
+    def elements: List[Model.Element[Uri]] = foundElements.toList
 
     override def startElement(uri: String, localName: String, qName: String, attributes: Attributes): Unit = {
       content.clear()
@@ -502,7 +432,7 @@ object DavParser {
         case `ElemResponse` =>
           if (elemProperties.size > 2) {
             createElement(elemProperties.toMap, optDescriptionKey) match {
-              case Success(element) => elements += element
+              case Success(element) => foundElements += element
               case Failure(exception) =>
                 log.error(s"Could not parse response for element $elemProperties.", exception)
             }

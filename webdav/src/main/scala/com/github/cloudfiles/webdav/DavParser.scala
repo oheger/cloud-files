@@ -37,7 +37,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-import scala.xml.{Elem, Node, NodeSeq, XML}
 
 object DavParser {
   /**
@@ -125,6 +124,24 @@ object DavParser {
   } orElse Try(Instant.parse(strDate)) getOrElse UndefinedDate
 
   /**
+   * Parses the given XML string using the provided [[ResultHandler]]. Returns
+   * the result produced by the handler.
+   *
+   * @param xml     the XML to be parsed as string
+   * @param handler the handler
+   * @tparam A the result type of the handler
+   * @return the result from the handler
+   */
+  private def parseXml[A](xml: ByteString, handler: ResultHandler[A]): A = {
+    val parserFactory = SAXParserFactory.newInstance()
+    parserFactory.setNamespaceAware(true)
+    val parser = parserFactory.newSAXParser()
+
+    parser.parse(new ByteArrayInputStream(xml.toArray), handler)
+    handler.result
+  }
+
+  /**
    * Parses the given XML string using a handler that is able to extract
    * elements. This works with folder results and single element results.
    *
@@ -133,15 +150,8 @@ object DavParser {
    * @return the [[ElementHandler]] with the extracted elements
    */
   private def parseWithElementHandler(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
-  ElementHandler = {
-    val parserFactory = SAXParserFactory.newInstance()
-    parserFactory.setNamespaceAware(true)
-    val parser = parserFactory.newSAXParser()
-    val handler = new ElementHandler(optDescriptionKey)
-
-    parser.parse(new ByteArrayInputStream(xml.toArray), handler)
-    handler
-  }
+  List[Model.Element[Uri]] =
+    parseXml(xml, new ElementHandler(optDescriptionKey))
 
   /**
    * Extracts the content of a folder from the given XML string.
@@ -152,9 +162,8 @@ object DavParser {
    */
   private def parseFolderContentXml(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
   Model.FolderContent[Uri, DavModel.DavFile, DavModel.DavFolder] = {
-    val handler = parseWithElementHandler(xml, optDescriptionKey)
+    val elements = parseWithElementHandler(xml, optDescriptionKey)
 
-    val elements = handler.elements
     val folderElements = elements.drop(1) // first element is the folder itself
       .foldLeft((Map.empty[Uri, DavModel.DavFolder], Map.empty[Uri, DavModel.DavFile])) { (maps, elem) =>
         (elem: @unchecked) match {
@@ -178,43 +187,7 @@ object DavParser {
    */
   private def parseElementXml(xml: ByteString, optDescriptionKey: Option[DavModel.AttributeKey]):
   Try[Model.Element[Uri]] =
-    Try(parseWithElementHandler(xml, optDescriptionKey).elements.head)
-
-  /**
-   * Parses a multi-status response and extracts the single status values
-   * contained therein.
-   *
-   * @param xml the XML string with the multi-status response
-   * @param ec  the execution context
-   * @return a ''Future'' with the extracted status codes
-   */
-  private def parseMultiStatusXml(xml: ByteString)(implicit ec: ExecutionContext): Future[Iterable[StatusCode]] =
-    Future.sequence(parseStatusCodes(parseResponses(xml) \ ElemPropStat))
-
-  /**
-   * Parses the single status codes elements contained in a multi-status
-   * response and returns a collection with the future results.
-   *
-   * @param propStats the sequence of ''propstat'' nodes to parse
-   * @return a collection with the future parsed status codes
-   */
-  private def parseStatusCodes(propStats: NodeSeq): Iterable[Future[StatusCode]] =
-    propStats.map { node => Future.fromTry(extractStatus(node)) }
-
-  /**
-   * Tries to extract the HTTP status code from the ''status'' child element of
-   * the given node. Result is a ''Failure'' if the status cannot be parsed.
-   *
-   * @param node the node in question
-   * @return a ''Try'' with the extracted HTTP status
-   */
-  private def extractStatus(node: Node): Try[StatusCode] =
-    elemText(node, ElemStatus) match {
-      case RegStatus(code) =>
-        Try(StatusCode.int2StatusCode(code.toInt))
-      case t =>
-        Failure(new IllegalStateException(s"Invalid HTTP status in multi-status response: '$t'"))
-    }
+    Try(parseWithElementHandler(xml, optDescriptionKey).head)
 
   /**
    * Tries to parse the given string as an HTTP status code. Result is a
@@ -232,19 +205,6 @@ object DavParser {
     }
 
   /**
-   * Checks whether all the status codes of a multi-status response are
-   * successful. If so, a successful ''Future'' is returned; otherwise an
-   * exception for the first failed response status is generated.
-   *
-   * @param codes the codes to be checked
-   * @return a ''Future'' with the outcome of the check
-   */
-  private def checkMultiStatusCodes(codes: Iterable[StatusCode]): Future[Unit] =
-    codes.find(_.isFailure()).map { code =>
-      FailedResponseException(HttpResponse(status = code))
-    }.fold(Future.successful(()))(Future.failed(_))
-
-  /**
    * Reads the source from the response of a folder request completely and
    * returns the resulting ''ByteString''.
    *
@@ -256,27 +216,6 @@ object DavParser {
                         (implicit system: ActorSystem[_]): Future[ByteString] = {
     val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
     source.runWith(sink)
-  }
-
-  /**
-   * Parses the given byte string as an XML document and returns a ''NodeSeq''
-   * with the response elements found in this document.
-   *
-   * @param xml the XML response from the server
-   * @return a sequence with the response elements
-   */
-  private def parseResponses(xml: ByteString): NodeSeq =
-    parseXml(xml) \ ElemResponse
-
-  /**
-   * Parses a ''ByteString'' to an XML element.
-   *
-   * @param xml the XML string
-   * @return the resulting ''Elem''
-   */
-  private def parseXml(xml: ByteString): Elem = {
-    val xmlStream = new ByteArrayInputStream(xml.toArray)
-    XML.load(xmlStream)
   }
 
   private def createElement(attributes: Map[DavModel.AttributeKey, String],
@@ -336,17 +275,6 @@ object DavParser {
   } getOrElse UndefinedSize
 
   /**
-   * Extracts the text of a sub element of the given XML node. Handles line
-   * breaks in the element.
-   *
-   * @param node     the node representing the parent element
-   * @param elemName the name of the element to be obtained
-   * @return the text of this element
-   */
-  private def elemText(node: NodeSeq, elemName: String): String =
-    removeLF((node \ elemName).text)
-
-  /**
    * Removes new line and special characters from the given string. Also
    * handles the case that indention after a new line will add additional
    * whitespace; this is collapsed to a single space.
@@ -384,13 +312,53 @@ object DavParser {
     DavModel.AttributeKey(NS_DAV, key)
 
   /**
+   * A base [[DefaultHandler]] implementation that is able to generate a result
+   * from the parsed document. The trait already provides some basic
+   * functionality for dealing with the text content of elements.
+   *
+   * @tparam A the type of the results produced by this handler
+   */
+  private trait ResultHandler[A] extends DefaultHandler {
+    /** Temporarily stores the text content of the current XML element. */
+    private val content = new StringBuilder
+
+    /**
+     * Returns the result of XML processing.
+     *
+     * @return the processing result
+     */
+    def result: A
+
+    /**
+     * @inheritdoc This implementation makes sure that the buffer for
+     *             collecting the text content of the current element is
+     *             cleared.
+     */
+    override def startElement(uri: String, localName: String, qName: String, attributes: Attributes): Unit = {
+      content.clear()
+    }
+
+    override def characters(ch: Array[Char], start: Int, length: Int): Unit = {
+      content.appendAll(ch, start, length)
+    }
+
+    /**
+     * Returns the (trimmed) content of the current XML element.
+     *
+     * @return the trimmed element content
+     */
+    protected def currentElementContent: String = removeLF(content.toString())
+  }
+
+  /**
    * Handler implementation for processing events during XML SAX parsing of a
    * WebDav folder or file structure. After processing, the elements that were
    * found can be queried.
    *
    * @param optDescriptionKey optional key of the description element
    */
-  private class ElementHandler(optDescriptionKey: Option[DavModel.AttributeKey]) extends DefaultHandler {
+  private class ElementHandler(optDescriptionKey: Option[DavModel.AttributeKey])
+    extends ResultHandler[List[Model.Element[Uri]]] {
     /** Stores the model elements extracted from the XML document. */
     private val foundElements = ListBuffer.empty[Model.Element[Uri]]
 
@@ -403,19 +371,10 @@ object DavParser {
      */
     private val propStatProperties = mutable.Map.empty[DavModel.AttributeKey, String]
 
-    /** Temporarily stores the text content of the current XML element. */
-    private val content = new StringBuilder
-
-    /**
-     * Returns a list with the encountered elements. This function can be
-     * called after XML parsing to obtain the elements of the document.
-     *
-     * @return the elements found in the folder XML document
-     */
-    def elements: List[Model.Element[Uri]] = foundElements.toList
+    override def result: List[Model.Element[Uri]] = foundElements.toList
 
     override def startElement(uri: String, localName: String, qName: String, attributes: Attributes): Unit = {
-      content.clear()
+      super.startElement(uri, localName, qName, attributes)
 
       localName match {
         case `ElemResponse` =>
@@ -451,17 +410,35 @@ object DavParser {
           propStatProperties += key -> currentElementContent
       }
     }
+  }
 
-    override def characters(ch: Array[Char], start: Int, length: Int): Unit = {
-      content.appendAll(ch, start, length)
+  /**
+   * Handler implementation for checking the status codes in a response with
+   * multiple status elements. For the first failed status, a corresponding
+   * [[FailedResponseException]] is returned, or a different exception if the
+   * status string could not be parsed. An empty option as result means that
+   * all status values encountered were successful.
+   */
+  private class MultiStatusHandler extends ResultHandler[Option[Throwable]] {
+    /** Stores an exception for a found failed status. */
+    private var failedStatus: Option[Throwable] = None
+
+    override def result: Option[Throwable] = failedStatus
+
+    override def endElement(uri: String, localName: String, qName: String): Unit = {
+      if (failedStatus.isEmpty) {
+        if (localName == ElemStatus) {
+          parseStatusString(currentElementContent) match {
+            case Failure(exception) =>
+              failedStatus = Some(exception)
+            case Success(status) =>
+              if (status.isFailure()) {
+                failedStatus = Some(FailedResponseException(HttpResponse(status = status)))
+              }
+          }
+        }
+      }
     }
-
-    /**
-     * Returns the (trimmed) content of the current XML element.
-     *
-     * @return the trimmed element content
-     */
-    private def currentElementContent: String = removeLF(content.toString())
   }
 }
 
@@ -530,10 +507,12 @@ private class DavParser(optDescriptionKey: Option[DavModel.AttributeKey] = None)
    */
   def parseMultiStatus(source: Source[ByteString, Any])(implicit system: ActorSystem[_]): Future[Unit] = {
     implicit val ec: ExecutionContext = system.executionContext
-    for {
-      xml <- readSource(source)
-      codes <- parseMultiStatusXml(xml)
-      check <- checkMultiStatusCodes(codes)
-    } yield check
+
+    readSource(source) map { xml =>
+      val optFailure = parseXml(xml, new MultiStatusHandler)
+      optFailure foreach {
+        throw _
+      }
+    }
   }
 }

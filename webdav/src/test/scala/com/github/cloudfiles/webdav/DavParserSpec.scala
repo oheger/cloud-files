@@ -25,9 +25,9 @@ import org.apache.pekko.stream.scaladsl.{FileIO, Source}
 import org.apache.pekko.util.ByteString
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.xml.sax.SAXParseException
 
 import java.time.Instant
-import scala.xml.SAXParseException
 
 object DavParserSpec {
   /** The standard namespace for DAV. */

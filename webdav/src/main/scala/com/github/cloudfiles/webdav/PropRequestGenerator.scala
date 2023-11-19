@@ -53,6 +53,20 @@ private object PropRequestGenerator {
    */
   private val StandardElements = StandardAttributes.map(attr => s"<D:${attr.key}/>").mkString("")
 
+  /**
+   * A map storing special characters that need to be escaped in XML content or
+   * attributes, together with the corresponding entities.
+   */
+  private val XmlEscapeCharacters = Map(
+    '\"' -> "quot",
+    '<' -> "lt",
+    '>' -> "gt",
+    '&' -> "amp"
+  )
+
+  /** A string containing control characters that are allowed in XML content. */
+  private val XmlControlCharacters = "\t\n\r"
+
   /** The logger. */
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -128,6 +142,29 @@ private object PropRequestGenerator {
   }
 
   /**
+   * Escapes the given string, so that it can be safely used as content of an
+   * XML tag.
+   *
+   * @param s the string to be escaped
+   * @return the escaped string
+   */
+  private[webdav] def escapeXml(s: String): String = {
+    val buf = new StringBuilder(s.length)
+    s.foreach { c =>
+      XmlEscapeCharacters.get(c) match {
+        case Some(value) =>
+          buf ++= s"&$value;"
+        case None =>
+          if (c >= ' ' || XmlControlCharacters.contains(c)) {
+            buf += c
+          }
+      }
+    }
+
+    buf.toString()
+  }
+
+  /**
    * Returns a map with prefixes and namespace URIs based on the passed in
    * attribute keys. The keys of the map are the unique namespace URIs, the
    * values are the prefixes to reference these namespaces.
@@ -180,7 +217,7 @@ private object PropRequestGenerator {
   private def generateSetElement(key: DavModel.AttributeKey, value: String,
                                  namespaces: NamespaceMapping): String = {
     val elem = elementName(key, namespaces)
-    s"<$elem>${xml.Utility.escape(value)}</$elem>"
+    s"<$elem>${escapeXml(value)}</$elem>"
   }
 
   /**

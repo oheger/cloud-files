@@ -337,4 +337,21 @@ class PropRequestGeneratorSpec extends AnyFlatSpec with Matchers {
 
     checkStandardPropFindAttributes(properties) shouldBe empty
   }
+
+  it should "correctly escape special characters" in {
+    val strWithProblematicCharacters = "\"<>&"
+
+    val escaped = PropRequestGenerator.escapeXml(strWithProblematicCharacters)
+
+    escaped should be("&quot;&lt;&gt;&amp;")
+  }
+
+  it should "handle special characters when escaping correctly" in {
+    val strWithSpecialCharacters = "This string\tcontains\n\rsome \\'special'\\ characters."
+    val strWithCtrlCharacters = strWithSpecialCharacters + "\b\u0001"
+
+    val escaped = PropRequestGenerator.escapeXml(strWithCtrlCharacters)
+
+    escaped should be(strWithSpecialCharacters)
+  }
 }

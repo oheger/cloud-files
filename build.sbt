@@ -26,12 +26,12 @@ lazy val VersionScala212 = "2.12.18"
 /** Versions of compile-time dependencies. */
 lazy val VersionPekko = "1.0.1"
 lazy val VersionPekkoHttp = "1.0.0"
-lazy val VersionScalaXml = "2.2.0"
 lazy val VersionSlf4j = "1.7.36"
 
 /** Versions of test dependencies. */
 lazy val VersionScalaTest = "3.2.17"
 lazy val VersionScalaTestMockito = "3.2.17.0"
+lazy val VersionScalaXml = "2.2.0"
 lazy val VersionWireMock = "3.2.0"
 
 lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
@@ -134,9 +134,9 @@ lazy val webDav = (project in file("webdav"))
   .settings(
     inConfig(ITest)(Defaults.testTasks),
     libraryDependencies ++= akkaDependencies,
-    libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % VersionScalaXml,
     libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
     libraryDependencies ++= testDependencies,
+    libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % VersionScalaXml % Test,
     name := "cloud-files-webdav",
     description := "Adds support for the WebDav protocol",
     crossScalaVersions := supportedScalaVersions,

@@ -88,7 +88,7 @@ object HttpRequestSender {
    * A message causing this actor to stop itself. This can be used to clean up
    * actor instances that are no longer needed.
    */
-  final case object Stop extends HttpCommand
+  case object Stop extends HttpCommand
 
   /**
    * A message class representing the result of a request that has been
@@ -212,7 +212,7 @@ object HttpRequestSender {
                      requestData: Any, discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure,
                      timeout: Timeout = DefaultForwardTimeout): Unit = {
     implicit val forwardTimeout: Timeout = timeout
-    context.ask(receiver, ref => SendRequest(request, requestData, ref, discardMode)) {
+    context.ask[HttpCommand, Result](receiver, ref => SendRequest(request, requestData, ref, discardMode)) {
       case Failure(exception) =>
         ForwardedResult(FailedResult(SendRequest(request, requestData, null), exception))
       case Success(response) => ForwardedResult(response)

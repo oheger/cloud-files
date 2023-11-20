@@ -39,15 +39,7 @@ object Spawner {
    * @return the ''Spawner'' creating actors using this system
    */
   implicit def classicActorSystemSpawner(system: classic.ActorSystem): Spawner =
-    new Spawner {
-      override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
-        optName match {
-          case Some(name) =>
-            system.spawn(behavior, name, props)
-          case None =>
-            system.spawnAnonymous(behavior, props)
-        }
-    }
+    new ClassicActorSystemSpawner(system)
 
   /**
    * Implicit conversion function to create a ''Spawner'' from a classic actor
@@ -57,15 +49,7 @@ object Spawner {
    * @return the ''Spawner'' creating actors using this context
    */
   implicit def classicActorContextSpawner(context: classic.ActorContext): Spawner =
-    new Spawner {
-      override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
-        optName match {
-          case Some(name) =>
-            context.spawn(behavior, name, props)
-          case None =>
-            context.spawnAnonymous(behavior, props)
-        }
-    }
+    new ClassicActorContextSpawner(context)
 
   /**
    * Implicit conversion function to create a ''Spawner'' from a typed actor
@@ -75,15 +59,7 @@ object Spawner {
    * @return the ''Spawner'' creating actors using this context
    */
   implicit def typedActorContextSpawner(context: ActorContext[_]): Spawner =
-    new Spawner {
-      override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
-        optName match {
-          case Some(name) =>
-            context.spawn(behavior, name, props)
-          case None =>
-            context.spawnAnonymous(behavior, props)
-        }
-    }
+    new TypedActorContextSpawner(context)
 }
 
 /**
@@ -106,4 +82,52 @@ trait Spawner {
    * @return a reference to the the newly created
    */
   def spawn[T](behavior: Behavior[T], optName: Option[String] = None, props: Props = Props.empty): ActorRef[T]
+}
+
+/**
+ * An internal [[Spawner]] implementation that uses a classic actor system for
+ * spawning new typed actors.
+ *
+ * @param system the classic actor system
+ */
+private class ClassicActorSystemSpawner(system: classic.ActorSystem) extends Spawner {
+  override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
+    optName match {
+      case Some(name) =>
+        system.spawn(behavior, name, props)
+      case None =>
+        system.spawnAnonymous(behavior, props)
+    }
+}
+
+/**
+ * An internal [[Spawner]] implementation that uses a classic actor context for
+ * spawning new typed actors.
+ *
+ * @param context the classic actor context
+ */
+private class ClassicActorContextSpawner(context: classic.ActorContext) extends Spawner {
+  override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
+    optName match {
+      case Some(name) =>
+        context.spawn(behavior, name, props)
+      case None =>
+        context.spawnAnonymous(behavior, props)
+    }
+}
+
+/**
+ * An internal [[Spawner]] implementation that uses a typed actor context for
+ * spawning new typed actors.
+ *
+ * @param context the typed actor context
+ */
+private class TypedActorContextSpawner(context: ActorContext[_]) extends Spawner {
+  override def spawn[T](behavior: Behavior[T], optName: Option[String], props: Props): ActorRef[T] =
+    optName match {
+      case Some(name) =>
+        context.spawn(behavior, name, props)
+      case None =>
+        context.spawnAnonymous(behavior, props)
+    }
 }

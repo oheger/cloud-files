@@ -162,7 +162,7 @@ object Model {
                           (implicit ec: ExecutionContext): Future[FolderContent[ID, FILE, FOLDER]] = {
       def mapTried[T](optFunc: Option[T => T]): Option[T => Try[T]] =
         optFunc map { func =>
-          elem: T => Try(func(elem))
+          (elem: T) => Try(func(elem))
         }
 
       mapContentParallelTried(mapTried(mapFiles), mapTried(mapFolders)) flatMap { result =>

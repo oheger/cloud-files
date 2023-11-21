@@ -279,10 +279,10 @@ class GoogleDriveFileSystem(val config: GoogleDriveConfig)
   private val uploadResourcePrefix = resolveEndpoint(UploadEndpoint)
 
   override def patchFolder(source: Model.Folder[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFolder =
-    patchElement(source, None, spec)(GoogleDriveModel.GoogleDriveFolder)
+    patchElement(source, None, spec)(GoogleDriveModel.GoogleDriveFolder.apply)
 
   override def patchFile(source: Model.File[String], spec: ElementPatchSpec): GoogleDriveModel.GoogleDriveFile =
-    patchElement(source, Some(source.size), spec)(GoogleDriveModel.GoogleDriveFile)
+    patchElement(source, Some(source.size), spec)(GoogleDriveModel.GoogleDriveFile.apply)
 
   /**
    * Resolves the ID of an element (file or folder) that is specified by its

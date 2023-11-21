@@ -279,25 +279,28 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
     override def write(obj: Instant): JsValue = JsString(obj.toString)
   }
 
-  implicit val hashesFormat: RootJsonFormat[Hashes] = jsonFormat3(Hashes)
-  implicit val identityFormat: RootJsonFormat[Identity] = jsonFormat2(Identity)
-  implicit val identitySetFormat: RootJsonFormat[IdentitySet] = jsonFormat4(IdentitySet)
-  implicit val fileFormat: RootJsonFormat[File] = jsonFormat2(File)
-  implicit val folderFormat: RootJsonFormat[Folder] = jsonFormat1(Folder)
-  implicit val fileSystemInfoFormat: RootJsonFormat[FileSystemInfo] = jsonFormat3(FileSystemInfo)
-  implicit val itemReferenceFormat: RootJsonFormat[ItemReference] = jsonFormat8(ItemReference)
-  implicit val sharedFormat: RootJsonFormat[Shared] = jsonFormat4(Shared)
-  implicit val specialFolderFormat: RootJsonFormat[SpecialFolder] = jsonFormat1(SpecialFolder)
-  implicit val driveItemFormat: RootJsonFormat[DriveItem] = jsonFormat15(DriveItem)
+  implicit val hashesFormat: RootJsonFormat[Hashes] = jsonFormat3(Hashes.apply)
+  implicit val identityFormat: RootJsonFormat[Identity] = jsonFormat2(Identity.apply)
+  implicit val identitySetFormat: RootJsonFormat[IdentitySet] = jsonFormat4(IdentitySet.apply)
+  implicit val fileFormat: RootJsonFormat[File] = jsonFormat2(File.apply)
+  implicit val folderFormat: RootJsonFormat[Folder] = jsonFormat1(Folder.apply)
+  implicit val fileSystemInfoFormat: RootJsonFormat[FileSystemInfo] = jsonFormat3(FileSystemInfo.apply)
+  implicit val itemReferenceFormat: RootJsonFormat[ItemReference] = jsonFormat8(ItemReference.apply)
+  implicit val sharedFormat: RootJsonFormat[Shared] = jsonFormat4(Shared.apply)
+  implicit val specialFolderFormat: RootJsonFormat[SpecialFolder] = jsonFormat1(SpecialFolder.apply)
+  implicit val driveItemFormat: RootJsonFormat[DriveItem] = jsonFormat15(DriveItem.apply)
   implicit val writableFileSystemInfoFormat: RootJsonFormat[WritableFileSystemInfo] =
-    jsonFormat3(WritableFileSystemInfo)
-  implicit val markerPropertyFormat: RootJsonFormat[MarkerProperty] = jsonFormat1(MarkerProperty)
-  implicit val writableDriveItemFormat: RootJsonFormat[WritableDriveItem] = jsonFormat5(WritableDriveItem)
-  implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat1(ResolveResponse)
+    jsonFormat3(WritableFileSystemInfo.apply)
+  implicit val markerPropertyFormat: RootJsonFormat[MarkerProperty] = jsonFormat1(MarkerProperty.apply)
+  implicit val writableDriveItemFormat: RootJsonFormat[WritableDriveItem] = jsonFormat5(WritableDriveItem.apply)
+  implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat1(ResolveResponse.apply)
   implicit val folderResponseFormat: RootJsonFormat[FolderResponse] = {
     jsonFormat(FolderResponse.apply, "value", "@odata.nextLink")
   }
-  implicit val uploadChunkResponseFormat: RootJsonFormat[UploadChunkResponse] = jsonFormat1(UploadChunkResponse)
-  implicit val uploadSessionRequest: RootJsonFormat[UploadSessionRequest] = jsonFormat1(UploadSessionRequest)
-  implicit val uploadSessionResponse: RootJsonFormat[UploadSessionResponse] = jsonFormat1(UploadSessionResponse)
+  implicit val uploadChunkResponseFormat: RootJsonFormat[UploadChunkResponse] =
+    jsonFormat1(UploadChunkResponse.apply)
+  implicit val uploadSessionRequest: RootJsonFormat[UploadSessionRequest] =
+    jsonFormat1(UploadSessionRequest.apply)
+  implicit val uploadSessionResponse: RootJsonFormat[UploadSessionResponse] =
+    jsonFormat1(UploadSessionResponse.apply)
 }

@@ -175,9 +175,9 @@ object GoogleDriveJsonProtocol extends DefaultJsonProtocol {
     override def write(obj: Instant): JsValue = JsString(obj.toString)
   }
 
-  implicit val fileFormat: RootJsonFormat[File] = jsonFormat12(File)
-  implicit val writableFileFormat: RootJsonFormat[WritableFile] = jsonFormat10(WritableFile)
-  implicit val folderResponseFormat: RootJsonFormat[FolderResponse] = jsonFormat2(FolderResponse)
-  implicit val fileReferenceFormat: RootJsonFormat[FileReference] = jsonFormat1(FileReference)
-  implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat2(ResolveResponse)
+  implicit val fileFormat: RootJsonFormat[File] = jsonFormat12(File.apply)
+  implicit val writableFileFormat: RootJsonFormat[WritableFile] = jsonFormat10(WritableFile.apply)
+  implicit val folderResponseFormat: RootJsonFormat[FolderResponse] = jsonFormat2(FolderResponse.apply)
+  implicit val fileReferenceFormat: RootJsonFormat[FileReference] = jsonFormat1(FileReference.apply)
+  implicit val resolveResponseFormat: RootJsonFormat[ResolveResponse] = jsonFormat2(ResolveResponse.apply)
 }

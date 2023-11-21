@@ -209,15 +209,9 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, requestData = RequestData))
     result.request.request should be(request)
     result.request.data should be(RequestData)
-
-    result match {
-      case HttpRequestSender.SuccessResult(_, response) =>
-        response.status should be(StatusCodes.Accepted)
-        val content = futureResult(entityToString(response))
-        content should be(FileTestHelper.TestDataSingleLine)
-
-      case res => fail("Unexpected result: " + res)
-    }
+    result.response.status should be(StatusCodes.Accepted)
+    val content = futureResult(entityToString(result.response))
+    content should be(FileTestHelper.TestDataSingleLine)
   }
 
   it should "support sending requests via a convenience function that handles failed results" in {

@@ -102,7 +102,7 @@ class GoogleDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTes
       trashed = Some(true), trashedTime = Some(Instant.parse("2021-09-10T18:41:57.365Z")))
     val expResult = readDataFile(resourceFile("/writableFile.json"))
 
-    val json = file.toJson.toString()
+    val json = file.toJson.compactPrint
     json should be(expResult)
   }
 
@@ -110,7 +110,7 @@ class GoogleDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTes
     val file = WritableFile(name = None, mimeType = None, parents = None, description = None,
       createdTime = None, modifiedTime = None, properties = None, appProperties = None)
 
-    val json = file.toJson.toString()
+    val json = file.toJson.compactPrint
     json should be("{}")
   }
 }

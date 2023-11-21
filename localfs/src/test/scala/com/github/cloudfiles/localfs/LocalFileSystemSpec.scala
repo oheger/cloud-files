@@ -339,7 +339,7 @@ class LocalFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val FileName = "aFile.dat"
     val CreatedAt = Instant.parse("2021-05-23T19:33:30.000Z")
     val ModifiedAt = Instant.parse("2021-05-23T19:33:38.000Z")
-    val Size = 645237
+    val Size = 645237L
     val fs = createFileSystem()
     val filePath = rootPath.resolve(FileName)
     val file = mock[Model.File[Path]]

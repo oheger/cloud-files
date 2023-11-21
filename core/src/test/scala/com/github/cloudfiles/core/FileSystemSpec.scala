@@ -227,7 +227,7 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
   it should "update both a file's properties and content" in {
     val source = Source.single(ByteString("updated file content"))
     val FileID = "theTestFile"
-    val FileSize = 20210609
+    val FileSize = 20210609L
     val file = mock[Model.File[String]]
     when(file.id).thenReturn(FileID)
     when(file.size).thenReturn(FileSize)

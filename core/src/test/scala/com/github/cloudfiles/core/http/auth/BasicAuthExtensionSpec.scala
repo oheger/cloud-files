@@ -19,8 +19,8 @@ package com.github.cloudfiles.core.http.auth
 import com.github.cloudfiles.core.http.{HttpRequestSender, Secret, auth}
 import org.apache.pekko.actor.DeadLetter
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials, `Content-Type`}
-import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpMethods, HttpRequest, Uri}
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials, RawHeader}
+import org.apache.pekko.http.scaladsl.model.{HttpMethods, HttpRequest, Uri}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -45,10 +45,10 @@ class BasicAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
   "BasicAuthExtension" should "add an authorization header to requests" in {
     val requestActorProbe = testKit.createTestProbe[HttpRequestSender.HttpCommand]()
     val resultProbe = testKit.createTestProbe[HttpRequestSender.Result]()
-    val headerContent = `Content-Type`(ContentTypes.`application/json`)
+    val headerTest = RawHeader("foo", "bar")
     val headerAuth = Authorization(BasicHttpCredentials(User, Password))
     val httpRequest = HttpRequest(method = HttpMethods.DELETE, uri = Uri("/path/to/delete"),
-      headers = List(headerContent))
+      headers = List(headerTest))
     val request = HttpRequestSender.SendRequest(httpRequest, new Object, resultProbe.ref)
     val authActor = testKit.spawn(BasicAuthExtension(requestActorProbe.ref, TestAuthConfig))
 
@@ -58,7 +58,7 @@ class BasicAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
     forwardRequest.replyTo should be(request.replyTo)
     forwardRequest.request.method should be(httpRequest.method)
     forwardRequest.request.uri should be(httpRequest.uri)
-    forwardRequest.request.headers should contain only(headerContent, headerAuth)
+    forwardRequest.request.headers should contain only(headerTest, headerAuth)
   }
 
   it should "stop the request actor when it is stopped" in {

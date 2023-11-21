@@ -26,7 +26,7 @@ import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.actor.{ActorSystem, DeadLetter}
 import org.apache.pekko.http.scaladsl.model.Uri.Query
 import org.apache.pekko.http.scaladsl.model._
-import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken, `Content-Type`}
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken, RawHeader}
 import org.apache.pekko.stream.scaladsl.Sink
 import org.apache.pekko.util.ByteString
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -53,7 +53,7 @@ object OAuthExtensionSpec {
 
   /** A test request used by the tests. */
   private val TestRequest = HttpRequest(method = HttpMethods.POST, uri = "http://test.org/foo",
-    headers = List(`Content-Type`(ContentTypes.`text/xml(UTF-8)`)))
+    headers = List(RawHeader("X-Test", "yes")))
 
   /** Token data representing refreshed tokens. */
   private val RefreshedTokens = OAuthTokenData(accessToken = "<new_access>", refreshToken = "<new_refresh>")
@@ -438,7 +438,7 @@ class OAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
    */
   private def expectResponses(probe: TestProbe[HttpRequestSender.Result], expResponses: HttpResponse*): Unit = {
     val results = (1 to expResponses.size) map (_ => probe.expectMessageType[HttpRequestSender.SuccessResult])
-    results.map(_.response) should contain only (expResponses: _*)
+    results.map(_.response) should contain theSameElementsAs expResponses
   }
 
   it should "hold incoming requests until the access token has been refreshed" in {

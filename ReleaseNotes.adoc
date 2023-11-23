@@ -3,7 +3,7 @@
 This page contains information about the changes between the different versions
 of the CloudFiles library.
 
-== Release 0.7 (TBD)
+== Release 0.7 (2023-11-23)
 
 * Reworked XML parsing in the `webDav` module to use standard board means of the Java SDK. This allows dropping the dependency to Scala XML (which is now only a test dependency).
 * Enabled cross-building against Scala 3, so that artifacts for the new Scala version can be published.

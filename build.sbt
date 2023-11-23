@@ -22,6 +22,7 @@ lazy val CloudFilesVersion = "0.7-SNAPSHOT"
 /** Supported Scala versions. */
 lazy val VersionScala213 = "2.13.12"
 lazy val VersionScala212 = "2.12.18"
+lazy val VersionScala3 = "3.3.1"
 
 /** Versions of compile-time dependencies. */
 lazy val VersionPekko = "1.0.1"
@@ -34,7 +35,7 @@ lazy val VersionScalaTestMockito = "3.2.17.0"
 lazy val VersionScalaXml = "2.2.0"
 lazy val VersionWireMock = "3.2.0"
 
-lazy val supportedScalaVersions = List(VersionScala213, VersionScala212)
+lazy val supportedScalaVersions = List(VersionScala213, VersionScala212, VersionScala3)
 
 lazy val ITest = config("integrationTest") extend Test
 

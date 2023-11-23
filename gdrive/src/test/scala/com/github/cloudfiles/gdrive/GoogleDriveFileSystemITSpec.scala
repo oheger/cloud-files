@@ -101,7 +101,7 @@ object GoogleDriveFileSystemITSpec {
    * @return the matcher to check against this file
    */
   private def equalToFile(file: GoogleDriveJsonProtocol.WritableFile): StringValuePattern =
-    equalToJson(file.toJson.toString())
+    equalToJson(file.toJson.compactPrint)
 
   /**
    * Generates a ''Model.Folder'' object with the properties provided.

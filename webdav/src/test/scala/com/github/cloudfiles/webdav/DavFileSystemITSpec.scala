@@ -48,7 +48,7 @@ object DavFileSystemITSpec {
   private val AttrDescription = DavModel.AttributeKey(NS_TEST, "testDesc")
 
   /** The size of the content of test files. */
-  private val FileContentSize = FileTestHelper.testBytes().length
+  private val FileContentSize = FileTestHelper.testBytes().length.toLong
 
   /**
    * Adds a stubbing declaration for a request to a folder that is served with
@@ -651,7 +651,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val file = mock[Model.File[Uri]]
     when(file.id).thenReturn(FileID)
     when(file.name).thenReturn("original.name")
-    when(file.size).thenReturn(11)
+    when(file.size).thenReturn(11L)
     when(file.description).thenReturn(None)
     val expFile = DavModel.newFile(PatchedName, PatchedSize, id = FileID)
     val spec = ElementPatchSpec(patchName = Some(PatchedName), patchSize = Some(PatchedSize))

@@ -1,0 +1,51 @@
+:toc:
+:toc-placement!:
+:toclevels: 3
+= CloudFiles Core
+
+This is the documentation of the CloudFiles _core_ module which is a basic dependency of all other modules.
+
+toc::[]
+
+== Synopsis
+The CloudFiles _core_ module defines the basic interfaces used by the CloudFiles library to interact with different types of HTTP-based file systems. Specifically, it contains the link:src/main/scala/com/github/cloudfiles/core/FileSystem.scala[FileSystem] trait defining the operations and programming model by which files and directories can be accessed across different HTTP-based protocols. Other modules typically provide a concrete implementation of these interfaces for a specific protocol.
+
+The module also implements basic functionality related to sending and processing HTTP requests, which is needed for most HTTP-based file system implementations. The corresponding utilities in this area are specifically intended to be used by concrete `FileSystem` implementations; however, they can well be used on their own to simplify sending of HTTP requests and processing responses.
+
+== HTTP-related utilities
+Most of the protocols supported by CloudFiles are based on HTTP. This means that files or directories are manipulated by sending specific HTTP requests to a server. CloudFiles uses the https://pekko.apache.org/docs/pekko-http/current/[Apache Pekko HTTP] library for this purpose. Since there is typically a single API endpoint that accepts the protocol-specific requests, the https://pekko.apache.org/docs/pekko-http/current/client-side/host-level.html[Host-Level Client-Side API] provided by Apache Pekko HTTP is suitable.
+
+This API is rather low-level, however. In order to enable a richer programming model, CloudFiles provides an actor implementation that allows processing HTTP requests by sending corresponding request messages to an actor instance: link:src/main/scala/com/github/cloudfiles/core/http/HttpRequestSender.scala[HttpRequestSender]. The actor internally manages a Pekko host connection pool and uses it to forward the requests to the target server. The responses are then sent to an actor instance specified in the original request message. The actor can also be used via the _ask_ pattern, and it provides a static helper function further simplifying this usage scenario. That way, the result of the request is available as a `Future`.
+
+One advantage of this actor-based approach is that it is rather straight-forward to extend the basic functionality of sending requests by additional logic, e.g. error handling or different mechanism for authentication. HTTP libraries typically support some type of _interceptors_ for such use cases, but Apache Pekko HTTP currently does not have this feature. In CloudFiles, interceptors are modeled by special-purpose actor implementations, so-called _extensions_, that can be chained together in order to form a request/response processing pipeline: An extension actor accepts a request and can manipulate it according to its special functionality (e.g. by adding a special `Authorization` header). The (manipulated) request is then forwarded to the next actor in the chain, which is either another extension or the final `HttpRequestSender` actor which actually executes the request. The response is then passed along the same chain and can optionally be manipulated at each step.
+
+The following sections shortly describe the single actor implementations provided by CloudFiles _core_. For a detailed description, please consult the ScalaDocs of the implementation classes.
+
+=== HttpRequestSender
+As already mentioned, this is the base actor implementation for sending HTTP requests to a specific target server. It is a typed actor that handles messages of type `HttpCommand`. `HttpCommand` consists of the following sub commands:
+
+* `SendRequest` is the most important message, since it triggers the sending of an HTTP request. The message consists of the actual request (in terms of an Apache Pekko HTTP `HttpRequest` object), an arbitrary data object which is just passed through and can be used to transport application-specific data, a reference to the actor which is going to receive the result, and the so-called _discard entity mode_ (see below). The result of the send operation is then passed to the receiver actor in form of a `Result` object, which can be either a `SuccessResult` or a `FailureResult`.
+* The `Stop` command provides a means to terminate the actor instance and free all associated resources. In case of a chain with multiple extension actors, the command is propagated so that all members in the chain are gracefully terminated.
+* `ForwardedResult` is mainly used internally to make chaining of extension actors possible. The command provides a way to manipulate a result or trigger additional steps before it is passed to the next actor in the chain - if any.
+
+The underlying Apache Pekko HTTP library requires that all HTTP entities received via responses are fully read or discarded - in case they are not needed. Forgetting this could block the HTTP connection - see https://pekko.apache.org/docs/pekko-http/current/implications-of-streaming-http-entity.html[Implications of the streaming nature of Request/Response Entities]. Ensuring that all entities are consumed is not always trivial, especially if there are unexpected responses or errors. `HttpRequestSender` makes the handling of entities easier and safer by introducing a _discard entity mode_ parameter in the `SendRequest` message. Depending on the concrete value, the actor can discard the entity automatically under certain conditions. The following values are possible:
+
+.Discard entity modes
+[cols="1,3",options="header"]
+|===
+|Value |Description
+
+|OnFailure
+|The entity is returned as is if the response is successful (i.e. a 2xx code). If the response status indicates an error, it is automatically discarded. This is often what an application requires; therefore, this is the standard mode.
+
+|Always
+|The entity is always discarded. This mode is useful for instance for update requests for which no response data is expected or needed, e.g. DELETE or PATCH requests.
+
+|Never
+|The entity is never discarded. This mode could be appropriate if the API also returns interesting information in case of errors.
+|===
+
+There are some helper functions that simplify using the actor from non-actor clients:
+
+* `sendRequest()` creates a `SendRequest` object from the passed in parameters and passes it to the specified actor instance. The response is then returned as a `Future`.
+* `sendRequestSuccess()` works like `sendRequest()`, but it also checks whether the response status indicates a success. If not, the resulting `Future` is failed. This can make error handling easier.

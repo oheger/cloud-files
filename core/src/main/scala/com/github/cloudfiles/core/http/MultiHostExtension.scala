@@ -28,7 +28,7 @@ import scala.util.{Failure, Success, Try}
 /**
  * An actor implementation that can send HTTP requests to multiple hosts.
  *
- * Being a layer on top of Akka HTTP's host level API, [[HttpRequestSender]]
+ * Being a layer on top of Pekko HTTP's host level API, [[HttpRequestSender]]
  * is configured with a single host, to which all requests are sent. This actor
  * implementation overcomes this limitation by creating request actors
  * dynamically whenever a request to a new host is encountered. All request

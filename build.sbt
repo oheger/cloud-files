@@ -39,7 +39,7 @@ lazy val supportedScalaVersions = List(VersionScala213, VersionScala212, Version
 
 lazy val ITest = config("integrationTest") extend Test
 
-lazy val akkaDependencies = Seq(
+lazy val pekkoDependencies = Seq(
   "org.apache.pekko" %% "pekko-actor-typed" % VersionPekko,
   "org.apache.pekko" %% "pekko-stream" % VersionPekko,
   "org.apache.pekko" %% "pekko-http" % VersionPekkoHttp,
@@ -114,7 +114,7 @@ lazy val core = (project in file("core"))
   .settings(projectOsgiSettings)
   .settings(
     inConfig(ITest)(Defaults.testTasks),
-    libraryDependencies ++= akkaDependencies,
+    libraryDependencies ++= pekkoDependencies,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-core",
     description := "The core module of the cloud-files library",
@@ -134,7 +134,7 @@ lazy val webDav = (project in file("webdav"))
   .settings(projectOsgiSettings)
   .settings(
     inConfig(ITest)(Defaults.testTasks),
-    libraryDependencies ++= akkaDependencies,
+    libraryDependencies ++= pekkoDependencies,
     libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
     libraryDependencies ++= testDependencies,
     libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % VersionScalaXml % Test,
@@ -157,7 +157,7 @@ lazy val oneDrive = (project in file("onedrive"))
   .settings(projectOsgiSettings)
   .settings(
     inConfig(ITest)(Defaults.testTasks),
-    libraryDependencies ++= akkaDependencies,
+    libraryDependencies ++= pekkoDependencies,
     libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-onedrive",
@@ -179,7 +179,7 @@ lazy val googleDrive = (project in file("gdrive"))
   .settings(projectOsgiSettings)
   .settings(
     inConfig(ITest)(Defaults.testTasks),
-    libraryDependencies ++= akkaDependencies,
+    libraryDependencies ++= pekkoDependencies,
     libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-googledrive",
@@ -199,7 +199,7 @@ lazy val localFs = (project in file("localfs"))
   .enablePlugins(SbtOsgi)
   .settings(projectOsgiSettings)
   .settings(
-    libraryDependencies ++= akkaDependencies,
+    libraryDependencies ++= pekkoDependencies,
     libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-localfs",
@@ -217,7 +217,7 @@ lazy val crypt = (project in file("crypt"))
   .enablePlugins(SbtOsgi)
   .settings(projectOsgiSettings)
   .settings(
-    libraryDependencies ++= akkaDependencies,
+    libraryDependencies ++= pekkoDependencies,
     libraryDependencies += "org.slf4j" % "slf4j-api" % VersionSlf4j,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-crypt",
@@ -234,7 +234,7 @@ lazy val cryptAlgAES = (project in file("crypt-algs/aes"))
   .enablePlugins(SbtOsgi)
   .settings(projectOsgiSettings)
   .settings(
-    libraryDependencies ++= akkaDependencies,
+    libraryDependencies ++= pekkoDependencies,
     libraryDependencies ++= testDependencies,
     name := "cloud-files-cryptalg-aes",
     description := "Implements the AES crypto algorithm",

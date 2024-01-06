@@ -34,7 +34,7 @@ import scala.util.{Failure, Success, Try}
 /**
  * An actor implementation for sending HTTP requests to a specific host.
  *
- * This module provides an actor-like wrapper around Akka HTTP's host level
+ * This module provides an actor-like wrapper around Pekko HTTP's host level
  * API. An HTTP request can be sent by passing a message to this actor. The
  * actor processes the request and replies with a corresponding response.
  */

@@ -57,7 +57,7 @@ private object RequestQueue {
    *
    * @param uri    the URI
    * @param proxy  the function to select a proxy
-   * @param ext    the Akka HTTP extension main entry point
+   * @param ext    the Pekko HTTP extension main entry point
    * @param system the actor system
    * @tparam T the type of objects passed to the flow
    * @return the flow for sending HTTP requests to this URI
@@ -113,8 +113,10 @@ private object RequestQueue {
 /**
  * A helper class to manage a flow for sending requests to the WebDav server.
  *
- * This is based on the usage example of the Akka HTTP host-level client API
- * from the official Akka documentation.
+ * This is based on the usage example of the Pekko HTTP host-level client API
+ * from the official Pekko documentation.
+ *
+ * See https://pekko.apache.org/docs/pekko-http/current/client-side/host-level.html#examples
  *
  * @param uri       the URI requests are to be sent to
  * @param queueSize the size of the request queue

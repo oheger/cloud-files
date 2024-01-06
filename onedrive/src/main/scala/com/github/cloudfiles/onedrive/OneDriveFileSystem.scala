@@ -522,7 +522,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
 
   /**
    * Prepares a JSON request entity that is serialized from the given object.
-   * This is a thin wrapper around Akka HTTP's JSON marshalling facilities.
+   * This is a thin wrapper around Pekko HTTP's JSON marshalling facilities.
    *
    * @param entity the entity of the request as object
    * @param m      a marshaller for this object

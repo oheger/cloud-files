@@ -56,3 +56,22 @@ An instance of <<HttpRequestSender>> can be used to send HTTP requests to a sing
 An actor of this class uses a map to associate `HttpRequestSender` actors with host names. Whenever a request is to be sent, it consults the map to find out whether there is already an actor for the host referenced by the request URI. If so, it delegates the request to this actor. Otherwise, it creates a new request sender actor, stores it in the map, and executes the request on this instance. The creation of new `HttpRequestSender` actors is done by a function which can be provided when instantiating a `MultiHostExtension` actor. This makes it possible to inject customized request sender actors.
 
 Note that this actor implementation is mainly intended for the use case described above: to support protocols that require more than a single endpoint. Nevertheless, the total number of hosts to be managed by a `MultiHostExtension` instance is expected to be low. The implementation should therefore not be used as an all-purpose actor for sending arbitrary HTTP requests; there should be more efficient ways to do this.
+
+=== Authentication support
+The HTTP-related utilities contain some extension actors that deal with different kinds of authentication. These actors intercept requests and add an `Authorization` header to them. They can be configured using concrete subclasses of the link:src/main/scala/com/github/cloudfiles/core/http/auth/AuthConfig.scala[AuthConfig] trait.
+
+==== BasicAuthExtension
+One of the easiest authentication mechanisms is Basic Auth. Here a username and a password are combined and base64-encoded; the resulting string is used as `Authorization` header. The link:src/main/scala/com/github/cloudfiles/core/http/auth/BasicAuthExtension.scala[BasicAuthExtension] actor supports this authentication mechanism. An instance is initialized with a `BasicAuthConfig` object which consists of a username and a password. Based on this information, it can generate the required header and add it to requests.
+
+==== OAuthExtension
+The https://oauth.net/2/[OAuth 2] protocol is another popular authentication mechanism. Here, authentication and authorization information is represented by tokens. The link:src/main/scala/com/github/cloudfiles/core/http/auth/OAuthExtension.scala[OAuthExtension] actor implements an OAuth flow which is frequently used in HTTP-based file system protocols. It assumes that an access token has already been obtained via an OAuth client whose credentials (client ID and client secret) are known. It uses this token to generate the `Authorization` header. It then monitors the outcome of the request. If the response status is 401, this is interpreted as an indication that the access token has expired. It then sends a request to the token endpoint to obtain another access token based on a refresh token.
+
+An instance of this actor class is configured using an `OAuthConfig` object containing the following information which is required for performing a successful token refresh:
+
+* the URI of the endpoint for obtaining an access token
+* the _redirect URI_ configured for this OAuth client
+* the ID of the OAuth client
+* the OAuth client secret
+* initial token information consisting of an access token and a refresh token
+
+In addition, the configuration can contain a function the actor invokes when it has a done a token refresh. This allows an external party to keep track on changed tokens. A use case could be to persist the new access token, so that it can be reused for later operations; this could be useful if the token is valid for a longer period.

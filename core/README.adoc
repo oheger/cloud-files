@@ -49,3 +49,10 @@ There are some helper functions that simplify using the actor from non-actor cli
 
 * `sendRequest()` creates a `SendRequest` object from the passed in parameters and passes it to the specified actor instance. The response is then returned as a `Future`.
 * `sendRequestSuccess()` works like `sendRequest()`, but it also checks whether the response status indicates a success. If not, the resulting `Future` is failed. This can make error handling easier.
+
+=== MultiHostExtension
+An instance of <<HttpRequestSender>> can be used to send HTTP requests to a single server. Some of the protocols supported by CloudFiles define multiple endpoints hosted by different servers, however. For instance, there can be one main API endpoint to manipulate files and folders, but in order to download files, a different endpoint has to be used. For such use cases, there is the link:src/main/scala/com/github/cloudfiles/core/http/MultiHostExtension.scala[MultiHostExtension] actor implementation.
+
+An actor of this class uses a map to associate `HttpRequestSender` actors with host names. Whenever a request is to be sent, it consults the map to find out whether there is already an actor for the host referenced by the request URI. If so, it delegates the request to this actor. Otherwise, it creates a new request sender actor, stores it in the map, and executes the request on this instance. The creation of new `HttpRequestSender` actors is done by a function which can be provided when instantiating a `MultiHostExtension` actor. This makes it possible to inject customized request sender actors.
+
+Note that this actor implementation is mainly intended for the use case described above: to support protocols that require more than a single endpoint. Nevertheless, the total number of hosts to be managed by a `MultiHostExtension` instance is expected to be low. The implementation should therefore not be used as an all-purpose actor for sending arbitrary HTTP requests; there should be more efficient ways to do this.

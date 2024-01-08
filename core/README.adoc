@@ -75,3 +75,9 @@ An instance of this actor class is configured using an `OAuthConfig` object cont
 * initial token information consisting of an access token and a refresh token
 
 In addition, the configuration can contain a function the actor invokes when it has a done a token refresh. This allows an external party to keep track on changed tokens. A use case could be to persist the new access token, so that it can be reused for later operations; this could be useful if the token is valid for a longer period.
+
+=== RetryAfterExtension
+The purpose of this extension actor implementation is to deal with responses of the failure status 429 _Too many requests_. Practice has shown that some service providers enforce a rate limit that can be reached when executing many operations in a short time, e.g. when trying to upload a larger number of small files. In this case, the server responds with the error code 429, and the response typically contains a `Retry-After` header that defines a delay until when another request will be accepted.
+
+`RetryAfterExtension` intercepts responses with this error code and evaluates the `Retry-After` header if it is present. If the header cannot be found or has an unexpected format, a configurable delay is used instead. The actor then waits for this time span, and afterward retries the request. Ideally, this new request is now successful; otherwise, the same steps are performed again.
+

@@ -87,3 +87,24 @@ The extension mechanism supported by the HTTP-related utilities requires that a 
 To simplify the setup of a chain of HTTP actors, at least for the standard extensions, CloudFiles offers the link:src/main/scala/com/github/cloudfiles/core/http/factory/HttpRequestSenderFactory.scala[HttpRequestSenderFactory] trait and the default implementation link:src/main/scala/com/github/cloudfiles/core/http/factory/HttpRequestSenderFactoryImpl.scala[HttpRequestSenderFactoryImpl]. The idea behind this trait is that a concrete chain is defined in terms of an link:src/main/scala/com/github/cloudfiles/core/http/factory/HttpRequestSenderConfig.scala[HttpRequestSenderConfig] object. The object contains a number of properties corresponding to the standard extensions supported by CloudFiles. Based on these properties, the factory is able to create the required actor instances, configure them correctly, and link them together. So, ideally, with a configuration object at hand, obtaining a fully initialized request sender actor is a matter of a single function call. This actor can then be used together with a CloudFiles `FileSystem` implementation to manipulate files on a server.
 
 The factory for request actors needs a way to create new actor instances. How this is done typically depends on client code. For instance, if the client is an actor, too, new actors should probably be created via its actor context, so that they become child actors. Other types of clients may have different requirements. To abstract over potential usage scenarios, CloudFiles offers the link:src/main/scala/com/github/cloudfiles/core/http/factory/Spawner.scala[Spawner] trait. It defines a generic function for creating a new (typed) actor. There are already a number of implementations available supporting different kinds of clients, e.g. for typed actors, classic actors or making use of a classic actor system. Since the interface is quite simple, it should be straight-forward to provide a custom implementation if the available options are not sufficient.
+
+== File systems
+The basic abstraction introduced by CloudFiles is represented by the link:src/main/scala/com/github/cloudfiles/core/FileSystem.scala[FileSystem] trait. A `FileSystem` object can be used to execute typical CRUD operations on files and directories on a server that supports a specific protocol. The various submodules of CloudFiles typically provide specialized `FileSystem` implementations that support a specific protocol. Refer to the README documents of these modules for further details.
+
+=== Type parameters
+The `FileSystem` trait has a number of type parameters:
+
+[source,scala]
+----
+trait FileSystem[ID, FILE, FOLDER, FOLDER_CONTENT]
+----
+
+The `ID` parameter defines the type used for the identifiers of files and folders. Many functions of the `FileSystem` trait expect a parameter of this type to select the element to be accessed. A number of file systems just use strings as identifiers, for instance the implementations for OneDrive or GoogleDrive; but more complex identifier types are common as well. The WebDav implementation is an example for this; it identifies files and folders based on Uris.
+
+The remaining type parameters define the types used to represent the elements contained in the file system:
+
+* the type for files
+* the type for folders (which form a hierarchy in the file system)
+* and a type to represent the content of a folder. This typically includes collections with the files and (sub) folders contained in this folder plus additional metadata. The `folderContent()` function returns such an object for a given folder ID.
+
+The `FileSystem` trait does not define any constraints on these types; so a concrete implementation is free to use whatever types it finds suitable. However, to support a certain level of interoperability between different file systems, it is helpful if the types in use follow certain standards. To support this, the link:src/main/scala/com/github/cloudfiles/core/Model.scala[Model] module defines a number of traits declaring standard properties for files and folders and even a concrete data class to represent the content of a folder. The `FileSystem` implementations in CloudFiles use type parameters that extend these traits, so that basic properties can be accessed across different file systems. If applicable, the file system-specific data types provide additional properties and functionality to make special features of the underlying protocol available.

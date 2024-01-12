@@ -108,3 +108,52 @@ The remaining type parameters define the types used to represent the elements co
 * and a type to represent the content of a folder. This typically includes collections with the files and (sub) folders contained in this folder plus additional metadata. The `folderContent()` function returns such an object for a given folder ID.
 
 The `FileSystem` trait does not define any constraints on these types; so a concrete implementation is free to use whatever types it finds suitable. However, to support a certain level of interoperability between different file systems, it is helpful if the types in use follow certain standards. To support this, the link:src/main/scala/com/github/cloudfiles/core/Model.scala[Model] module defines a number of traits declaring standard properties for files and folders and even a concrete data class to represent the content of a folder. The `FileSystem` implementations in CloudFiles use type parameters that extend these traits, so that basic properties can be accessed across different file systems. If applicable, the file system-specific data types provide additional properties and functionality to make special features of the underlying protocol available.
+
+=== Monadic operations
+The `FileSystem` trait follows the functional programming paradigm. Its methods do not manipulate files and folders themselves as a side effect, but return `Operation` objects that perform the desired operation(s) when invoked. An `Operation` has a `run()` method that expects a reference to an <<HttpRequestSender>> actor (such an actor is always required when dealing with file systems) and returns a `Future` with the result of the operation. So, as an example, the following code fragment obtains a file with a specific ID known beforehand:
+
+[source,scala]
+----
+val httpSender = ... // create sender actor
+val fileSystem = ... // create a specific FileSystem
+val fileID = someID
+
+// First obtain an operation to resolve the file.
+val opResolveFile = fileSystem.resolveFile(fileID)
+
+// Then execute the operation, result is a Future.
+val futureFile = opResolveFile.run(httpSender)
+
+// Process the file result.
+futureFile onComplete {
+  case Success(file) =>
+    // Do something with the file
+  case Failure(exception) =>
+    // Handle the exception
+}
+----
+
+The `Operation` type is a monad. This means that multiple instances can be combined before they are executed in a single step. For this purpose Scala's *for* comprehensions can be used. As a more complex example let's assume that the ID of the file to be resolved is not known, but only its path. Then two operations are required:
+
+* The `FileSystem.resolvePath()` method returns an operation that can determine the ID of a file or folder specified by its path.
+* The ID can then be passed to the already known `FileSystem.resolveFile()` method which returns the operation to resolve the file.
+
+In code, this could look as follows:
+
+[source,scala]
+----
+// Get a combined operation.
+val opResolveFileByPath = for {
+  id <- fileSystem.resolvePath(filePath)
+  file <- fileSystem.resolveFile(id)
+} yield file
+
+// Then execute it.
+val futureFile = opResolveFileByPath.run(httpSender)
+----
+
+NOTE: As resolving files and folders based on their path is a common use case, the `FileSystem` trait offers convenience methods that do this. So, the example is rather to demonstrate the underlying concept. However, the implementations of the existing convenience methods look exactly as shown here.
+
+Using this approach, an arbitrary complex operation can be constructed, which is basically a description of the actions to be performed. Only when invoking the `run()` method on the resulting `Operation`, the actions are actually executed.
+
+One advantage of this programming model is that error handling is rather straight-forward: When executing a combined operation the resulting `Future` is successful only if all primitive operations could be completed successfully. If a single operation fails, no later operations are run, and the resulting `Future` completes with the failure produced by the primitive operation.

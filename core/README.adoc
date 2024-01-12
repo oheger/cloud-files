@@ -157,3 +157,16 @@ NOTE: As resolving files and folders based on their path is a common use case, t
 Using this approach, an arbitrary complex operation can be constructed, which is basically a description of the actions to be performed. Only when invoking the `run()` method on the resulting `Operation`, the actions are actually executed.
 
 One advantage of this programming model is that error handling is rather straight-forward: When executing a combined operation the resulting `Future` is successful only if all primitive operations could be completed successfully. If a single operation fails, no later operations are run, and the resulting `Future` completes with the failure produced by the primitive operation.
+
+=== Extensible file systems
+In addition to defining an abstraction for accessing files and folders over multiple protocols, CloudFiles supports specific extensions on all file systems. The idea is, that a `FileSystem` implementation decorates another `FileSystem`. It uses the underlying `FileSystem` for the manipulation of files and folders according to the concrete protocol, but can implement enhanced functionality on top of this. Example use cases for such extensions could be:
+
+* When files are uploaded their content can be compressed; analogously, downloaded files are deflated on the fly.
+* Data can be stored on the server in encrypted form. Like for the compression use case, uploaded files would be encrypted dynamically, and downloaded files would again be decrypted.
+* The names of files and folders could be mapped based on some scheme.
+
+To make advanced transformations possible, as required by the use cases listed above, an extension implementation must have a controlled way to manipulate specific properties of files and folders without knowing the concrete internal representation of these objects; remember that the types used for items in the file system are defined by <<Type parameters>>. This goes beyond the standard operations offered by the `FileSystem` trait. Therefore, CloudFiles provides another trait, link:src/main/scala/com/github/cloudfiles/core/delegate/ExtensibleFileSystem.scala[ExtensibleFileSystem], which extends the basic `FileSystem` trait by the required functionality. So, only file systems implementing this `ExtensibleFileSystem` trait can be decorated by extensions. The good news is that all the standard implementations integrating concrete protocols offered by CloudFiles fall under this category. Actually, the `ExtensibleFileSystem` trait requires only two additional methods, so supporting this extension mechanism is not that hard.
+
+To simplify the implementation of concrete extensions, CloudFiles has the link:src/main/scala/com/github/cloudfiles/core/delegate/DelegateFileSystem.scala[DelegateFileSystem] trait. It provides default implementations for all the operations defined by `FileSystem` that just forward the call to another `FileSystem` object. So, an extension implementation extending this trait just needs to override the methods affected by the specific functionality it provides and can use the default implementations for all others.
+
+To sum up, CloudFiles' file systems can be grouped into two categories: file systems that implement the `FileSystem` API for a specific protocol, and file systems implementing extended functionality on arbitrary other file systems.

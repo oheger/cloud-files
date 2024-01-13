@@ -3,12 +3,28 @@
 :toclevels: 3
 = CloudFiles
 
-CloudFiles is a library that supports reading and manipulating files and
-folders stored on various HTTP-based file system, such as WebDav or OneDrive.
-
-TODO More documentation to come...
+CloudFiles is a library that supports reading and manipulating files and folders stored on various HTTP-based file system protocols, such as WebDav or OneDrive. It does so by defining an abstraction for dealing with files and folders and provides concrete implementations for the supported protocols.
 
 toc::[]
+
+== Modules
+The CloudFiles library consists of multiple modules. Each module has its own documentation in form of _README_ files in the corresponding sub paths of this repository. This section gives an overview over the modules available.
+
+=== Fundamentals
+The link:core/README.adoc[Core] module defines the basic interfaces and programming model used by CloudFiles, i.e. the abstraction mentioned above. Make sure to read this documentation first; it is a prerequisite to understand the other modules.
+
+=== Supported protocols
+A number of modules provide implementations of the abstractions defined by the _core_ module to integrate specific protocols. These are the following:
+
+* GoogleDrive
+* Local file system
+* OneDrive
+* WebDav
+
+=== Other functionality
+On top of the _file system_ abstraction, CloudFiles provides functionality that can be used together with all the supported protocols. This is done by the following modules:
+
+* Encryption
 
 == Release Notes
 

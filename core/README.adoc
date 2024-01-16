@@ -21,6 +21,7 @@ One advantage of this actor-based approach is that it is rather straight-forward
 
 The following sections shortly describe the single actor implementations provided by CloudFiles _core_. For a detailed description, please consult the ScalaDocs of the implementation classes.
 
+[#_httprequestsender]
 === HttpRequestSender
 As already mentioned, this is the base actor implementation for sending HTTP requests to a specific target server. It is a typed actor that handles messages of type `HttpCommand`. `HttpCommand` consists of the following sub commands:
 

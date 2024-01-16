@@ -18,7 +18,7 @@ A number of modules provide implementations of the abstractions defined by the _
 
 * GoogleDrive
 * Local file system
-* OneDrive
+* link:onedrive/README.adoc[OneDrive]
 * WebDav
 
 === Other functionality

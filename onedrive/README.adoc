@@ -1,0 +1,43 @@
+:toc:
+:toc-placement!:
+:toclevels: 3
+= CloudFiles OneDrive
+
+This is the documentation of the CloudFiles _onedrive_ module which provides an implementation of the `FileSystem` abstraction for https://learn.microsoft.com/en-us/graph/onedrive-concept-overview[Microsoft OneDrive].
+
+toc::[]
+
+== Synopsis
+Microsoft OneDrive implements a file storage protocol that is used by multiple Microsoft services. The basic unit is a _drive_ which is uniquely identified by an alphanumeric identifier. On such a drive, a hierarchical structure of folders containing files and sub folders can be created.
+
+In the CloudFiles implementation, the `FileSystem` corresponds to a drive; on constructing a `FileSystem` instance, the drive ID must be provided. The implementation uses the https://learn.microsoft.com/en-us/graph/api/resources/onedrive?view=graph-rest-1.0[Microsoft Graph API] to access the items stored on this drive. The API makes use of JSON to represent the drive items; the OneDrive module therefore defines corresponding data classes to serialize and deserialize the JSON structures used by the API.
+
+The `FileSystem` implementation for OneDrive implements the `ExtensibleFileSystem` trait and can thus be used together with all extension file systems available.
+
+== Usage
+This section contains usage instructions for the OneDrive file system implementation. The main implementation class is link:src/main/scala/com/github/cloudfiles/onedrive/OneDriveFileSystem.scala[OneDriveFileSystem].
+
+=== Creating a file system
+In order to access items stored on a OneDrive, two objects must be created: an instance of `OneDriveFileSystem`, and an link:../core/README.adoc#_httprequestsender[HttpRequestSender] actor.
+
+Creating the file system instance is as easy as invoking its constructor passing in a link:src/main/scala/com/github/cloudfiles/onedrive/OneDriveConfig.scala[OneDriveConfig] object. This object collects all the properties supported by the OneDrive file system implementation. The only mandatory property is the alphanumeric OneDrive ID that has already been mentioned in the <<Synopsis>> section. Other supported configuration options are the following ones:
+
+* The root path to be used by the file system. If this is set, only files and folders below this root path can be accessed. This can be useful to restrict operations to a specific sub structure of the drive. If this property is undefined, the root folder is the root of the drive.
+* The chunk size for files to be uploaded. OneDrive has a restriction for the number of bytes that can be uploaded in a single request. Larger files need to be split in multiple upload operations. This is handled automatically by the implementation, but this property can be used to configure the size when this splitting is performed. For slow or unstable network connections, it could be beneficial to experiment with this value.
+* A timeout for network operations. Operations that take longer are canceled and considered as failures.
+* An alternative URL for the OneDrive API server. This is probably rarely needed in practice. The CloudFiles library itself makes use of this for testing purposes; but if somebody decides to host a OneDrive server on premise, this URL can be specified.
+
+To execute the operations produced by the file system, an actor for sending HTTP requests is required. The OneDrive protocol has some requirements for this actor:
+
+* The OneDrive API uses different servers for uploading and downloading files than for other operations. Therefore, the actor must support multiple hosts.
+* Authentication against the Microsoft Graph API is done via the OAuth protocol; so the corresponding authentication extension must be enabled.
+* The server used for file up- and downloads, however, does not expect any authentication headers. (The corresponding links cannot be guessed and are valid only temporarily; so an additional authentication mechanism is obviously not necessary.)
+
+The companion object of `OneDriveFileSystem` provides the `createHttpSender()` function that can be used to create an actor that meets all these requirements. So, a client does not need to combine all the needed extensions manually.
+
+=== Item model
+The data types for files and folders used by `OneDriveFileSystem` are defined in the link:src/main/scala/com/github/cloudfiles/onedrive/OneDriveModel.scala[OneDriveModel] module and are named `OneDriveFile` and `OneDriveFolder`. They extend the base traits from the _core_ module, so access to basic properties and interoperability with other file system implementations is possible. The underlying metadata is hold in data classes that correspond to the JSON data structures the OneDrive API operates on. Their source code is located in the link:src/main/scala/com/github/cloudfiles/onedrive/OneDriveJsonProtocol.scala[OneDriveJsonProtocol] module.
+
+Both, `OneDriveFile` and `OneDriveFolder`, store a `DriveItem` object which is the actual container of metadata. Clients can access this item and have therefore access to all the information provided by OneDrive. Most of the metadata available is read-only, e.g. things like timestamps or hashes.
+
+For creating new file or folder instances - which is needed for invoking a number of operations that expect such objects as parameters -, clients can use the convenience functions `newFile()` or `newFolder()` respectively from `OneDriveModel`. These functions construct the structures required by the OneDrive JSON API by using the properties provided and setting default values for unspecified properties.

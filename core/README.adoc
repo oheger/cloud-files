@@ -64,6 +64,7 @@ The HTTP-related utilities contain some extension actors that deal with differen
 ==== BasicAuthExtension
 One of the easiest authentication mechanisms is Basic Auth. Here a username and a password are combined and base64-encoded; the resulting string is used as `Authorization` header. The link:src/main/scala/com/github/cloudfiles/core/http/auth/BasicAuthExtension.scala[BasicAuthExtension] actor supports this authentication mechanism. An instance is initialized with a `BasicAuthConfig` object which consists of a username and a password. Based on this information, it can generate the required header and add it to requests.
 
+[#auth_oauth]
 ==== OAuthExtension
 The https://oauth.net/2/[OAuth 2] protocol is another popular authentication mechanism. Here, authentication and authorization information is represented by tokens. The link:src/main/scala/com/github/cloudfiles/core/http/auth/OAuthExtension.scala[OAuthExtension] actor implements an OAuth flow which is frequently used in HTTP-based file system protocols. It assumes that an access token has already been obtained via an OAuth client whose credentials (client ID and client secret) are known. It uses this token to generate the `Authorization` header. It then monitors the outcome of the request. If the response status is 401, this is interpreted as an indication that the access token has expired. It then sends a request to the token endpoint to obtain another access token based on a refresh token.
 

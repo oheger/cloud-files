@@ -1,0 +1,57 @@
+:toc:
+:toc-placement!:
+:toclevels: 3
+= CloudFiles WebDav
+
+This is the documentation of the CloudFiles _webdav_ module which provides an implementation of the `FileSystem` abstraction based on the https://en.wikipedia.org/wiki/WebDAV[WebDav] protocol.
+
+toc::[]
+
+== Synopsis
+WebDav is a protocol that extends the standard HTTP protocol by new methods for managing files and folders stored on a server. That way a file system with typical operations on folders and files can be simulated on an HTTP server.
+
+Each item in the file system is identified by a URI. Reading and writing items is done via the standard HTTP methods plus some new extension methods like _PROPFIND_ to retrieve metadata about an item or _MKCOL_ to create a new folder. WebDav also provides features for locking files to enable collaborative editing, but the CloudFiles implementation focuses on the functionality required to implement the file system interface.
+
+The bodies of requests and responses to and from WebDav servers use https://en.wikipedia.org/wiki/XML[XML] as data format. Each item in the file system can have a set of predefined standard attributes. In addition, arbitrary attributes can be added which can use a custom XML namespace to be distinguishable from the standard attributes. However, a concrete server may restrict the attributes or namespaces that it accepts. Via the file and folder classes provided by this module, these attributes can be queried and set.
+
+The WebDav `FileSystem` implementation extends the `ExtensibleFileSystem` trait and can thus be used together with all extension file systems available.
+
+== Usage
+This section contains usage instructions for the WebDav file system implementation. The main implementation class is link:src/main/scala/com/github/cloudfiles/webdav/DavFileSystem.scala[DavFileSystem].
+
+=== Creating a file system
+Like for other file system implementations, a concrete instance is created by invoking the constructor of `DavFileSystem` passing in an object with configuration settings. For the _webdav_ module, the configuration class is named link:src/main/scala/com/github/cloudfiles/webdav/DavConfig.scala[DavConfig]. It defines the options listed in Table <<tab_webdav_config>>. Only the URI to the WebDav server must be provided; other settings use meaningful default values.
+
+[#tab_webdav_config]
+.Configuration properties for WebDav file systems
+[cols="1,3,1",options="header"]
+|===
+|Property |Description |Default
+
+|rootUri
+|The URI of the WebDav server. This is the endpoint that handles the WebDav requests. The URI can have a path component, then this path is interpreted as the root path of the file system.
+|must be set
+
+|optDescriptionKey
+|WebDav does not define a standard attribute for the description of an element. So in order to have descriptions for files and folders - which is part of the interface used by CloudFiles -, a custom attribute must be specified which stores this information. An attribute, by the way, is defined by a namespace and a name which conforms to the naming conventions of XML elements. If this property is not set, no description for elements is available.
+|None
+
+|additionalAttributes
+|When working with custom attributes in addition to the standard WebDav attributes, the full list of these custom attribute keys (again consisting of a namespace and a name) must be provided here. This is because some servers require that non-standard attributes must be explicitly requested when querying data; otherwise their values are not retrieved. CloudFiles always fetches the standard attributes and the attribute for the description (if set); these attributes need not be listed here.
+|empty list
+
+|deleteBeforeOverride
+|This is a flag introduced as a work-around for a strange behavior encountered with some servers: When a file was uploaded that already existed on the server, the upload sometimes was skipped. If set to *true*, CloudFiles issues a `delete` command first and then creates a new file. This is of course not ideal; so this work-around should only be activated if problems with uploads occur.
+|false
+
+|timeout
+|A timeout for network operations. Operations that take longer are canceled and considered as failures.
+|30 seconds
+|===
+
+Since WebDav is built on top of the HTTP protocol, it does not define a new authentication mechanism, but uses the methods available. So, the extension for authentication to be used when constructing the link:../core/README.adoc#_httprequestsender[HttpRequestSender] actor depends on the requirements of the target server. Often, the Basic Auth method is used. The WebDav file system implementation does not put any restrictions on the HTTP sender actor itself.
+
+=== Item model
+The data types for files and folders used by `DavFileSystem` are defined in the link:src/main/scala/com/github/cloudfiles/webdav/DavModel.scala[DavModel] module. They are named `DavFile` and `DavFolder` and are rather straight-forward data classes. They define fields for the CloudFiles standard properties and contain an `Attributes` object that holds the non-standard WebDav attributes, if those are used. Both classes extend the base traits from the _core_ module, so access to basic properties and interoperability with other file system implementations is possible.
+
+For creating new file or folder instances - which is needed for invoking a number of operations that expect such objects as parameters -, clients can use the convenience functions `newFile()` or `newFolder()` respectively from `DavModel`. They construct the corresponding items based on the provided properties setting default values for the remaining properties.

@@ -19,7 +19,7 @@ A number of modules provide implementations of the abstractions defined by the _
 * link:gdrive/README.adoc[GoogleDrive]
 * Local file system
 * link:onedrive/README.adoc[OneDrive]
-* WebDav
+* link:webdav/README.adoc[WebDav]
 
 === Other functionality
 On top of the _file system_ abstraction, CloudFiles provides functionality that can be used together with all the supported protocols. This is done by the following modules:

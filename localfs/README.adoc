@@ -1,0 +1,52 @@
+:toc:
+:toc-placement!:
+:toclevels: 3
+= CloudFiles Local File System
+
+This is the documentation of the CloudFiles _localfs_ module which provides an implementation of the `FileSystem` abstraction for the local file system.
+
+toc::[]
+
+== Synopsis
+While CloudFiles mainly targets file systems located on servers that are accessed via HTTP, this module is a bit special. It operates on the local file system using the standard Java API (from the `java.nio.file` package) to access and manipulate files and folders. The link:../core/README.adoc#operations[operations] returned by this implementation do not require an link:../core/README.adoc#_httprequestsender[HttpRequestSender] actor for their execution; the passed in value is ignored and can thus even be *null*. Because of this focus, the implementation is rather straight-forward. It calls the corresponding Java functions wrapped in a `Future`.
+
+Items on the local file system are identified via `Path` objects (from the Java API); so this type is used as generic ID parameter of the `FileSystem` implementation. The standard properties defined by CloudFiles for files and folders are mapped to corresponding file system attributes. Since there is no such thing as a description for local files, this property is always undefined.
+
+The local `FileSystem` implementation extends the `ExtensibleFileSystem` trait and can thus be used together with all extension file systems available.
+
+== Usage
+This section contains usage instructions for the local file system implementation. The main implementation class is link:src/main/scala/com/github/cloudfiles/localfs/LocalFileSystem.scala[LocalFileSystem].
+
+=== Creating a file system
+A `LocalFileSystem` instance is created by passing a link:src/main/scala/com/github/cloudfiles/localfs/LocalFsConfig.scala[LocalFsConfig] object to the constructor. The configuration options available are described by table <<tab_localfs_config>>.
+
+[#tab_localfs_config]
+.Configuration properties for the local file system
+[cols="1,3,1",options="header"]
+|===
+|Property |Description |Default
+
+|basePath
+|The base path of the file system. This path is returned when querying for the root folder. Paths are resolved relatively to this path.
+|must be set
+
+|executionContext
+|The file system implementation uses this execution context for dealing with futures. Since file system operations are typically blocking, this should not be the default dispatcher of an actor system. The recommendation is to use a dedicated dispatcher for I/O operations.
+|must be set
+
+|linkOptions
+|A collection of `java.nio.file.LinkOption` objects that determine how links on the file system should be handled.
+|empty list
+
+|sanitizePaths
+|This flag controls whether the paths passed as parameters to file system operations should be checked that they are actually sub paths of the configured base path. If set to *true*, the implementation ensures that no access to elements outside the base path is possible. So paths like `../../some/arbitrary/path` will be normalized and checked against the base path.
+|true
+|===
+
+With a `LocalFileSystem` instance available, it is possible to perform all supported manipulations on the local file system. No actor for sending HTTP requests is needed, the `run()` function on the `Operation` objects returned by the file system can just be called passing in *null* as parameter.
+
+=== Item model
+The data types for files and folders used by `LocalFileSystem` are defined in the link:src/main/scala/com/github/cloudfiles/localfs/LocalFsModel.scala[LocalFsModel] module. They are named `LocalFile` and `LocalFolder`. They are simple data classes storing the values required by the standard CloudFiles interfaces for files and folders.
+
+As for other file systems, there are helper functions
+provided by `LocalFsModel` for creating new file or folder instances - which is needed for invoking a number of operations that expect such objects as parameters. They are called `newFile()` and `newFolder()` respectively. They construct the corresponding items based on the provided properties setting default values for the remaining properties.

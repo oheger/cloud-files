@@ -17,7 +17,7 @@ The link:core/README.adoc[Core] module defines the basic interfaces and programm
 A number of modules provide implementations of the abstractions defined by the _core_ module to integrate specific protocols. These are the following:
 
 * link:gdrive/README.adoc[GoogleDrive]
-* Local file system
+* link:localfs/README.adoc[Local file system]
 * link:onedrive/README.adoc[OneDrive]
 * link:webdav/README.adoc[WebDav]
 

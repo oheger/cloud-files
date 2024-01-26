@@ -113,6 +113,7 @@ The remaining type parameters define the types used to represent the elements co
 
 The `FileSystem` trait does not define any constraints on these types; so a concrete implementation is free to use whatever types it finds suitable. However, to support a certain level of interoperability between different file systems, it is helpful if the types in use follow certain standards. To support this, the link:src/main/scala/com/github/cloudfiles/core/Model.scala[Model] module defines a number of traits declaring standard properties for files and folders and even a concrete data class to represent the content of a folder. The `FileSystem` implementations in CloudFiles use type parameters that extend these traits, so that basic properties can be accessed across different file systems. If applicable, the file system-specific data types provide additional properties and functionality to make special features of the underlying protocol available.
 
+[#operations]
 === Monadic operations
 The `FileSystem` trait follows the functional programming paradigm. Its methods do not manipulate files and folders themselves as a side effect, but return `Operation` objects that perform the desired operation(s) when invoked. An `Operation` has a `run()` method that expects a reference to an <<HttpRequestSender>> actor (such an actor is always required when dealing with file systems) and returns a `Future` with the result of the operation. So, as an example, the following code fragment obtains a file with a specific ID known beforehand:
 

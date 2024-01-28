@@ -16,13 +16,11 @@
 
 package com.github.cloudfiles.core
 
-import com.github.cloudfiles.core.Model.Folder
 import org.mockito.Mockito.when
-import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
 
 object ModelSpec {
@@ -48,7 +46,7 @@ object ModelSpec {
 /**
  * Test class for ''Model'' and the classes it defines.
  */
-class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTestHelper {
+class ModelSpec extends AsyncFlatSpec with Matchers with MockitoSugar {
 
   import ModelSpec._
 
@@ -148,16 +146,16 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
       Map(file1.id -> file1, file2.id -> file2),
       Map(folder1.id -> folder1, folder2.id -> folder2, folder3.id -> folder3))
 
-    val mappedContent =
-      futureResult(content.mapContentParallel(mapFiles = Some(mapFile), mapFolders = Some(mapFolder)))
-    mappedContent.folderID should be(content.folderID)
-    mappedContent.files should have size 2
-    mappedContent.files(file1.id).name should be(mappedFileName(file1))
-    mappedContent.files(file2.id).name should be(mappedFileName(file2))
-    mappedContent.folders should have size 3
-    mappedContent.folders(folder1.id).name should be(mappedFolderName(folder1))
-    mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
-    mappedContent.folders(folder3.id).name should be(mappedFolderName(folder3))
+    content.mapContentParallel(mapFiles = Some(mapFile), mapFolders = Some(mapFolder)) map { mappedContent =>
+      mappedContent.folderID should be(content.folderID)
+      mappedContent.files should have size 2
+      mappedContent.files(file1.id).name should be(mappedFileName(file1))
+      mappedContent.files(file2.id).name should be(mappedFileName(file2))
+      mappedContent.folders should have size 3
+      mappedContent.folders(folder1.id).name should be(mappedFolderName(folder1))
+      mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
+      mappedContent.folders(folder3.id).name should be(mappedFolderName(folder3))
+    }
   }
 
   it should "deal with undefined mapping functions when mapping in parallel" in {
@@ -167,10 +165,11 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
       Map("fo1" -> folderMock("fo1", "someFolder"),
         "fo2" -> folderMock("fo2", "oneMoreFolder")))
 
-    val mappedContent = futureResult(content.mapContentParallel())
-    mappedContent should be(content)
-    mappedContent.files shouldBe theSameInstanceAs(content.files)
-    mappedContent.folders shouldBe theSameInstanceAs(content.folders)
+    content.mapContentParallel() map { mappedContent =>
+      mappedContent should be(content)
+      mappedContent.files shouldBe theSameInstanceAs(content.files)
+      mappedContent.folders shouldBe theSameInstanceAs(content.folders)
+    }
   }
 
   it should "return a failed future if a parallel mapping fails" in {
@@ -183,8 +182,11 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
 
     def mapFileFailure(file: Model.File[String]): Model.File[String] = throw expectedException
 
-    val exception = expectFailedFuture[IllegalArgumentException](content.mapContentParallel(Some(mapFileFailure)))
-    exception should be(expectedException)
+    recoverToExceptionIf[IllegalArgumentException] {
+      content.mapContentParallel(Some(mapFileFailure))
+    } map { exception =>
+      exception should be(expectedException)
+    }
   }
 
   it should "map files and folders with Try in parallel if mapping is successful" in {
@@ -205,17 +207,18 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
       mapFolder(folder)
     }
 
-    val (mappedContent, failures) =
-      futureResult(content.mapContentParallelTried(mapFiles = Some(mapFileTried), mapFolders = Some(mapFolderTried)))
-    mappedContent.folderID should be(content.folderID)
-    mappedContent.files should have size 2
-    mappedContent.files(file1.id).name should be(mappedFileName(file1))
-    mappedContent.files(file2.id).name should be(mappedFileName(file2))
-    mappedContent.folders should have size 3
-    mappedContent.folders(folder1.id).name should be(mappedFolderName(folder1))
-    mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
-    mappedContent.folders(folder3.id).name should be(mappedFolderName(folder3))
-    failures shouldBe empty
+    content.mapContentParallelTried(mapFiles = Some(mapFileTried), mapFolders = Some(mapFolderTried)) map { t =>
+      val (mappedContent, failures) = t
+      mappedContent.folderID should be(content.folderID)
+      mappedContent.files should have size 2
+      mappedContent.files(file1.id).name should be(mappedFileName(file1))
+      mappedContent.files(file2.id).name should be(mappedFileName(file2))
+      mappedContent.folders should have size 3
+      mappedContent.folders(folder1.id).name should be(mappedFolderName(folder1))
+      mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
+      mappedContent.folders(folder3.id).name should be(mappedFolderName(folder3))
+      failures shouldBe empty
+    }
   }
 
   it should "map files and folders with Try in parallel if mappings fail" in {
@@ -237,16 +240,17 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
       Map(file1.id -> file1, file2.id -> file2),
       Map(folder1.id -> folder1, folder2.id -> folder2))
 
-    val (mappedContent, failures) =
-      futureResult(content.mapContentParallelTried(mapFiles = Some(mapFileTried), mapFolders = Some(mapFolderTried)))
-    mappedContent.folderID should be(content.folderID)
-    mappedContent.files should have size 1
-    mappedContent.files(file1.id).name should be(mappedFileName(file1))
-    mappedContent.folders should have size 1
-    mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
-    failures should have size 2
-    failures.forall(_.exception.isInstanceOf[IllegalArgumentException])
-    failures.map(_.exception.getMessage) should contain only(ErrorName, ErrorName + ".txt")
+    content.mapContentParallelTried(mapFiles = Some(mapFileTried), mapFolders = Some(mapFolderTried)) map { t =>
+      val (mappedContent, failures) = t
+      mappedContent.folderID should be(content.folderID)
+      mappedContent.files should have size 1
+      mappedContent.files(file1.id).name should be(mappedFileName(file1))
+      mappedContent.folders should have size 1
+      mappedContent.folders(folder2.id).name should be(mappedFolderName(folder2))
+      failures should have size 2
+      failures.forall(_.exception.isInstanceOf[IllegalArgumentException])
+      failures.map(_.exception.getMessage) should contain only(ErrorName, ErrorName + ".txt")
+    }
   }
 
   it should "deal with undefined mapping functions when mapping with Try in parallel" in {
@@ -256,10 +260,12 @@ class ModelSpec extends AnyFlatSpec with Matchers with MockitoSugar with AsyncTe
       Map("fo1" -> folderMock("fo1", "someFolder"),
         "fo2" -> folderMock("fo2", "oneMoreFolder")))
 
-    val (mappedContent, failures) = futureResult(content.mapContentParallelTried())
-    mappedContent should be(content)
-    mappedContent.files shouldBe theSameInstanceAs(content.files)
-    mappedContent.folders shouldBe theSameInstanceAs(content.folders)
-    failures shouldBe empty
+    content.mapContentParallelTried() map { t =>
+      val (mappedContent, failures) = t
+      mappedContent should be(content)
+      mappedContent.files shouldBe theSameInstanceAs(content.files)
+      mappedContent.folders shouldBe theSameInstanceAs(content.folders)
+      failures shouldBe empty
+    }
   }
 }

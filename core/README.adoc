@@ -163,6 +163,7 @@ Using this approach, an arbitrary complex operation can be constructed, which is
 
 One advantage of this programming model is that error handling is rather straight-forward: When executing a combined operation the resulting `Future` is successful only if all primitive operations could be completed successfully. If a single operation fails, no later operations are run, and the resulting `Future` completes with the failure produced by the primitive operation.
 
+[#extensible_file_systems]
 === Extensible file systems
 In addition to defining an abstraction for accessing files and folders over multiple protocols, CloudFiles supports specific extensions on all file systems. The idea is, that a `FileSystem` implementation decorates another `FileSystem`. It uses the underlying `FileSystem` for the manipulation of files and folders according to the concrete protocol, but can implement enhanced functionality on top of this. Example use cases for such extensions could be:
 

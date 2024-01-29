@@ -1,0 +1,47 @@
+:toc:
+:toc-placement!:
+:toclevels: 3
+= CloudFiles Crypt
+
+This is the documentation of the CloudFiles _crypt_ module which provides multiple implementations of the `FileSystem` abstraction that are related to encryption of data.
+
+toc::[]
+
+== Synopsis
+This module provides `FileSystem` implementations that can decorate other file systems (implementing the link:../core/README.adoc#extensible_file_systems[ExtensibleFileSystem] trait) to support different kinds of encryption. This encryption happens transparently to the underlying file systems: when data is stored on a target file system it is encrypted; when it is accessed later it is decrypted on the fly again. This means that a client of these file systems sees plain data, while the data on the target file system is actually encrypted. This functionality is especially useful when storing sensitive information on public servers or in the cloud.
+
+The _crypt_ module supports the following `FileSystem` implementations:
+
+.Encrypting file system implementations
+[cols="1,3",options="header"]
+|===
+|File system |Description
+
+|CryptContentFileSystem
+|A file system that encrypts the content of files stored on the underlying file system.
+
+|CryptNamesFileSystem
+|A file system that encrypts the names of files and folders, but does not manipulate the content of files.
+|===
+
+These file systems can be used in isolation or in combination with each other. For some use cases, it might not be sufficient to encrypt only the content of files if from their names information about them could already leak.
+
+The _crypt_ module defines an abstraction for algorithms to encrypt and decrypt data. This makes it possible to plug in different encryption schemes.
+
+== Algorithm abstraction
+The `FileSystem` implementations from this module do not implement encryption or decryption logic by themselves, but delegate to special algorithm objects for this purpose. There are two traits for such algorithm implementations as listed by table <<tab_algorithm_interface>>.
+
+[#tab_algorithm_interface]
+.Traits for crypt algorithms
+[cols="1,3",options="header"]
+|===
+|Trait |Description
+
+|CryptCipher
+|Analogously to a `javax.crypto.Cipher` object, this trait defines the functions to execute a cryptographic operation, i.e. an encryption or decryption of data. The protocol consists of initializing the object, passing data to it, and notifying it that all data has been passed. Each step returns transformed data which (when aggregated) is the result of the operation.
+
+|CryptAlgorithm
+|This trait represents a specific cryptographic algorithm. It allows obtaining specialized `CryptCipher` objects for encrypt and decrypt operations. In addition, there are functions for calculating the encrypted and decrypted size of data. This is needed, since for uploading or downloading data via a file system the size of the stream must be known beforehand.
+|===
+
+The traits can be found in the link:src/main/scala/com/github/cloudfiles/crypt/alg/[alg] package. Refer to the ScalaDocs for further information.

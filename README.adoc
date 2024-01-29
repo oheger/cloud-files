@@ -24,7 +24,7 @@ A number of modules provide implementations of the abstractions defined by the _
 === Other functionality
 On top of the _file system_ abstraction, CloudFiles provides functionality that can be used together with all the supported protocols. This is done by the following modules:
 
-* Encryption
+* link:crypt/README.adoc[Encryption]
 
 == Release Notes
 

@@ -24,7 +24,7 @@ import org.apache.pekko.http.scaladsl.model.HttpEntity
 import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
 import org.mockito.Mockito.when
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -119,8 +119,7 @@ object FileSystemSpec {
  * are already implemented by the trait. This includes the monadic features of
  * the ''Operation'' result class.
  */
-class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
-  with AsyncTestHelper {
+class FileSystemSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers with MockitoSugar {
 
   import FileSystemSpec._
 
@@ -142,8 +141,9 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     }
 
     val op = fs.resolveFolderByPath(FolderPath)
-    val result = futureResult(op.run(requestActor))
-    result should be(folder)
+    op.run(requestActor) map { result =>
+      result should be(folder)
+    }
   }
 
   it should "handle a failed future in a combined operation" in {
@@ -155,7 +155,11 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     }
 
     val op = fs.resolveFolderByPath("some/folder/path")
-    expectFailedFuture[IllegalStateException](op.run(requestActor)) should be(exception)
+    recoverToExceptionIf[IllegalStateException] {
+      op.run(requestActor)
+    } map {
+      _ should be(exception)
+    }
   }
 
   it should "resolve a file by its path" in {
@@ -177,8 +181,9 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     }
 
     val op = fs.resolveFileByPath(FilePath)
-    val result = futureResult(op.run(requestActor))
-    result should be(file)
+    op.run(requestActor) map { result =>
+      result should be(file)
+    }
   }
 
   it should "obtain the content of the root folder" in {
@@ -197,8 +202,9 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     }
 
     val op = fs.rootFolderContent
-    val result = futureResult(op.run(requestActor))
-    result should be(RootContent)
+    op.run(requestActor) map { result =>
+      result should be(RootContent)
+    }
   }
 
   it should "resolve a sequence of path components by combining them to a path" in {
@@ -213,8 +219,9 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     }
 
     val op = fs.resolvePathComponents(pathComponents)
-    val result = futureResult(op.run(requestActor))
-    result should be(expectedPath)
+    op.run(requestActor) map { result =>
+      result should be(expectedPath)
+    }
   }
 
   it should "provide an empty close() implementation" in {
@@ -222,6 +229,7 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     val fs = new FileSystemImpl
 
     fs.close()
+    succeed
   }
 
   it should "update both a file's properties and content" in {
@@ -253,7 +261,6 @@ class FileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
     }
 
     val op = fs.updateFileAndContent(file, source)
-    futureResult(op.run(requestActor))
-    count.get() should be(2)
+    op.run(requestActor) map { _ => count.get() should be(2) }
   }
 }

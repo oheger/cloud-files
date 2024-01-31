@@ -21,17 +21,19 @@ import com.github.cloudfiles.core.http.MultiHostExtension.RequestActorFactory
 import com.github.cloudfiles.core.http.RetryAfterExtension.RetryAfterConfig
 import com.github.cloudfiles.core.http.auth.{BasicAuthConfig, OAuthConfig, OAuthTokenData}
 import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, Secret}
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
+import com.github.cloudfiles.core.{FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
 import com.github.tomakehurst.wiremock.stubbing.Scenario
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, Props}
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, StatusCodes, Uri}
 import org.apache.pekko.util.Timeout
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object HttpRequestSenderFactoryImplITSpec {
@@ -48,8 +50,8 @@ object HttpRequestSenderFactoryImplITSpec {
 /**
  * Test class for ''HttpRequestSenderFactoryImpl''.
  */
-class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers
-  with WireMockSupport with AsyncTestHelper {
+class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers
+  with WireMockSupport {
   override protected val resourceRoot: String = "core"
 
   import HttpRequestSenderFactoryImplITSpec._
@@ -83,13 +85,11 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
    * test request and checking whether the expected response is received.
    *
    * @param config the configuration for the test actor
-   * @return the actor created for the test
+   * @return a ''Future'' with the test condition
    */
-  private def checkCreationAndRequestSending(config: HttpRequestSenderConfig):
-  ActorRef[HttpRequestSender.HttpCommand] = {
+  private def checkCreationAndRequestSending(config: HttpRequestSenderConfig): Future[Assertion] = {
     val actor = HttpRequestSenderFactoryImpl.createRequestSender(testSpawner(), serverBaseUri, config)
     checkRequestSending(actor, Path)
-    actor
   }
 
   /**
@@ -98,15 +98,17 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
    *
    * @param actor the actor to test
    * @param uri   the URI to invoke
+   * @return a ''Future'' with the test assertion
    */
-  private def checkRequestSending(actor: ActorRef[HttpRequestSender.HttpCommand], uri: Uri): Unit = {
+  private def checkRequestSending(actor: ActorRef[HttpRequestSender.HttpCommand], uri: Uri): Future[Assertion] = {
     val probe = testKit.createTestProbe[HttpRequestSender.Result]()
     val request = HttpRequestSender.SendRequest(HttpRequest(uri = uri), "testRequestData", probe.ref)
     actor ! request
     val result = probe.expectMessageType[HttpRequestSender.SuccessResult]
     result.response.status should be(StatusCodes.Accepted)
-    val content = futureResult(entityToString(result.response))
-    content should be(FileTestHelper.TestDataSingleLine)
+    entityToString(result.response) map { content =>
+      content should be(FileTestHelper.TestDataSingleLine)
+    }
   }
 
   "HttpRequestSenderFactoryImpl" should "create a basic HTTP sender actor" in {
@@ -180,9 +182,10 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
       BaseName + HttpRequestSenderFactoryImpl.IDPName)
     val idpSender = namedActors(BaseName + HttpRequestSenderFactoryImpl.IDPName)
       .asInstanceOf[ActorRef[HttpRequestSender.HttpCommand]]
-    val result = futureResult(HttpRequestSender.sendRequestSuccess(idpSender, HttpRequest(uri = TokenPath),
-      requestData = this))
-    result.response.status should be(StatusCodes.OK)
+    HttpRequestSender.sendRequestSuccess(idpSender, HttpRequest(uri = TokenPath),
+      requestData = this) map { result =>
+      result.response.status should be(StatusCodes.OK)
+    }
   }
 
   it should "create an HTTP sender actor with support for retrying requests" in {
@@ -226,16 +229,17 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
       MultiHostExtension.defaultRequestActorFactory(uri, size, proxy)
     }
 
-    runWithNewServer { server =>
+    runWithNewServerAsync { server =>
       server.stubFor(BasicAuthFunc(get(urlPathEqualTo(Path)))
         .willReturn(aResponse()
           .withStatus(StatusCodes.Accepted.intValue)
           .withBodyFile(ResponseFile)))
 
       val sender = HttpRequestSenderFactoryImpl.createMultiHostRequestSender(testSpawner(), config, factory)
-      checkRequestSending(sender, serverUri(Path))
-      checkRequestSending(sender, WireMockSupport.serverUri(server, Path))
-      createdSenderActors.get() should be(2)
+      for {
+        _ <- checkRequestSending(sender, serverUri(Path))
+        _ <- checkRequestSending(sender, WireMockSupport.serverUri(server, Path))
+      } yield createdSenderActors.get() should be(2)
     }
   }
 

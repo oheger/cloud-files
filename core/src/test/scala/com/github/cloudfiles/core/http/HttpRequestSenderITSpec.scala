@@ -17,7 +17,7 @@
 package com.github.cloudfiles.core.http
 
 import com.github.cloudfiles.core.http.HttpRequestSender.{DiscardEntityMode, FailedResponseException}
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
+import com.github.cloudfiles.core.{FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.Fault
 import org.apache.pekko.Done
@@ -27,13 +27,14 @@ import org.apache.pekko.http.scaladsl.model._
 import org.apache.pekko.util.Timeout
 import org.mockito.Mockito
 import org.mockito.Mockito.when
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.io.IOException
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
 
 object HttpRequestSenderITSpec {
   /** A data object passed with the request. */
@@ -49,8 +50,8 @@ object HttpRequestSenderITSpec {
 /**
  * Integration test class for ''HttpRequestSender''.
  */
-class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
-  with AsyncTestHelper with WireMockSupport {
+class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers with MockitoSugar
+  with WireMockSupport {
 
   override protected val resourceRoot: String = "core"
 
@@ -70,8 +71,9 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     result.request should be(request)
     result.response.status should be(StatusCodes.Accepted)
 
-    val content = futureResult(entityToString(result.response))
-    content should be(FileTestHelper.TestDataSingleLine)
+    entityToString(result.response) map { content =>
+      content should be(FileTestHelper.TestDataSingleLine)
+    }
   }
 
   it should "return a failed result for a non-success response" in {
@@ -111,6 +113,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val request = HttpRequestSender.SendRequest(HttpRequest(uri = Path), RequestData, probeSuc.ref)
     actor ! request
     probeSuc.expectMessageType[HttpRequestSender.SuccessResult]
+    succeed
   }
 
   it should "handle an exception from the server" in {
@@ -132,6 +135,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
 
     testKit stop actor
     Mockito.verify(queue).shutdown()
+    succeed
   }
 
   it should "stop itself when receiving a corresponding message" in {
@@ -142,6 +146,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     actor ! HttpRequestSender.Stop
     actor ! HttpRequestSender.SendRequest(HttpRequest(uri = Path), RequestData, probeReply.ref)
     probe.expectMessageType[DeadLetter]
+    succeed
   }
 
   it should "support sending requests via a convenience function" in {
@@ -152,25 +157,28 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
-    val result = futureResult(HttpRequestSender.sendRequest(actor, request, requestData = RequestData))
-    result.request.request should be(request)
-    result.request.data should be(RequestData)
+    HttpRequestSender.sendRequest(actor, request, requestData = RequestData) flatMap { result =>
+      result.request.request should be(request)
+      result.request.data should be(RequestData)
 
-    result match {
-      case HttpRequestSender.SuccessResult(_, response) =>
-        response.status should be(StatusCodes.Accepted)
-        val content = futureResult(entityToString(response))
-        content should be(FileTestHelper.TestDataSingleLine)
+      result match {
+        case HttpRequestSender.SuccessResult(_, response) =>
+          response.status should be(StatusCodes.Accepted)
+          entityToString(response) map { content =>
+            content should be(FileTestHelper.TestDataSingleLine)
+          }
 
-      case res => fail("Unexpected result: " + res)
+        case res => fail("Unexpected result: " + res)
+      }
     }
   }
 
   it should "discard the entity bytes for a failed result" in {
     val result = HttpRequestSender.FailedResult(null, new Exception("don't care"))
 
-    val discardedResult = futureResult(HttpRequestSender.discardEntityBytes(result))
-    discardedResult should be(result)
+    HttpRequestSender.discardEntityBytes(result) map { discardedResult =>
+      discardedResult should be(result)
+    }
   }
 
   it should "discard the entity bytes of a successful result" in {
@@ -180,9 +188,10 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val response = HttpResponse(entity = entity)
     val result = HttpRequestSender.SuccessResult(null, response)
 
-    val discardedResult = futureResult(HttpRequestSender.discardEntityBytes(result))
-    discardedResult should be(result)
-    Mockito.verify(entity).discardBytes()
+    HttpRequestSender.discardEntityBytes(result) map { discardedResult =>
+      Mockito.verify(entity).discardBytes()
+      discardedResult should be(result)
+    }
   }
 
   it should "discard the entity bytes of a successful result future" in {
@@ -193,9 +202,10 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val result = HttpRequestSender.SuccessResult(null, response)
     val futResult = Future.successful(result)
 
-    val discardedResult = futureResult(HttpRequestSender.discardEntityBytes(futResult))
-    discardedResult should be(result)
-    Mockito.verify(entity).discardBytes()
+    HttpRequestSender.discardEntityBytes(futResult) map { discardedResult =>
+      Mockito.verify(entity).discardBytes()
+      discardedResult should be(result)
+    }
   }
 
   it should "support sending requests via a convenience function that checks for success results" in {
@@ -206,12 +216,14 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
-    val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, requestData = RequestData))
-    result.request.request should be(request)
-    result.request.data should be(RequestData)
-    result.response.status should be(StatusCodes.Accepted)
-    val content = futureResult(entityToString(result.response))
-    content should be(FileTestHelper.TestDataSingleLine)
+    HttpRequestSender.sendRequestSuccess(actor, request, requestData = RequestData) flatMap { result =>
+      result.request.request should be(request)
+      result.request.data should be(RequestData)
+      result.response.status should be(StatusCodes.Accepted)
+      entityToString(result.response) map { content =>
+        content should be(FileTestHelper.TestDataSingleLine)
+      }
+    }
   }
 
   it should "support sending requests via a convenience function that handles failed results" in {
@@ -221,9 +233,11 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = Path)
 
-    val exception = expectFailedFuture[FailedResponseException](HttpRequestSender.sendRequestSuccess(actor,
-      request, requestData = RequestData))
-    exception.response.status should be(StatusCodes.BadRequest)
+    recoverToExceptionIf[FailedResponseException] {
+      HttpRequestSender.sendRequestSuccess(actor, request, requestData = RequestData)
+    } map { exception =>
+      exception.response.status should be(StatusCodes.BadRequest)
+    }
   }
 
   it should "allow keeping the entity bytes if failure responses are received" in {
@@ -236,16 +250,16 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
     val request = HttpRequest(uri = ErrorPath)
 
-    val result = futureResult(HttpRequestSender.sendRequest(actor, request, DiscardEntityMode.Never, RequestData))
-    result match {
+    HttpRequestSender.sendRequest(actor, request, DiscardEntityMode.Never, RequestData) flatMap {
       case HttpRequestSender.FailedResult(_, cause: FailedResponseException) =>
-        futureResult(entityToString(cause.response)) should be(ErrorEntity)
+        entityToString(cause.response) map {
+          _ should be(ErrorEntity)
+        }
       case r => fail("Unexpected result: " + r)
     }
   }
 
   it should "support discarding the entity bytes always" in {
-    implicit val ec: ExecutionContext = system.executionContext
     stubFor(get(urlPathEqualTo(Path))
       .willReturn(aResponse()
         .withStatus(StatusCodes.OK.intValue)
@@ -256,7 +270,7 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
     val futResults = (1 to 16) map { _ =>
       HttpRequestSender.sendRequestSuccess(actor, request, discardMode = DiscardEntityMode.Always, RequestData)
     }
-    futureResult(Future.sequence(futResults))
+    Future.sequence(futResults) map { _ => succeed }
   }
 
   it should "answer pending requests when it is stopped" in {
@@ -267,20 +281,21 @@ class HttpRequestSenderITSpec extends ScalaTestWithActorTestKit with AnyFlatSpec
         .withBody("Delayed response")))
     val actor = testKit.spawn(HttpRequestSender(serverBaseUri))
 
-    def checkFailedResult(futReq: Future[HttpRequestSender.Result], expData: String): Unit = {
-      futureResult(futReq) match {
+    def checkFailedResult(futReq: Future[HttpRequestSender.Result], expData: String): Future[Assertion] =
+      futReq map {
         case res: HttpRequestSender.FailedResult =>
           res.request.request should be(request)
           res.request.data should be(expData)
           res.cause shouldBe a[IOException]
         case res => fail("Unexpected result: " + res)
       }
-    }
 
     val futReq1 = HttpRequestSender.sendRequest(actor, request, requestData = "foo")
     val futReq2 = HttpRequestSender.sendRequest(actor, request, requestData = "bar")
     actor ! HttpRequestSender.Stop
-    checkFailedResult(futReq1, "foo")
-    checkFailedResult(futReq2, "bar")
+    for {
+      _ <- checkFailedResult(futReq1, "foo")
+      _ <- checkFailedResult(futReq2, "bar")
+    } yield succeed
   }
 }

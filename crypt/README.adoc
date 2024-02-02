@@ -49,6 +49,7 @@ The traits can be found in the link:src/main/scala/com/github/cloudfiles/crypt/a
 == Usage
 This section contains instructions how to use the file system implementations provided by the _crypt_ module.
 
+[#crypt_content_file_system]
 === CryptContentFileSystem
 The link:src/main/scala/com/github/cloudfiles/crypt/fs/CryptContentFileSystem.scala[CryptContentFileSystem] class adds the functionality to another file system to encrypt files when they are uploaded and to decrypt them when they are downloaded again. So, persistent data is encrypted, but users accessing it see the plain content of files.
 
@@ -78,3 +79,41 @@ The object with the configuration is of type link:src/main/scala/com/github/clou
 Note that `CryptContentFileSystem` can be used together with arbitrary `ExtensibleFileSystem` implementations, but it places some restrictions on the type parameters: Since some attributes of files have to be adjusted dynamically, they must be represented by the base trait defined in the link:../core/README.adoc[core] module. The same is true for the type used for the content of folders.
 
 There is one caveat when using `CryptContentFileSystem` to decorate another file system: The implementation assumes that all files on the underlying file system have been encrypted using the configured algorithm. Files stored in plain text will nevertheless be decrypted resulting in garbage. So, in case of mixed content, it is in the responsibility of the client to keep a reference to the decorated file system and use this one to access unencrypted files.
+
+=== CryptNamesFileSystem
+The link:src/main/scala/com/github/cloudfiles/crypt/fs/CryptNamesFileSystem.scala[CryptNamesFileSystem] class adds transparent encryption of file and folder names to another file system. It does not encrypt the content of files though. Therefore, it is rarely used alone, but in combination with `CryptContentFileSystem` to add another level of security by confusing the names in the underlying file system.
+
+NOTE: A file system can be decorated by multiple extension file systems. When `CryptNamesFileSystem` is used together with `CryptContentFileSystem`, it does not matter in which order the extensions are applied; the result is always the same.
+
+The basic usage scenario for `CryptNamesFileSystem` is analogous to the one for `CryptContentFileSystem`: In the decorated file system, all files and folders have encrypted names, while clients of the class see the plain text names. The configuration is slightly extended: It is represented by the `CryptNamesConfig` class which includes a `CryptConfig` object with the properties listed in table <<tab_crypt_config>>. There is an additional boolean property that controls how to deal with file oder folder names that are not encrypted:
+
+* If set to *false*, such items on the file system cause the current operation to fail.
+* If set to *true*, such items are ignored and simply skipped (for instance when collecting the content of a folder). This happens without any notice, just a hint is logged with _DEBUG_ level.
+
+So, there is a different in this regard to `CryptContentFileSystem`, which always assumes that all files are encrypted. There are multiple reasons for this behavior:
+
+* Encrypted file names are Base64-encoded to ensure they do not contain any special or forbidden characters. A consequence of this is that in order to decrypt a file name, a Base64-decode operation has to be done as well which can fail if the name contains unexpected characters. This problem does not occur when decrypting the content of files: since there is no encoding applied, there is no way to find out whether a file is actually encrypted or not.
+* It has been noticed that some servers (especially for the WebDav protocol) create hidden files themselves to store some metadata about the items in a folder. Such files were nevertheless listed when querying the content of the parent folder. This caused the decryption to fail because their names were not Base64-encoded.
+
+It is recommended to set this flag to *false*; this is the safe variant and ensures that inconsistencies in the file system will not go without notice. Only in special cases, e.g. if the file system contains files not under control of the client, the parameter can be set to *true*.
+
+When encrypting names with an arbitrary algorithm, resolving of items by path names can be problematic because it requires to match a path specified in plain text to encrypted path components. If the algorithm used for encryption makes use of a random initialization vector, multiple encrypt operations with the same input will yield different output. So, the naive approach to resolve an item by encrypting its single path components will not work. Instead, the search must be done in the other direction: For each path component, the algorithm obtains the content of the current folder (in encrypted form) and decrypts the single names until it gets a result matching the path component. Then the algorithm can proceed with the next path component until all components are resolved or no match is found - causing the operation to fail.
+
+This is of course a rather complex operation and can cause performance issues. To address those, `CryptNamesFileSystem` expects a so-called link:src/main/scala/com/github/cloudfiles/crypt/fs/resolver/PathResolver.scala[PathResolver] as constructor argument. Resolve operations are delegated to this object; so the algorithm can be customized to special needs.
+
+The _crypt_ module comes with a couple of default implementations of the `PathResolver` trait that are listed in table <<tab_path_resolvers>>.
+
+[#tab_path_resolvers]
+.PathResolver implementations
+[cols="1,3",options="header"]
+|===
+|Class |Description
+
+|PathComponentResolver
+|This class provides a direct implementation of the algorithm to resolve path components as described above. It is well-suited if only a few resolve operations are done, and access to files and folders mainly happens via identifiers.
+
+|CachePathComponentsResolver
+|This class is intended for clients that frequently access items on the file system via their paths. As the name implies, it uses caching to speed up lookup operations. The cache is filled eagerly; when a path is to be resolved, the class obtains the content of all encountered folders and stores their decrypted names in the cache. So, if afterward siblings of this path need to be resolved, the required information is typically already available. The cache is implemented by an LRU map (last-recently used); its size can be configured.
+|===
+
+The creation of a `CryptNamesFileSystem` instance is done via calling the constructor, passing in the underlying file system, the configuration, and the `PathResolver` to use. Like <<crypt_content_file_system>>, the class places some restrictions on the type parameters of the file system to decorate. Both the types for files and folders must extend the basic traits from the _core_ module, to allow access to their name properties.

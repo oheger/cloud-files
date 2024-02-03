@@ -16,26 +16,28 @@
 
 package com.github.cloudfiles.core.http
 
+import com.github.cloudfiles.core.WireMockSupport
+import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
+import com.github.cloudfiles.core.http.ProxySupport.ProxySpec
+import com.github.cloudfiles.core.http.factory.{HttpRequestSenderConfig, HttpRequestSenderFactoryImpl, Spawner}
+import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, Props}
 import org.apache.pekko.http.scaladsl.model.headers.BasicHttpCredentials
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, StatusCodes}
 import org.apache.pekko.util.Timeout
-import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
-import com.github.cloudfiles.core.http.ProxySupport.ProxySpec
-import com.github.cloudfiles.core.http.factory.{HttpRequestSenderConfig, HttpRequestSenderFactoryImpl, Spawner}
-import com.github.cloudfiles.core.{AsyncTestHelper, WireMockSupport}
-import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
-import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.proxy.{ConnectHandler, ProxyServlet}
 import org.eclipse.jetty.server.{NetworkConnector, Server}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.net.InetSocketAddress
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue, TimeUnit}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 object ProxyITSpec {
   /** The test path for requests. */
@@ -80,15 +82,18 @@ object ProxyITSpec {
   }
 
   /**
-   * Runs a code block with a proxy server active. The proxy server is started
-   * before and stopped after the execution of the code block. The function
-   * returns a queue, from which the requests sent to the proxy can be
-   * obtained.
+   * Runs a code block with a proxy server active and a function that checks
+   * the requests that were sent to it. The proxy server is started before and
+   * stopped after the execution of the code blocks. The check function is
+   * passed a queue, from which the requests sent to the proxy can be obtained.
    *
    * @param block the code block to execute
-   * @return a queue to obtain the proxy requests
+   * @param check the check function
+   * @return the ''Future'' with the test assertion
    */
-  def runWithProxy(block: ProxySpec => Unit): BlockingQueue[ProxyRequest] = {
+  def runWithProxy(block: ProxySpec => Future[Assertion])
+                  (check: BlockingQueue[ProxyRequest] => Future[Assertion])
+                  (implicit ec: ExecutionContext): Future[Assertion] = {
     val queue = new LinkedBlockingQueue[ProxyRequest]
 
     val server = new Server(0)
@@ -107,13 +112,16 @@ object ProxyITSpec {
     server.start()
     val port = server.getConnectors.head.asInstanceOf[NetworkConnector].getLocalPort
 
-    try {
-      block(ProxySpec(new InetSocketAddress("localhost", port)))
-    } finally {
-      server.stop()
-    }
+    val futBlock = block(ProxySpec(new InetSocketAddress("localhost", port)))
+    val futCheck = check(queue)
+    val futAssert = for {
+      _ <- futBlock
+      checkAssert <- futCheck
+    } yield checkAssert
 
-    queue
+    futAssert.andThen {
+      case _ => server.stop()
+    }
   }
 
   /**
@@ -137,8 +145,7 @@ object ProxyITSpec {
  * server. This class actually starts a proxy server, which records incoming
  * requests.
  */
-class ProxyITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with AsyncTestHelper
-  with WireMockSupport {
+class ProxyITSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers with WireMockSupport {
   override protected val resourceRoot: String = "core"
 
   import ProxyITSpec._
@@ -148,52 +155,55 @@ class ProxyITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Ma
    *
    * @param result the result
    */
-  private def checkResult(result: HttpRequestSender.SuccessResult): Unit = {
+  private def checkResult(result: HttpRequestSender.SuccessResult): Future[Assertion] = {
     result.response.status should be(StatusCodes.Accepted)
-    val responseBody = futureResult(entityToString(result.response))
-    responseBody should be(ServerResponse)
+    entityToString(result.response) map { responseBody =>
+      responseBody should be(ServerResponse)
+    }
   }
 
   "HttpRequestSender" should "use a configured proxy" in {
     stubTestRequest()
-    val queue = runWithProxy { proxySpec =>
+    runWithProxy { proxySpec =>
       val actor = testKit.spawn(HttpRequestSender(serverBaseUri, proxy = ProxySupport.withProxy(proxySpec)))
       val request = HttpRequest(uri = Path)
 
-      val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, DiscardEntityMode.Always))
-      result.response.status should be(StatusCodes.Accepted)
+      HttpRequestSender.sendRequestSuccess(actor, request, DiscardEntityMode.Always) map { result =>
+        result.response.status should be(StatusCodes.Accepted)
+      }
+    } { queue =>
+      val request = nextRequest(queue)
+      request.authorizationHeader should be(null)
     }
-
-    val request = nextRequest(queue)
-    request.authorizationHeader should be(null)
   }
 
   it should "pass credentials to the proxy" in {
     stubTestRequest()
-    val queue = runWithProxy { proxySpec =>
+    runWithProxy { proxySpec =>
       val actor = testKit.spawn(HttpRequestSender(serverBaseUri,
         proxy = ProxySupport.withProxy(proxySpec.copy(credentials = Some(ProxyCredentials)))))
       val request = HttpRequest(uri = Path)
 
-      val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request))
-      checkResult(result)
+      HttpRequestSender.sendRequestSuccess(actor, request) flatMap checkResult
+    } { queue =>
+      val request = nextRequest(queue)
+      request.authorizationHeader should be(CredentialsBase64)
     }
-
-    val request = nextRequest(queue)
-    request.authorizationHeader should be(CredentialsBase64)
   }
 
   "MultiHostExtension" should "use a configured proxy" in {
     stubTestRequest()
-    val queue = runWithProxy { proxySpec =>
+    runWithProxy { proxySpec =>
       val actor = testKit.spawn(MultiHostExtension(proxy = ProxySupport.withProxy(proxySpec)))
       val request = HttpRequest(uri = serverUri(Path))
 
-      val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, DiscardEntityMode.Always))
-      result.response.status should be(StatusCodes.Accepted)
+      HttpRequestSender.sendRequestSuccess(actor, request, DiscardEntityMode.Always) map { result =>
+        result.response.status should be(StatusCodes.Accepted)
+      }
+    } { queue =>
+      nextRequest(queue)
+      succeed
     }
-
-    nextRequest(queue)
   }
 
   /**
@@ -208,29 +218,33 @@ class ProxyITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Ma
 
   "HttRequestSenderFactoryImpl" should "use a configured proxy for a plain request actor" in {
     stubTestRequest()
-    val queue = runWithProxy { proxySpec =>
+    runWithProxy { proxySpec =>
       val config = HttpRequestSenderConfig(proxy = ProxySupport.withProxy(proxySpec))
       val actor = HttpRequestSenderFactoryImpl.createRequestSender(spawner(), serverBaseUri, config)
       val request = HttpRequest(uri = Path)
 
-      val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, DiscardEntityMode.Always))
-      result.response.status should be(StatusCodes.Accepted)
+      HttpRequestSender.sendRequestSuccess(actor, request, DiscardEntityMode.Always) map { result =>
+        result.response.status should be(StatusCodes.Accepted)
+      }
+    } { queue =>
+      nextRequest(queue)
+      succeed
     }
-
-    nextRequest(queue)
   }
 
   it should "use a configured proxy for a multi-request actor" in {
     stubTestRequest()
-    val queue = runWithProxy { proxySpec =>
+    runWithProxy { proxySpec =>
       val config = HttpRequestSenderConfig(proxy = ProxySupport.withProxy(proxySpec))
       val actor = HttpRequestSenderFactoryImpl.createMultiHostRequestSender(spawner(), config)
       val request = HttpRequest(uri = serverUri(Path))
 
-      val result = futureResult(HttpRequestSender.sendRequestSuccess(actor, request, DiscardEntityMode.Always))
-      result.response.status should be(StatusCodes.Accepted)
+      HttpRequestSender.sendRequestSuccess(actor, request, DiscardEntityMode.Always) map { result =>
+        result.response.status should be(StatusCodes.Accepted)
+      }
+    } { queue =>
+      nextRequest(queue)
+      succeed
     }
-
-    nextRequest(queue)
   }
 }

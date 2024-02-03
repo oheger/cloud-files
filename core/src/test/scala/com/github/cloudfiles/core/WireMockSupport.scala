@@ -27,9 +27,9 @@ import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCode, StatusCod
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Sink
 import org.apache.pekko.util.ByteString
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
+import org.scalatest.{Assertion, BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 object WireMockSupport {
@@ -255,6 +255,31 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
       run(server)
     } finally {
       server.stop()
+    }
+  }
+
+  /**
+   * Support running a block of code that requires another mock server
+   * asynchronously. This  can be needed for instance to check correct redirect
+   * handling, e.g. if the API server refers to a different server for
+   * downloading files. The function starts a new server and passes it to the
+   * provided ''run'' function, which must return a ''Future'' with the test
+   * assertion. To this ''Future'', a callback is added that stops the server
+   * again.
+   *
+   * @param run the function to run with the new server
+   * @param ec  the execution context
+   * @return the assertion result returned by the function
+   */
+  protected def runWithNewServerAsync(run: WireMockServer => Future[Assertion])
+                                     (implicit ec: ExecutionContext): Future[Assertion] = {
+    val server = new WireMockServer(wireMockConfig()
+      .dynamicPort()
+      .withRootDirectory(s"$resourceRoot/src/test/resources"))
+    server.start()
+
+    run(server) andThen {
+      case _ => server.stop()
     }
   }
 

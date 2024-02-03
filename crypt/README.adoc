@@ -46,6 +46,14 @@ The `FileSystem` implementations from this module do not implement encryption or
 
 The traits can be found in the link:src/main/scala/com/github/cloudfiles/crypt/alg/[alg] package. Refer to the ScalaDocs for further information.
 
+== Algorithm implementations
+This section gives an overview over the implementations of the `CryptAlgorithm` trait shipped with CloudFiles. They are separate subprojects and located under the link:../crypt-algs/[crypt-algs] folder.
+
+=== Aes
+The link:../crypt-algs/aes/src/main/scala/com/github/cloudfiles/crypt/alg/aes/Aes.scala[Aes] module provides an implementation of the https://en.wikipedia.org/wiki/Advanced_Encryption_Standard[Advanced Encryption Standard] (AES) algorithm. AES is a symmetric-key algorithm, i.e. the same key is used for both, encryption and decryption. Refer to the referenced site for further characteristics of this algorithm.
+
+When encrypting data, this implementation uses a random initial vector. This means that if the same input is encrypted multiple times with the same key, each encrypt operation yields a different output.
+
 == Usage
 This section contains instructions how to use the file system implementations provided by the _crypt_ module.
 

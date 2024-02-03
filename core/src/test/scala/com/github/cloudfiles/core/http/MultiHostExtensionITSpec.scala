@@ -17,12 +17,13 @@
 package com.github.cloudfiles.core.http
 
 import com.github.cloudfiles.core.http.auth.{BasicAuthConfig, BasicAuthExtension}
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, WireMockSupport}
+import com.github.cloudfiles.core.{FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
 import org.apache.pekko.actor.testkit.typed.scaladsl.{BehaviorTestKit, ScalaTestWithActorTestKit, TestProbe}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, StatusCodes}
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -31,8 +32,8 @@ import scala.concurrent.{Future, Promise}
 /**
  * Integration test class for ''MultiHostExtension''.
  */
-class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with MockitoSugar
-  with WireMockSupport with AsyncTestHelper {
+class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with MockitoSugar
+  with WireMockSupport {
 
   override protected val resourceRoot: String = "core"
 
@@ -42,14 +43,16 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
    * @param probe      the test probe that receives the response
    * @param expRequest the expected request
    * @param expEntity  the expected entity of the response
+   * @return a ''Future'' with the test assertion
    */
   private def checkResponse(probe: TestProbe[HttpRequestSender.Result], expRequest: HttpRequestSender.SendRequest,
-                            expEntity: String): Unit = {
+                            expEntity: String): Future[Assertion] = {
     val response = probe.expectMessageType[HttpRequestSender.SuccessResult]
     response.request should be(expRequest)
     response.response.status should be(StatusCodes.OK)
-    val entity = futureResult(entityToString(response.response))
-    entity should be(expEntity)
+    entityToString(response.response) map { entity =>
+      entity should be(expEntity)
+    }
   }
 
   "MultiHostExtension" should "support sending requests to multiple hosts" in {
@@ -58,7 +61,7 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val Result1 = "First result"
     val Result2 = "This is another result"
 
-    runWithNewServer { server2 =>
+    runWithNewServerAsync { server2 =>
       stubFor(get(urlPathEqualTo(Path1))
         .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
           .withBody(Result1)))
@@ -72,9 +75,10 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       val multiSender = testKit.spawn(MultiHostExtension())
 
       multiSender ! req1
-      checkResponse(probe, req1, Result1)
-      multiSender ! req2
-      checkResponse(probe, req2, Result2)
+      checkResponse(probe, req1, Result1) flatMap { _ =>
+        multiSender ! req2
+        checkResponse(probe, req2, Result2)
+      }
     }
   }
 
@@ -103,10 +107,10 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBody(FileTestHelper.TestData))))
     val multiSender = testKit.spawn(MultiHostExtension(RequestQueueSize, requestActorFactory = factory))
 
-    val result = futureResult(HttpRequestSender.sendRequestSuccess(multiSender, HttpRequest(uri = serverUri(Path)),
-      null))
-    val entity = futureResult(entityToString(result.response))
-    entity should be(FileTestHelper.TestData)
+    for {
+      result <- HttpRequestSender.sendRequestSuccess(multiSender, HttpRequest(uri = serverUri(Path)), null)
+      entity <- entityToString(result.response)
+    } yield entity should be(FileTestHelper.TestData)
   }
 
   it should "handle a failed response from the actor factory" in {
@@ -115,7 +119,7 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val testRequest = HttpRequest(uri = "http://www.example.org/test/failure")
     val multiSender = testKit.spawn(MultiHostExtension(requestActorFactory = factory))
 
-    futureResult(HttpRequestSender.sendRequest(multiSender, testRequest, null)) match {
+    HttpRequestSender.sendRequest(multiSender, testRequest, null) map {
       case HttpRequestSender.FailedResult(request, cause) =>
         request.request should be(testRequest)
         cause should be(expException)
@@ -152,8 +156,9 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val creator: MultiHostExtension.RequestActorCreator = context =>
       context.spawnAnonymous(HttpRequestSender(serverBaseUri))
     promiseRequestActor.success(creator)
-    checkResponse(probe, req2, Result2)
-    checkResponse(probe, req1, Result1)
+    checkResponse(probe, req2, Result2) flatMap { _ =>
+      checkResponse(probe, req1, Result1)
+    }
   }
 
   it should "try again after a failed request actor creation" in {

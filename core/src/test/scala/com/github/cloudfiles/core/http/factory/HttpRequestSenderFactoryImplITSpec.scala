@@ -229,7 +229,7 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
       MultiHostExtension.defaultRequestActorFactory(uri, size, proxy)
     }
 
-    runWithNewServerAsync { server =>
+    runWithNewServer { server =>
       server.stubFor(BasicAuthFunc(get(urlPathEqualTo(Path)))
         .willReturn(aResponse()
           .withStatus(StatusCodes.Accepted.intValue)

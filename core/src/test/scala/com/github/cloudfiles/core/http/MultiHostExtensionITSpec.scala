@@ -61,7 +61,7 @@ class MultiHostExtensionITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
     val Result1 = "First result"
     val Result2 = "This is another result"
 
-    runWithNewServerAsync { server2 =>
+    runWithNewServer { server2 =>
       stubFor(get(urlPathEqualTo(Path1))
         .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
           .withBody(Result1)))

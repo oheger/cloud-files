@@ -413,7 +413,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
 
   it should "download the content of a file" in {
     val DownloadUri = "/path/to/download/file.dat"
-    runWithNewServerAsync { server =>
+    runWithNewServer { server =>
       stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID/content")))
         .willReturn(aResponse().withStatus(StatusCodes.Found.intValue)
           .withHeader("Location", WireMockSupport.serverUri(server, DownloadUri))))
@@ -477,7 +477,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
     val uploadSessionRequest = readDataFile(resourceFile("/createUploadSession.json"))
     val fileSource = Source(Content.grouped(groupSize).toList).map(ByteString(_))
 
-    runWithNewServerAsync {
+    runWithNewServer {
       server =>
         stubFor(post(urlPathEqualTo(SourceUri))
           .withHeader("Content-Type", equalTo("application/json"))
@@ -526,7 +526,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
     val SourceUri = drivePath(s"/items/$ParentId:/someFile.dat:/createUploadSession")
     val fileSource = Source(Content.grouped(1024).toList).map(ByteString(_))
 
-    runWithNewServerAsync { server =>
+    runWithNewServer { server =>
       stubFor(post(urlPathEqualTo(SourceUri))
         .willReturn(aJsonResponse()
           .withBody(uploadSessionResponse(server))))
@@ -572,7 +572,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
     val file = OneDriveModel.newFile(id = ResolvedID, name = FileName, info = Some(fileInfo),
       size = FileTestHelper.TestData.length, description = Some("Upload test file description"))
 
-    runWithNewServerAsync { server =>
+    runWithNewServer { server =>
       stubFor(post(urlPathEqualTo(SourceUri))
         .withHeader("Accept", equalTo("application/json"))
         .withRequestBody(equalToJson(uploadSessionRequest))
@@ -621,7 +621,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
     val SourceUri = drivePath(s"/items/$ResolvedID/createUploadSession")
     val fileSource = Source(FileTestHelper.TestData.grouped(64).toList).map(ByteString(_))
 
-    runWithNewServerAsync { server =>
+    runWithNewServer { server =>
       stubFor(post(urlPathEqualTo(SourceUri))
         .withHeader("Accept", equalTo("application/json"))
         .withRequestBody(AbsentPattern.ABSENT)
@@ -690,7 +690,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
       .willReturn(aResponse().withStatus(StatusCodes.Unauthorized.intValue)))
 
     ProxyITSpec.runWithProxy { proxySpec =>
-      runWithNewServerAsync { authServer =>
+      runWithNewServer { authServer =>
         val authConfig = OAuthConfig(tokenEndpoint = WireMockSupport.serverUri(authServer, TokenUri),
           redirectUri = "https://some.redirect.org/uri", clientID = "someClient", clientSecret = Secret("foo"),
           initTokenData = OAuthTokenData(ExpiredAccessToken, RefreshToken))
@@ -698,7 +698,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
           .willReturn(aJsonResponse(StatusCodes.OK)
             .withBody(TokenResponse)))
 
-        runWithNewServerAsync { uploadServer =>
+        runWithNewServer { uploadServer =>
           stubFor(post(urlPathEqualTo(SourceUri))
             .withHeader("Authorization", equalTo("Bearer " + AccessToken))
             .willReturn(aJsonResponse()

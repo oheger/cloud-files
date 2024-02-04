@@ -29,14 +29,15 @@ import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
 import org.mockito.Mockito.when
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.time.Instant
 import java.util.concurrent.TimeoutException
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
 
 object OneDriveFileSystemITSpec {
   /** Test OneDrive ID. */
@@ -85,8 +86,8 @@ object OneDriveFileSystemITSpec {
 /**
  * Test class for ''OneDriveFileSystem''.
  */
-class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers
-  with MockitoSugar with WireMockSupport with AsyncTestHelper with FileTestHelper {
+class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers
+  with MockitoSugar with WireMockSupport with FileTestHelper {
   override protected val resourceRoot: String = "onedrive"
 
   import OneDriveFileSystemITSpec._
@@ -129,16 +130,18 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     stubResolvePath("/root")
     val fs = new OneDriveFileSystem(createConfig().copy(optRootPath = None))
 
-    val rootID = futureResult(runOp(fs.rootID))
-    rootID should be(ResolvedID)
+    runOp(fs.rootID) map { rootID =>
+      rootID should be(ResolvedID)
+    }
   }
 
   it should "determine the root ID if a root path is specified" in {
     stubResolvePath(s"/root:$RootPath:")
     val fs = new OneDriveFileSystem(createConfig())
 
-    val rootID = futureResult(runOp(fs.rootID))
-    rootID should be(ResolvedID)
+    runOp(fs.rootID) map { rootID =>
+      rootID should be(ResolvedID)
+    }
   }
 
   it should "handle a trailing slash in the server URI" in {
@@ -146,8 +149,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val config = createConfig()
     val fs = new OneDriveFileSystem(config.copy(serverUri = config.serverUri + "/"))
 
-    val rootID = futureResult(runOp(fs.rootID))
-    rootID should be(ResolvedID)
+    runOp(fs.rootID) map { rootID =>
+      rootID should be(ResolvedID)
+    }
   }
 
   it should "handle a missing leading slash in the root path" in {
@@ -155,8 +159,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val config = createConfig()
     val fs = new OneDriveFileSystem(config.copy(optRootPath = Some(RootPath.drop(1))))
 
-    val rootID = futureResult(runOp(fs.rootID))
-    rootID should be(ResolvedID)
+    runOp(fs.rootID) map { rootID =>
+      rootID should be(ResolvedID)
+    }
   }
 
   it should "resolve a path for an undefined root path" in {
@@ -164,8 +169,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     stubResolvePath(s"/root:$path:")
     val fs = new OneDriveFileSystem(createConfig().copy(optRootPath = None))
 
-    val pathID = futureResult(runOp(fs.resolvePath(path)))
-    pathID should be(ResolvedID)
+    runOp(fs.resolvePath(path)) map { pathID =>
+      pathID should be(ResolvedID)
+    }
   }
 
   it should "resolve a path if a root path is specified" in {
@@ -173,8 +179,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     stubResolvePath(s"/root:$RootPath$path:")
     val fs = new OneDriveFileSystem(createConfig())
 
-    val pathID = futureResult(runOp(fs.resolvePath(path)))
-    pathID should be(ResolvedID)
+    runOp(fs.resolvePath(path)) map { pathID =>
+      pathID should be(ResolvedID)
+    }
   }
 
   it should "resolve a path that does not start with a slash" in {
@@ -182,8 +189,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     stubResolvePath(s"/root:$RootPath/$path:")
     val fs = new OneDriveFileSystem(createConfig())
 
-    val pathID = futureResult(runOp(fs.resolvePath(path)))
-    pathID should be(ResolvedID)
+    runOp(fs.resolvePath(path)) map { pathID =>
+      pathID should be(ResolvedID)
+    }
   }
 
   it should "resolve a folder by its ID" in {
@@ -193,12 +201,13 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("resolve_folder_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    val folder = futureResult(runOp(fs.resolveFolder(ResolvedID)))
-    folder.id should be(ResolvedID)
-    folder.name should be("data")
-    folder.description should be(None)
-    folder.folderData.childCount should be(9)
-    folder.item.fileSystemInfo.createdDateTime should be(Instant.parse("2019-11-12T14:32:50.8Z"))
+    runOp(fs.resolveFolder(ResolvedID)) map { folder =>
+      folder.id should be(ResolvedID)
+      folder.name should be("data")
+      folder.description should be(None)
+      folder.folderData.childCount should be(9)
+      folder.item.fileSystemInfo.createdDateTime should be(Instant.parse("2019-11-12T14:32:50.8Z"))
+    }
   }
 
   it should "check whether the ID points to a folder when resolving it" in {
@@ -207,7 +216,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("resolve_file_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFolder(ResolvedID)))
+    recoverToSucceededIf[IllegalArgumentException](runOp(fs.resolveFolder(ResolvedID)))
   }
 
   it should "resolve a file by its ID" in {
@@ -217,12 +226,13 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("resolve_file_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    val file = futureResult(runOp(fs.resolveFile(ResolvedID)))
-    file.id should be(ResolvedID)
-    file.name should be("test.txt")
-    file.size should be(327)
-    file.fileData.mimeType should be("application/octet-stream")
-    file.fileData.hashes.sha1Hash should be(Some("319D8515AC0683C7EA6AF60A547E142141F11BF5"))
+    runOp(fs.resolveFile(ResolvedID)) map { file =>
+      file.id should be(ResolvedID)
+      file.name should be("test.txt")
+      file.size should be(327)
+      file.fileData.mimeType should be("application/octet-stream")
+      file.fileData.hashes.sha1Hash should be(Some("319D8515AC0683C7EA6AF60A547E142141F11BF5"))
+    }
   }
 
   it should "check whether the ID points to a file when resolving it" in {
@@ -231,7 +241,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("resolve_folder_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFile(ResolvedID)))
+    recoverToSucceededIf[IllegalArgumentException](runOp(fs.resolveFile(ResolvedID)))
   }
 
   it should "return the content of a folder" in {
@@ -241,14 +251,15 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("folder_children_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    val content = futureResult(runOp(fs.folderContent(ResolvedID)))
-    content.folderID should be(ResolvedID)
-    content.folders should have size 2
-    content.folders("xxxyyyzzz1234567!7193").name should be("subFolder1")
-    content.folders("xxxyyyzzz1234567!4891").name should be("subFolder2")
-    content.files should have size 2
-    content.files("xxxyyyzzz1234567!26990").name should be("data.json")
-    content.files("xxxyyyzzz1234567!26988").name should be("info.txt")
+    runOp(fs.folderContent(ResolvedID)) map { content =>
+      content.folderID should be(ResolvedID)
+      content.folders should have size 2
+      content.folders("xxxyyyzzz1234567!7193").name should be("subFolder1")
+      content.folders("xxxyyyzzz1234567!4891").name should be("subFolder2")
+      content.files should have size 2
+      content.files("xxxyyyzzz1234567!26990").name should be("data.json")
+      content.files("xxxyyyzzz1234567!26988").name should be("info.txt")
+    }
   }
 
   it should "return the content of a folder split onto multiple pages" in {
@@ -264,12 +275,13 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("folder_children_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    val content = futureResult(runOp(fs.folderContent(ResolvedID)))
-    content.folderID should be(ResolvedID)
-    content.folders should have size 2
-    content.files should have size 4
-    content.files("xxxyyyzzz1234567!26990").name should be("data.json")
-    content.files("xxxyyyzzz1234567!26124").name should be("file (2).mp3")
+    runOp(fs.folderContent(ResolvedID)) map { content =>
+      content.folderID should be(ResolvedID)
+      content.folders should have size 2
+      content.files should have size 4
+      content.files("xxxyyyzzz1234567!26990").name should be("data.json")
+      content.files("xxxyyyzzz1234567!26124").name should be("file (2).mp3")
+    }
   }
 
   it should "delete a folder" in {
@@ -278,12 +290,13 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .willReturn(aResponse().withStatus(StatusCodes.NoContent.intValue)))
     val fs = new OneDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.deleteFolder(ResolvedID)))
-    verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+    runOp(fs.deleteFolder(ResolvedID)) map { _ =>
+      verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+      succeed
+    }
   }
 
   it should "discard the entities of requests where the response does not matter" in {
-    implicit val ec: ExecutionContext = system.executionContext
     stubSuccess(WireMockSupport.NoAuthFunc)
     val fs = new OneDriveFileSystem(createConfig())
 
@@ -293,7 +306,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       val id = s"id$idx"
       runOp(fs.deleteFolder(id))
     }
-    futureResult(Future.sequence(futResults))
+    Future.sequence(futResults) map { _ =>
+      succeed
+    }
   }
 
   it should "delete a file" in {
@@ -302,8 +317,10 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .willReturn(aResponse().withStatus(StatusCodes.NoContent.intValue)))
     val fs = new OneDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.deleteFile(ResolvedID)))
-    verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+    runOp(fs.deleteFile(ResolvedID)) map { _ =>
+      verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+      succeed
+    }
   }
 
   it should "create a new folder" in {
@@ -320,8 +337,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       description = Some("This is the description of the test folder."))
     val fs = new OneDriveFileSystem(createConfig())
 
-    val folderId = futureResult(runOp(fs.createFolder(ParentId, folder)))
-    folderId should be(ResolvedID)
+    runOp(fs.createFolder(ParentId, folder)) map { folderId =>
+      folderId should be(ResolvedID)
+    }
   }
 
   it should "create a new folder from another Folder implementation" in {
@@ -335,8 +353,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("resolve_folder_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    val folderId = futureResult(runOp(fs.createFolder(ResolvedID, folder)))
-    folderId should be(ResolvedID)
+    runOp(fs.createFolder(ResolvedID, folder)) map { folderId =>
+      folderId should be(ResolvedID)
+    }
   }
 
   it should "update a folder" in {
@@ -351,8 +370,10 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       info = Some(OneDriveJsonProtocol.WritableFileSystemInfo()))
     val fs = new OneDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFolder(folder)))
-    verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+    runOp(fs.updateFolder(folder)) map { _ =>
+      verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+      succeed
+    }
   }
 
   it should "update a file" in {
@@ -366,8 +387,10 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val file = OneDriveModel.newFile(id = ResolvedID, name = FileName, info = Some(TestFileInfo), size = 2048)
     val fs = new OneDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFile(file)))
-    verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+    runOp(fs.updateFile(file)) map { _ =>
+      verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+      succeed
+    }
   }
 
   it should "update a file from another File implementation" in {
@@ -382,13 +405,15 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBodyFile("resolve_file_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFile(file)))
-    verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+    runOp(fs.updateFile(file)) map { _ =>
+      verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+      succeed
+    }
   }
 
   it should "download the content of a file" in {
     val DownloadUri = "/path/to/download/file.dat"
-    runWithNewServer { server =>
+    runWithNewServerAsync { server =>
       stubFor(get(urlPathEqualTo(drivePath(s"/items/$ResolvedID/content")))
         .willReturn(aResponse().withStatus(StatusCodes.Found.intValue)
           .withHeader("Location", WireMockSupport.serverUri(server, DownloadUri))))
@@ -397,10 +422,11 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
           .withBody(FileTestHelper.TestData)))
       val fs = new OneDriveFileSystem(createConfig())
 
-      val source = futureResult(runOp(fs.downloadFile(ResolvedID)))
       val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
-      val content = futureResult(source.dataBytes.runWith(sink))
-      content.utf8String should be(FileTestHelper.TestData)
+      for {
+        source <- runOp(fs.downloadFile(ResolvedID))
+        content <- source.dataBytes.runWith(sink)
+      } yield content.utf8String should be(FileTestHelper.TestData)
     }
   }
 
@@ -411,8 +437,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withBody("Missing Location header")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    val ex = expectFailedFuture[IllegalStateException](runOp(fs.downloadFile(ResolvedID)))
-    ex.getMessage should include(path)
+    recoverToExceptionIf[IllegalStateException](runOp(fs.downloadFile(ResolvedID))) map { ex =>
+      ex.getMessage should include(path)
+    }
   }
 
   /**
@@ -436,8 +463,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
    *
    * @param uploadChunkSize the upload chunk size
    * @param groupSize       the group size in the stream
+   * @return the ''Future'' with the test assertion
    */
-  private def checkUploadNewFile(uploadChunkSize: Int, groupSize: Int): Unit = {
+  private def checkUploadNewFile(uploadChunkSize: Int, groupSize: Int): Future[Assertion] = {
     val ParentId = ResolvedID.reverse
     val FileDescription = Some("Upload test file description")
     val Content = FileTestHelper.TestData * 8
@@ -449,7 +477,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val uploadSessionRequest = readDataFile(resourceFile("/createUploadSession.json"))
     val fileSource = Source(Content.grouped(groupSize).toList).map(ByteString(_))
 
-    runWithNewServer {
+    runWithNewServerAsync {
       server =>
         stubFor(post(urlPathEqualTo(SourceUri))
           .withHeader("Content-Type", equalTo("application/json"))
@@ -473,8 +501,9 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
           }
 
         val fs = new OneDriveFileSystem(createConfig().copy(uploadChunkSize = uploadChunkSize))
-        val id = futureResult(runOp(fs.createFile(ParentId, file, fileSource)))
-        id should be(ResolvedID)
+        runOp(fs.createFile(ParentId, file, fileSource)) map { id =>
+          id should be(ResolvedID)
+        }
     }
   }
 
@@ -497,7 +526,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val SourceUri = drivePath(s"/items/$ParentId:/someFile.dat:/createUploadSession")
     val fileSource = Source(Content.grouped(1024).toList).map(ByteString(_))
 
-    runWithNewServer { server =>
+    runWithNewServerAsync { server =>
       stubFor(post(urlPathEqualTo(SourceUri))
         .willReturn(aJsonResponse()
           .withBody(uploadSessionResponse(server))))
@@ -506,7 +535,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
           .withBody("{ \"foo\": \"bar\" }")))
       val fs = new OneDriveFileSystem(createConfig().copy(uploadChunkSize = 2048))
 
-      expectFailedFuture[IllegalStateException](runOp(fs.createFile(ParentId, file, fileSource)))
+      recoverToSucceededIf[IllegalStateException](runOp(fs.createFile(ParentId, file, fileSource)))
     }
   }
 
@@ -528,9 +557,10 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val file = OneDriveModel.newFile(id = ResolvedID, name = FileName, info = Some(TestFileInfo), size = 0)
     val fs = new OneDriveFileSystem(createConfig())
 
-    val result = futureResult(runOp(fs.createFile(ParentId, file, Source.empty)))
-    result should be(ResolvedID)
-    verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+    runOp(fs.createFile(ParentId, file, Source.empty)) map { result =>
+      verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+      result should be(ResolvedID)
+    }
   }
 
   it should "update the content and metadata of a file" in {
@@ -542,7 +572,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val file = OneDriveModel.newFile(id = ResolvedID, name = FileName, info = Some(fileInfo),
       size = FileTestHelper.TestData.length, description = Some("Upload test file description"))
 
-    runWithNewServer { server =>
+    runWithNewServerAsync { server =>
       stubFor(post(urlPathEqualTo(SourceUri))
         .withHeader("Accept", equalTo("application/json"))
         .withRequestBody(equalToJson(uploadSessionRequest))
@@ -556,8 +586,10 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
           .withBodyFile("upload_complete_response.json")))
       val fs = new OneDriveFileSystem(createConfig())
 
-      futureResult(runOp(fs.updateFileAndContent(file, fileSource)))
-      server.verify(putRequestedFor(urlPathEqualTo(UploadUri)))
+      runOp(fs.updateFileAndContent(file, fileSource)) map { _ =>
+        server.verify(putRequestedFor(urlPathEqualTo(UploadUri)))
+        succeed
+      }
     }
   }
 
@@ -578,16 +610,18 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val file = OneDriveModel.newFile(id = ResolvedID, name = FileName, info = Some(TestFileInfo), size = 0)
     val fs = new OneDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFileAndContent(file, Source.empty)))
-    verify(putRequestedFor(urlPathEqualTo(uploadPath)))
-    verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+    runOp(fs.updateFileAndContent(file, Source.empty)) map { _ =>
+      verify(putRequestedFor(urlPathEqualTo(uploadPath)))
+      verify(patchRequestedFor(urlPathEqualTo(updatePath)))
+      succeed
+    }
   }
 
   it should "update the content of a file" in {
     val SourceUri = drivePath(s"/items/$ResolvedID/createUploadSession")
     val fileSource = Source(FileTestHelper.TestData.grouped(64).toList).map(ByteString(_))
 
-    runWithNewServer { server =>
+    runWithNewServerAsync { server =>
       stubFor(post(urlPathEqualTo(SourceUri))
         .withHeader("Accept", equalTo("application/json"))
         .withRequestBody(AbsentPattern.ABSENT)
@@ -601,8 +635,10 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
           .withBodyFile("upload_complete_response.json")))
       val fs = new OneDriveFileSystem(createConfig())
 
-      futureResult(runOp(fs.updateFileContent(ResolvedID, FileTestHelper.TestData.length, fileSource)))
-      server.verify(putRequestedFor(urlPathEqualTo(UploadUri)))
+      runOp(fs.updateFileContent(ResolvedID, FileTestHelper.TestData.length, fileSource)) map { _ =>
+        server.verify(putRequestedFor(urlPathEqualTo(UploadUri)))
+        succeed
+      }
     }
   }
 
@@ -615,8 +651,10 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .willReturn(aJsonResponse().withBodyFile("resolve_file_response.json")))
     val fs = new OneDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFileContent(ResolvedID, 0, Source.empty)))
-    verify(putRequestedFor(urlPathEqualTo(uploadPath)))
+    runOp(fs.updateFileContent(ResolvedID, 0, Source.empty)) map { _ =>
+      verify(putRequestedFor(urlPathEqualTo(uploadPath)))
+      succeed
+    }
   }
 
   it should "apply the timeout from the configuration" in {
@@ -626,7 +664,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
         .withFixedDelay(1000)))
     val fs = new OneDriveFileSystem(createConfig().copy(timeout = 200.millis))
 
-    expectFailedFuture[TimeoutException](runOp(fs.resolveFolder(ResolvedID)))
+    recoverToSucceededIf[TimeoutException](runOp(fs.resolveFolder(ResolvedID)))
   }
 
   it should "create a correctly configured HTTP sender actor" in {
@@ -651,7 +689,6 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .withHeader("Authorization", equalTo("Bearer " + ExpiredAccessToken))
       .willReturn(aResponse().withStatus(StatusCodes.Unauthorized.intValue)))
 
-    implicit val ec: ExecutionContext = testKit.internalSystem.executionContext
     ProxyITSpec.runWithProxy { proxySpec =>
       runWithNewServerAsync { authServer =>
         val authConfig = OAuthConfig(tokenEndpoint = WireMockSupport.serverUri(authServer, TokenUri),

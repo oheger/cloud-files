@@ -236,31 +236,8 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
   }
 
   /**
-   * Support running a block of code that requires another mock server. This
-   * can be needed for instance to check correct redirect handling, e.g. if the
-   * API server refers to a different server for downloading files. The
-   * function starts a new server and passes it to the provided ''run''
-   * function. Afterwards, the server is stopped again.
-   *
-   * @param run the function to run with the new server
-   * @tparam A the result type of the function
-   * @return the result returned by the function
-   */
-  protected def runWithNewServer[A](run: WireMockServer => A): A = {
-    val server = new WireMockServer(wireMockConfig()
-      .dynamicPort()
-      .withRootDirectory(s"$resourceRoot/src/test/resources"))
-    server.start()
-    try {
-      run(server)
-    } finally {
-      server.stop()
-    }
-  }
-
-  /**
-   * Support running a block of code that requires another mock server
-   * asynchronously. This  can be needed for instance to check correct redirect
+   * Supports running a block of code that requires another mock server
+   * asynchronously. This can be needed for instance to check correct redirect
    * handling, e.g. if the API server refers to a different server for
    * downloading files. The function starts a new server and passes it to the
    * provided ''run'' function, which must return a ''Future'' with the test
@@ -271,8 +248,8 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
    * @param ec  the execution context
    * @return the assertion result returned by the function
    */
-  protected def runWithNewServerAsync(run: WireMockServer => Future[Assertion])
-                                     (implicit ec: ExecutionContext): Future[Assertion] = {
+  protected def runWithNewServer(run: WireMockServer => Future[Assertion])
+                                (implicit ec: ExecutionContext): Future[Assertion] = {
     val server = new WireMockServer(wireMockConfig()
       .dynamicPort()
       .withRootDirectory(s"$resourceRoot/src/test/resources"))

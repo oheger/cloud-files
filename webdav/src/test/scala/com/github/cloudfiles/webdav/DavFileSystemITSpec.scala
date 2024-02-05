@@ -29,13 +29,14 @@ import org.apache.pekko.http.scaladsl.model.{StatusCodes, Uri}
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.{ByteString, Timeout}
 import org.mockito.Mockito.when
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.time.Instant
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, TimeoutException}
+import scala.concurrent.{Future, TimeoutException}
 
 object DavFileSystemITSpec {
   /** The root path for all server requests. */
@@ -94,8 +95,8 @@ object DavFileSystemITSpec {
 /**
  * Integration test class for ''DavFileSystem''.
  */
-class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
-  with WireMockSupport with AsyncTestHelper with FileTestHelper {
+class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers with MockitoSugar
+  with WireMockSupport with FileTestHelper {
   override protected val resourceRoot: String = "webdav"
 
   import DavFileSystemITSpec._
@@ -126,8 +127,9 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val ExpUri = Uri(serverUri(RootPath + TestPath))
     val fs = new DavFileSystem(createConfig())
 
-    val uri = futureResult(runOp(fs.resolvePath(TestPath)))
-    uri should be(ExpUri)
+    runOp(fs.resolvePath(TestPath)) map { uri =>
+      uri should be(ExpUri)
+    }
   }
 
   it should "resolve a path not starting with a slash" in {
@@ -135,41 +137,45 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val ExpUri = Uri(serverUri(RootPath + "/" + TestPath))
     val fs = new DavFileSystem(createConfig())
 
-    val uri = futureResult(runOp(fs.resolvePath(TestPath)))
-    uri should be(ExpUri)
+    runOp(fs.resolvePath(TestPath)) map { uri =>
+      uri should be(ExpUri)
+    }
   }
 
   it should "return the correct root ID" in {
     val config = createConfig()
     val fs = new DavFileSystem(config)
 
-    val rootUri = futureResult(runOp(fs.rootID))
-    rootUri should be(config.rootUri)
+    runOp(fs.rootID) map { rootUri =>
+      rootUri should be(config.rootUri)
+    }
   }
 
   /**
    * Checks whether the content of a folder can be queried correctly.
    *
    * @param folderUri the URI of the folder
+   * @return the ''Future'' with the test assertion
    */
-  private def checkFolderContent(folderUri: Uri): Unit = {
+  private def checkFolderContent(folderUri: Uri): Future[Assertion] = {
     stubFolderRequest(folderUri.path.toString(), "folder.xml")
     val fs = new DavFileSystem(createConfig())
 
-    val result = futureResult(runOp(fs.folderContent(folderUri)))
-    val subFolderUri = Uri("/test%20data/subFolder%20%281%29/")
-    result.folders.keys should contain only subFolderUri
-    val folder = result.folders(subFolderUri)
-    folder.id should be(subFolderUri)
-    folder.name should be("subFolder (1)")
-    result.files should have size 3
-    val fileUri3 = Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3")
-    val file3 = result.files(fileUri3)
-    file3.name should be("file3.mp3")
-    file3.size should be(300)
-    file3.attributes.values(AttributeKey("urn:schemas-microsoft-com:",
-      "Win32LastModifiedTime")) should be("Wed, 19 Sep 2018 20:12:00 GMT")
-    file3.description shouldBe empty
+    runOp(fs.folderContent(folderUri)) map { result =>
+      val subFolderUri = Uri("/test%20data/subFolder%20%281%29/")
+      result.folders.keys should contain only subFolderUri
+      val folder = result.folders(subFolderUri)
+      folder.id should be(subFolderUri)
+      folder.name should be("subFolder (1)")
+      result.files should have size 3
+      val fileUri3 = Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3")
+      val file3 = result.files(fileUri3)
+      file3.name should be("file3.mp3")
+      file3.size should be(300)
+      file3.attributes.values(AttributeKey("urn:schemas-microsoft-com:",
+        "Win32LastModifiedTime")) should be("Wed, 19 Sep 2018 20:12:00 GMT")
+      file3.description shouldBe empty
+    }
   }
 
   it should "return the content of a folder" in {
@@ -187,10 +193,11 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val config = createConfig().copy(optDescriptionKey = Some(AttrDescription))
     val fs = new DavFileSystem(config)
 
-    val result = futureResult(runOp(fs.folderContent(folderUri)))
-    val fileUri3 = Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3")
-    val file3 = result.files(fileUri3)
-    file3.description should be(Some("A test description"))
+    runOp(fs.folderContent(folderUri)) map { result =>
+      val fileUri3 = Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3")
+      val file3 = result.files(fileUri3)
+      file3.description should be(Some("A test description"))
+    }
   }
 
   it should "query additional attributes for elements from the folder content" in {
@@ -201,9 +208,10 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val config = createConfig().copy(additionalAttributes = additionalAttributes)
     val fs = new DavFileSystem(config)
 
-    val result = futureResult(runOp(fs.folderContent(folderUri)))
-    result.folders should have size 1
-    result.files should have size 3
+    runOp(fs.folderContent(folderUri)) map { result =>
+      result.folders should have size 1
+      result.files should have size 3
+    }
   }
 
   it should "handle a failed request for the content of a folder" in {
@@ -211,8 +219,9 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .willReturn(aResponse().withStatus(StatusCodes.NotFound.intValue)))
     val fs = new DavFileSystem(createConfig())
 
-    val exception = expectFailedFuture[FailedResponseException](runOp(fs.folderContent("/some/uri")))
-    exception.response.status should be(StatusCodes.NotFound)
+    recoverToExceptionIf[FailedResponseException](runOp(fs.folderContent("/some/uri"))) map { exception =>
+      exception.response.status should be(StatusCodes.NotFound)
+    }
   }
 
   it should "resolve a file by its ID" in {
@@ -220,10 +229,11 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     stubFolderRequest(FileUri.path.toString(), "element_file.xml", depth = "0", withSlash = false)
     val fs = new DavFileSystem(createConfig())
 
-    val file = futureResult(runOp(fs.resolveFile(FileUri)))
-    file.name should be("test.txt")
-    file.lastModifiedAt should be(Instant.parse("2020-12-31T19:23:52Z"))
-    file.description shouldBe empty
+    runOp(fs.resolveFile(FileUri)) map { file =>
+      file.name should be("test.txt")
+      file.lastModifiedAt should be(Instant.parse("2020-12-31T19:23:52Z"))
+      file.description shouldBe empty
+    }
   }
 
   it should "take additional attributes into account when resolving a file by its ID" in {
@@ -236,10 +246,11 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       additionalAttributes = additionalAttributes)
     val fs = new DavFileSystem(config)
 
-    val file = futureResult(runOp(fs.resolveFile(FileUri)))
-    file.name should be("test.txt")
-    file.lastModifiedAt should be(Instant.parse("2020-12-31T19:23:52Z"))
-    file.description should be(Some("A test description"))
+    runOp(fs.resolveFile(FileUri)) map { file =>
+      file.name should be("test.txt")
+      file.lastModifiedAt should be(Instant.parse("2020-12-31T19:23:52Z"))
+      file.description should be(Some("A test description"))
+    }
   }
 
   it should "handle a request to resolve a file that yields a folder" in {
@@ -247,23 +258,26 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     stubFolderRequest(FileUri.path.toString(), "empty_folder.xml", depth = "0")
     val fs = new DavFileSystem(createConfig())
 
-    val exception = expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFile(FileUri)))
-    exception.getMessage should include(FileUri.toString())
+    recoverToExceptionIf[IllegalArgumentException](runOp(fs.resolveFile(FileUri))) map { exception =>
+      exception.getMessage should include(FileUri.toString())
+    }
   }
 
   /**
    * Checks whether a folder can be resolved by its URI.
    *
    * @param folderUri the folder URI
+   * @return the ''Future'' with the test assertion
    */
-  private def checkResolveFolder(folderUri: Uri): Unit = {
+  private def checkResolveFolder(folderUri: Uri): Future[Assertion] = {
     stubFolderRequest(folderUri.path.toString(), "empty_folder.xml", depth = "0")
     val fs = new DavFileSystem(createConfig())
 
-    val folder = futureResult(runOp(fs.resolveFolder(folderUri)))
-    folder.name should be("test")
-    folder.lastModifiedAt should be(Instant.parse("2018-08-30T20:07:40Z"))
-    folder.attributes.values(DavModel.AttributeKey("DAV:", "getcontenttype")) should be("httpd/unix-directory")
+    runOp(fs.resolveFolder(folderUri)) map { folder =>
+      folder.name should be("test")
+      folder.lastModifiedAt should be(Instant.parse("2018-08-30T20:07:40Z"))
+      folder.attributes.values(DavModel.AttributeKey("DAV:", "getcontenttype")) should be("httpd/unix-directory")
+    }
   }
 
   it should "resolve a folder by its ID" in {
@@ -279,8 +293,9 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     stubFolderRequest(FolderUri.path.toString(), "element_file.xml", depth = "0")
     val fs = new DavFileSystem(createConfig())
 
-    val exception = expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFolder(FolderUri)))
-    exception.getMessage should include(FolderUri.toString())
+    recoverToExceptionIf[IllegalArgumentException](runOp(fs.resolveFolder(FolderUri))) map { exception =>
+      exception.getMessage should include(FolderUri.toString())
+    }
   }
 
   it should "delete a folder" in {
@@ -288,8 +303,10 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     stubSuccess(WireMockSupport.NoAuthFunc)
     val fs = new DavFileSystem(createConfig())
 
-    futureResult(runOp(fs.deleteFolder(FolderURI)))
-    verify(deleteRequestedFor(urlPathEqualTo(FolderURI.path.toString() + "/")))
+    runOp(fs.deleteFolder(FolderURI)) map { _ =>
+      verify(deleteRequestedFor(urlPathEqualTo(FolderURI.path.toString() + "/")))
+      succeed
+    }
   }
 
   it should "delete a file" in {
@@ -297,12 +314,13 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     stubSuccess(WireMockSupport.NoAuthFunc)
     val fs = new DavFileSystem(createConfig())
 
-    futureResult(runOp(fs.deleteFile(FileURI)))
-    verify(deleteRequestedFor(urlPathEqualTo(FileURI.path.toString())))
+    runOp(fs.deleteFile(FileURI)) map { _ =>
+      verify(deleteRequestedFor(urlPathEqualTo(FileURI.path.toString())))
+      succeed
+    }
   }
 
   it should "discard the entities of requests where the response does not matter" in {
-    implicit val ec: ExecutionContext = system.executionContext
     stubSuccess(WireMockSupport.NoAuthFunc)
     val fs = new DavFileSystem(createConfig())
 
@@ -312,11 +330,10 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       val uri = Uri(RootPath + s"/files/file$idx.dat")
       runOp(fs.deleteFile(uri))
     }
-    futureResult(Future.sequence(futResults))
+    Future.sequence(futResults) map { _ => succeed }
   }
 
   it should "download a file" in {
-    implicit val ec: ExecutionContext = system.executionContext
     val FileUri = Uri(RootPath + "/data/testFile.txt")
     stubFor(get(urlPathEqualTo(FileUri.path.toString()))
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
@@ -327,8 +344,9 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
       entity.dataBytes.runWith(sink)
     }
-    val result = futureResult(futResult)
-    result.utf8String should be(FileTestHelper.TestData)
+    futResult map { result =>
+      result.utf8String should be(FileTestHelper.TestData)
+    }
   }
 
   it should "create a folder without additional attributes" in {
@@ -342,9 +360,10 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .willReturn(aResponse().withStatus(StatusCodes.Created.intValue)))
     val fs = new DavFileSystem(createConfig())
 
-    val result = futureResult(runOp(fs.createFolder(ParentUri, folder)))
-    result.path should be(FolderUri.path)
-    getAllServeEvents should have size 1
+    runOp(fs.createFolder(ParentUri, folder)) map { result =>
+      result.path should be(FolderUri.path)
+      getAllServeEvents should have size 1
+    }
   }
 
   it should "create a folder with additional attributes" in {
@@ -363,11 +382,12 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val config = createConfig().copy(optDescriptionKey = Some(AttrDescription))
     val fs = new DavFileSystem(config)
 
-    val result = futureResult(runOp(fs.createFolder(ParentUri, newFolder)))
-    result.path should be(FolderUri.path)
-    verify(anyRequestedFor(urlPathEqualTo(FolderUri.path.toString() + "/"))
-      .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
-      .withRequestBody(equalToXml(expPatch)))
+    runOp(fs.createFolder(ParentUri, newFolder)) map { result =>
+      verify(anyRequestedFor(urlPathEqualTo(FolderUri.path.toString() + "/"))
+        .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
+        .withRequestBody(equalToXml(expPatch)))
+      result.path should be(FolderUri.path)
+    }
   }
 
   it should "create a folder if the parent URI ends on a slash" in {
@@ -382,9 +402,10 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .willReturn(aResponse().withStatus(StatusCodes.Created.intValue)))
     val fs = new DavFileSystem(createConfig())
 
-    val result = futureResult(runOp(fs.createFolder(Uri(ParentUriStr + "/"), folder)))
-    result.path should be(FolderUri.path)
-    getAllServeEvents should have size 1
+    runOp(fs.createFolder(Uri(ParentUriStr + "/"), folder)) map { result =>
+      result.path should be(FolderUri.path)
+      getAllServeEvents should have size 1
+    }
   }
 
   it should "update a folder without additional attributes" in {
@@ -393,8 +414,9 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     when(folder.description).thenReturn(None)
     val fs = new DavFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFolder(folder)))
-    getAllServeEvents should have size 0
+    runOp(fs.updateFolder(folder)) map { _ =>
+      getAllServeEvents should have size 0
+    }
   }
 
   it should "update a folder's attributes" in {
@@ -410,10 +432,12 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val config = createConfig().copy(optDescriptionKey = Some(AttrDescription))
     val fs = new DavFileSystem(config)
 
-    futureResult(runOp(fs.updateFolder(folder)))
-    verify(anyRequestedFor(urlPathEqualTo(FolderUri.path.toString() + "/"))
-      .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
-      .withRequestBody(equalToXml(expPatch)))
+    runOp(fs.updateFolder(folder)) map { _ =>
+      verify(anyRequestedFor(urlPathEqualTo(FolderUri.path.toString() + "/"))
+        .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
+        .withRequestBody(equalToXml(expPatch)))
+      succeed
+    }
   }
 
   it should "update a file without additional attributes" in {
@@ -421,8 +445,9 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     when(file.description).thenReturn(None)
     val fs = new DavFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFile(file)))
-    getAllServeEvents should have size 0
+    runOp(fs.updateFile(file)) map { _ =>
+      getAllServeEvents should have size 0
+    }
   }
 
   it should "update a file's attributes" in {
@@ -438,10 +463,12 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val config = createConfig().copy(optDescriptionKey = Some(AttrDescription))
     val fs = new DavFileSystem(config)
 
-    futureResult(runOp(fs.updateFile(file)))
-    verify(anyRequestedFor(urlPathEqualTo(FileUri.path.toString()))
-      .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
-      .withRequestBody(equalToXml(expPatch)))
+    runOp(fs.updateFile(file)) map { _ =>
+      verify(anyRequestedFor(urlPathEqualTo(FileUri.path.toString()))
+        .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
+        .withRequestBody(equalToXml(expPatch)))
+      succeed
+    }
   }
 
   it should "update the content of a file" in {
@@ -450,11 +477,12 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFileContent(FileUri, FileContentSize, fileContentSource)))
-    verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
-      .withHeader("Content-Length", equalTo(FileContentSize.toString))
-      .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
-    getAllServeEvents should have size 1
+    runOp(fs.updateFileContent(FileUri, FileContentSize, fileContentSource)) map { _ =>
+      verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
+        .withHeader("Content-Length", equalTo(FileContentSize.toString))
+        .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
+      getAllServeEvents should have size 1
+    }
   }
 
   it should "update the content of the file with deleting it before" in {
@@ -465,11 +493,13 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig().copy(deleteBeforeOverride = true))
 
-    futureResult(runOp(fs.updateFileContent(FileUri, FileContentSize, fileContentSource)))
-    verify(deleteRequestedFor(urlPathEqualTo(FileUri.path.toString())))
-    verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
-      .withHeader("Content-Length", equalTo(FileContentSize.toString))
-      .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
+    runOp(fs.updateFileContent(FileUri, FileContentSize, fileContentSource)) map { _ =>
+      verify(deleteRequestedFor(urlPathEqualTo(FileUri.path.toString())))
+      verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
+        .withHeader("Content-Length", equalTo(FileContentSize.toString))
+        .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
+      succeed
+    }
   }
 
   it should "create a file without additional attributes" in {
@@ -484,12 +514,13 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig())
 
-    val resultUri = futureResult(runOp(fs.createFile(ParentUri, file, fileContentSource)))
-    resultUri should be(FileUri)
-    verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
-      .withHeader("Content-Length", equalTo(FileContentSize.toString))
-      .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
-    getAllServeEvents should have size 1
+    runOp(fs.createFile(ParentUri, file, fileContentSource)) map { resultUri =>
+      resultUri should be(FileUri)
+      verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
+        .withHeader("Content-Length", equalTo(FileContentSize.toString))
+        .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
+      getAllServeEvents should have size 1
+    }
   }
 
   it should "create a file with additional attributes" in {
@@ -508,14 +539,15 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
     val config = createConfig().copy(optDescriptionKey = Some(AttrDescription))
     val fs = new DavFileSystem(config)
 
-    val resultUri = futureResult(runOp(fs.createFile(ParentUri, newFile, fileContentSource)))
-    resultUri should be(FileUri)
-    verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
-      .withHeader("Content-Length", equalTo(FileContentSize.toString))
-      .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
-    verify(anyRequestedFor(urlPathEqualTo(FileUri.path.toString()))
-      .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
-      .withRequestBody(equalToXml(expPatch)))
+    runOp(fs.createFile(ParentUri, newFile, fileContentSource)) map { resultUri =>
+      verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
+        .withHeader("Content-Length", equalTo(FileContentSize.toString))
+        .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
+      verify(anyRequestedFor(urlPathEqualTo(FileUri.path.toString()))
+        .withHeader("Content-Type", equalTo("text/xml; charset=UTF-8"))
+        .withRequestBody(equalToXml(expPatch)))
+      resultUri should be(FileUri)
+    }
   }
 
   it should "handle a successful multi-status response when creating a file with additional attributes" in {
@@ -532,8 +564,9 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
         .withBodyFile("multi_status_success.xml")))
     val fs = new DavFileSystem(createConfig())
 
-    val resultUri = futureResult(runOp(fs.createFile(ParentUri, newFile, fileContentSource)))
-    resultUri should be(FileUri)
+    runOp(fs.createFile(ParentUri, newFile, fileContentSource)) map { resultUri =>
+      resultUri should be(FileUri)
+    }
   }
 
   it should "handle a failure multi-status response when creating a file with additional attributes" in {
@@ -550,8 +583,10 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
         .withBodyFile("multi_status_failed.xml")))
     val fs = new DavFileSystem(createConfig())
 
-    val ex = expectFailedFuture[FailedResponseException](runOp(fs.createFile(ParentUri, newFile, fileContentSource)))
-    ex.response.status should be(StatusCodes.Conflict)
+    recoverToExceptionIf[FailedResponseException](runOp(fs.createFile(ParentUri, newFile, fileContentSource)))
+      .map { ex =>
+        ex.response.status should be(StatusCodes.Conflict)
+      }
   }
 
   it should "discard response entities when handling multi-status responses" in {
@@ -570,8 +605,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       val newFile = DavModel.newFile(name = s"FileName$idx", attributes = attributes, size = FileContentSize)
       runOp(fs.createFile(ParentUri, newFile, fileContentSource))
     }
-    implicit val ec: ExecutionContext = system.executionContext
-    futureResult(Future.sequence(futResults))
+    Future.sequence(futResults) map { _ => succeed }
   }
 
   it should "create a file if the parent URI ends on a slash" in {
@@ -587,12 +621,13 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)))
     val fs = new DavFileSystem(createConfig())
 
-    val resultUri = futureResult(runOp(fs.createFile(Uri(ParentUriStr + "/"), file, fileContentSource)))
-    resultUri should be(FileUri)
-    verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
-      .withHeader("Content-Length", equalTo(FileContentSize.toString))
-      .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
-    getAllServeEvents should have size 1
+    runOp(fs.createFile(Uri(ParentUriStr + "/"), file, fileContentSource)) map { resultUri =>
+      resultUri should be(FileUri)
+      verify(putRequestedFor(urlPathEqualTo(FileUri.path.toString()))
+        .withHeader("Content-Length", equalTo(FileContentSize.toString))
+        .withRequestBody(binaryEqualTo(FileTestHelper.testBytes())))
+      getAllServeEvents should have size 1
+    }
   }
 
   it should "apply the timeout from the configuration" in {
@@ -601,7 +636,7 @@ class DavFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike
       optDelay = Some(1.second), withSlash = false)
     val fs = new DavFileSystem(createConfig().copy(timeout = Timeout(250.millis)))
 
-    expectFailedFuture[TimeoutException](runOp(fs.resolveFile(FileUri)))
+    recoverToSucceededIf[TimeoutException](runOp(fs.resolveFile(FileUri)))
   }
 
   it should "patch a folder against an empty patch spec" in {

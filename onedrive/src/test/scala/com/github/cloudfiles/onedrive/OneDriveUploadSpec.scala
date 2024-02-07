@@ -16,7 +16,7 @@
 
 package com.github.cloudfiles.onedrive
 
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
+import com.github.cloudfiles.core.FileTestHelper
 import com.github.cloudfiles.onedrive.OneDriveUpload.UploadRequestSource
 import com.github.cloudfiles.onedrive.OneDriveUpload.UploadStreamCoordinatorActor.{NextUploadChunk, UploadStreamCoordinationMessage}
 import org.apache.pekko.Done
@@ -27,7 +27,8 @@ import org.apache.pekko.http.scaladsl.model.HttpRequest
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.stream.stage.AsyncCallback
 import org.apache.pekko.util.{ByteString, Timeout}
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
@@ -101,8 +102,7 @@ object OneDriveUploadSpec {
  * Test class for the OneDrive upload functionality. This class mainly tests
  * corner cases; for the main functionality, there is an integration test.
  */
-class OneDriveUploadSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers
-  with AsyncTestHelper {
+class OneDriveUploadSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers {
 
   import OneDriveUploadSpec._
 
@@ -112,20 +112,23 @@ class OneDriveUploadSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
    *
    * @param source    the source of the simulated upload stream
    * @param chunkSize the upload chunk size
+   * @return the ''Future'' with the test assertion
    */
-  private def checkStreamCoordinatorActorIsStopped(source: Source[ByteString, Any], chunkSize: Int): Unit = {
+  private def checkStreamCoordinatorActorIsStopped(source: Source[ByteString, Any], chunkSize: Int):
+  Future[Assertion] = {
     val config = createConfig(chunkSize)
-    implicit val ec: ExecutionContext = system.executionContext
     val flow = new UploadFlowTestImpl(config)
     val sink = Sink.foreach[HttpRequest] { request =>
       request.entity.dataBytes.runWith(Sink.ignore)
     }
 
-    futureResult(source.via(flow).runWith(sink).fallbackTo(Future.successful(Done)))
-    val probe = testKit.createDeadLetterProbe()
-    val coordinator = flow.coordinatorActor
-    coordinator ! NextUploadChunk(testKit.createTestProbe().ref)
-    probe.expectMessageType[DeadLetter]
+    source.via(flow).runWith(sink).fallbackTo(Future.successful(Done)) map { _ =>
+      val probe = testKit.createDeadLetterProbe()
+      val coordinator = flow.coordinatorActor
+      coordinator ! NextUploadChunk(testKit.createTestProbe().ref)
+      probe.expectMessageType[DeadLetter]
+      succeed
+    }
   }
 
   "UploadBytesToRequestFlow" should "stop the coordinator actor if there is a single chunk only" in {
@@ -147,11 +150,10 @@ class OneDriveUploadSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
   }
 
   "UploadRequestSource" should "handle a failure when requesting data from the coordinator actor" in {
-    implicit val ec: ExecutionContext = system.executionContext
     val config = createConfig(1024, timeout = 200.millis)
     val requestSource = new UploadRequestSource(config, testKit.createTestProbe[UploadStreamCoordinationMessage]().ref)
     val source = Source.fromGraph(requestSource)
 
-    expectFailedFuture[TimeoutException](source.runWith(Sink.ignore))
+    recoverToSucceededIf[TimeoutException](source.runWith(Sink.ignore))
   }
 }

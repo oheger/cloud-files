@@ -27,14 +27,15 @@ import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, StatusCode, StatusCodes}
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.{ByteString, Timeout}
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.time.Instant
 import java.util
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, TimeoutException}
+import scala.concurrent.{Future, TimeoutException}
 
 object GoogleDriveFileSystemITSpec {
   /** ID of a test file used by the tests. */
@@ -201,8 +202,8 @@ object GoogleDriveFileSystemITSpec {
 /**
  * Integration test class for ''GoogleDriveFileSystem''.
  */
-class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers
-  with WireMockSupport with AsyncTestHelper {
+class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers
+  with WireMockSupport {
   override protected val resourceRoot: String = "gdrive"
 
   import GoogleDriveFileSystemITSpec._
@@ -253,8 +254,10 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
   /**
    * Verifies that a correct upload request has been executed. Unfortunately,
    * the declarations from the stubbing have to be repeated.
+   *
+   * @return a ''Future'' with the test assertion
    */
-  private def verifyUploadRequest(): Unit = {
+  private def verifyUploadRequest(): Future[Assertion] = {
     waitAndVerify(testKit, 2) {
       putRequestedFor(urlPathEqualTo(UploadApiPrefix))
         .withQueryParam("uploadType", equalTo("resumable"))
@@ -262,6 +265,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
         .withHeader(HeaderLength, equalTo(TestFileContentLength.toString))
         .withRequestBody(equalTo(FileTestHelper.TestData))
     }
+    succeed
   }
 
   /**
@@ -309,8 +313,10 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aResponse().withStatus(StatusCodes.NoContent.intValue)))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.deleteFolder(TestFileID)))
-    verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+    runOp(fs.deleteFolder(TestFileID)) map { _ =>
+      verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+      succeed
+    }
   }
 
   it should "delete a file" in {
@@ -319,12 +325,13 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aResponse().withStatus(StatusCodes.NoContent.intValue)))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.deleteFile(TestFileID)))
-    verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+    runOp(fs.deleteFile(TestFileID)) map { _ =>
+      verify(deleteRequestedFor(urlPathEqualTo(deletePath)))
+      succeed
+    }
   }
 
   it should "discard the entities of requests where the response does not matter" in {
-    implicit val ec: ExecutionContext = system.executionContext
     stubSuccess(WireMockSupport.NoAuthFunc)
     val fs = new GoogleDriveFileSystem(createConfig())
 
@@ -334,13 +341,13 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       val id = s"id$idx"
       runOp(fs.deleteFolder(id))
     }
-    futureResult(Future.sequence(futResults))
+    Future.sequence(futResults) map { _ => succeed }
   }
 
   it should "return the constant root ID if no root path is specified" in {
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.rootID)) should be("root")
+    runOp(fs.rootID) map (_ should be("root"))
   }
 
   it should "resolve a file" in {
@@ -357,8 +364,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       appProperties = Some(Map("appFoo" -> "appBar", "appTest" -> "true")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val file = futureResult(runOp(fs.resolveFile(TestFileID)))
-    file.googleFile should be(expGoogleFile)
+    runOp(fs.resolveFile(TestFileID)) map { file =>
+      file.googleFile should be(expGoogleFile)
+    }
   }
 
   it should "resolve a folder" in {
@@ -373,8 +381,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       description = None, properties = None, appProperties = None)
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val folder = futureResult(runOp(fs.resolveFolder(TestFileID)))
-    folder.googleFile should be(expGoogleFile)
+    runOp(fs.resolveFolder(TestFileID)) map { folder =>
+      folder.googleFile should be(expGoogleFile)
+    }
   }
 
   it should "return a failed future if a file to resolve is actually a folder" in {
@@ -382,8 +391,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aJsonResponse().withBodyFile("resolveFolderResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val exception = expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFile(TestFileID)))
-    exception.getMessage should include(TestFileID)
+    recoverToExceptionIf[IllegalArgumentException](runOp(fs.resolveFile(TestFileID))) map { exception =>
+      exception.getMessage should include(TestFileID)
+    }
   }
 
   it should "return a failed future if a folder to resolve is actually a file" in {
@@ -391,8 +401,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aJsonResponse().withBodyFile("resolveFileResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val exception = expectFailedFuture[IllegalArgumentException](runOp(fs.resolveFolder(TestFileID)))
-    exception.getMessage should include(TestFileID)
+    recoverToExceptionIf[IllegalArgumentException](runOp(fs.resolveFolder(TestFileID))) map { exception =>
+      exception.getMessage should include(TestFileID)
+    }
   }
 
   /**
@@ -426,8 +437,10 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aJsonResponse().withBodyFile("folderContentResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val content = futureResult(runOp(fs.folderContent(TestFileID)))
-    checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+    runOp(fs.folderContent(TestFileID)) map { content =>
+      checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+      succeed
+    }
   }
 
   it should "query the content of a folder that is split over multiple pages" in {
@@ -443,11 +456,12 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aJsonResponse().withBodyFile("folderContentResponsePage1.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val content = futureResult(runOp(fs.folderContent(TestFileID)))
-    checkFolderContent(content, expFileCount = 4, expFolderCount = 3)
-    val trashedFolder = content.folders("folder_id-3")
-    trashedFolder.googleFile.trashed shouldBe true
-    trashedFolder.googleFile.trashedTime should be(Some(Instant.parse("2021-09-10T19:09:41.110Z")))
+    runOp(fs.folderContent(TestFileID)) map { content =>
+      checkFolderContent(content, expFileCount = 4, expFolderCount = 3)
+      val trashedFolder = content.folders("folder_id-3")
+      trashedFolder.googleFile.trashed shouldBe true
+      trashedFolder.googleFile.trashedTime should be(Some(Instant.parse("2021-09-10T19:09:41.110Z")))
+    }
   }
 
   it should "download a file" in {
@@ -458,11 +472,13 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
         .withHeader("Content-Type", "text/plain; charset=UTF-8")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val entity = futureResult(runOp(fs.downloadFile(TestFileID)))
-    entity.contentType should be(ContentTypes.`text/plain(UTF-8)`)
-    val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
-    val data = futureResult(entity.dataBytes.runWith(sink))
-    data.utf8String should be(FileTestHelper.TestData)
+    runOp(fs.downloadFile(TestFileID)) flatMap { entity =>
+      entity.contentType should be(ContentTypes.`text/plain(UTF-8)`)
+      val sink = Sink.fold[ByteString, ByteString](ByteString.empty)(_ ++ _)
+      entity.dataBytes.runWith(sink) map { data =>
+        data.utf8String should be(FileTestHelper.TestData)
+      }
+    }
   }
 
   /**
@@ -472,17 +488,19 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
    *
    * @param srcFolder          the source folder defining the new folder
    * @param expectedProperties the expected properties in the request
+   * @return a ''Future'' with the test assertion
    */
   private def checkCreateFolder(srcFolder: Model.Folder[String],
-                                expectedProperties: GoogleDriveJsonProtocol.WritableFile): Unit = {
+                                expectedProperties: GoogleDriveJsonProtocol.WritableFile): Future[Assertion] = {
     stubFor(post(urlPathEqualTo(DriveApiPrefix))
       .withHeader(HeaderContent, equalTo(ContentJson))
       .withRequestBody(equalToFile(expectedProperties))
       .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("createFolderResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val folderID = futureResult(runOp(fs.createFolder(TestFileID, srcFolder)))
-    folderID should be("folder_id-AECVBSOxrHyqtqTest")
+    runOp(fs.createFolder(TestFileID, srcFolder)) map { folderID =>
+      folderID should be("folder_id-AECVBSOxrHyqtqTest")
+    }
   }
 
   it should "create a folder from a model folder" in {
@@ -533,17 +551,20 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
    *
    * @param srcFolder          the folder with the properties to update
    * @param expectedProperties the properties expected in the update request
+   * @return a ''Future'' with the test assertion
    */
   private def checkUpdateFolder(srcFolder: Model.Folder[String],
-                                expectedProperties: GoogleDriveJsonProtocol.WritableFile): Unit = {
+                                expectedProperties: GoogleDriveJsonProtocol.WritableFile): Future[Assertion] = {
     stubFor(patch(urlPathEqualTo(filePath(TestFileID)))
       .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFolderResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFolder(srcFolder)))
-    verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
-      .withHeader(HeaderContent, equalTo(ContentJson))
-      .withRequestBody(equalToFile(expectedProperties)))
+    runOp(fs.updateFolder(srcFolder)) map { _ =>
+      verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
+        .withHeader(HeaderContent, equalTo(ContentJson))
+        .withRequestBody(equalToFile(expectedProperties)))
+      succeed
+    }
   }
 
   it should "update a folder from a model folder" in {
@@ -591,8 +612,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubUploadRequest()
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val fileID = futureResult(runOp(fs.createFile(TestFileID, srcFile, testFileContent)))
-    fileID should be("file_id-J9die95gBb_123456987")
+    runOp(fs.createFile(TestFileID, srcFile, testFileContent)) map { fileID =>
+      fileID should be("file_id-J9die95gBb_123456987")
+    }
   }
 
   it should "handle a missing Location header when creating a new file" in {
@@ -601,8 +623,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     val fs = new GoogleDriveFileSystem(createConfig())
 
     val opCreate = fs.createFile(TestFileID, GoogleDriveModel.newFile(name = "myNewFile"), testFileContent)
-    val exception = expectFailedFuture[IllegalStateException](runOp(opCreate))
-    exception.getMessage should include("'Location' header")
+    recoverToExceptionIf[IllegalStateException](runOp(opCreate)) map { exception =>
+      exception.getMessage should include("'Location' header")
+    }
   }
 
   it should "update the content of a file" in {
@@ -615,8 +638,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubUploadRequest()
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFileContent(TestFileID, TestFileContentLength, testFileContent)))
-    verifyUploadRequest()
+    runOp(fs.updateFileContent(TestFileID, TestFileContentLength, testFileContent)) flatMap { _ =>
+      verifyUploadRequest()
+    }
   }
 
   it should "evaluate the response status when updating the content of a file" in {
@@ -626,9 +650,10 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubUploadRequest(status = StatusCodes.InternalServerError)
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val exception = expectFailedFuture[FailedResponseException](runOp(fs.updateFileContent(TestFileID,
-      TestFileContentLength, testFileContent)))
-    exception.response.status should be(StatusCodes.InternalServerError)
+    recoverToExceptionIf[FailedResponseException](runOp(fs.updateFileContent(TestFileID,
+      TestFileContentLength, testFileContent))) map { exception =>
+      exception.response.status should be(StatusCodes.InternalServerError)
+    }
   }
 
   it should "update both the content and the metadata of a file" in {
@@ -651,8 +676,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubUploadRequest()
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFileAndContent(srcFile, testFileContent)))
-    verifyUploadRequest()
+    runOp(fs.updateFileAndContent(srcFile, testFileContent)) flatMap { _ =>
+      verifyUploadRequest()
+    }
   }
 
   it should "update the metadata of a file" in {
@@ -669,10 +695,12 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFolderResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateFile(srcFile)))
-    verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
-      .withHeader(HeaderContent, equalTo(ContentJson))
-      .withRequestBody(equalToFile(expectedProperties)))
+    runOp(fs.updateFile(srcFile)) map { _ =>
+      verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
+        .withHeader(HeaderContent, equalTo(ContentJson))
+        .withRequestBody(equalToFile(expectedProperties)))
+      succeed
+    }
   }
 
   it should "patch a model folder without updates" in {
@@ -737,7 +765,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
         .withFixedDelay(1000)))
     val fs = new GoogleDriveFileSystem(config)
 
-    expectFailedFuture[TimeoutException](runOp(fs.resolveFile(TestFileID)))
+    recoverToSucceededIf[TimeoutException](runOp(fs.resolveFile(TestFileID)))
   }
 
   it should "resolve a path inside the root folder" in {
@@ -746,8 +774,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubResolveRequest("root", FileName, response)
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val id = futureResult(runOp(fs.resolvePath(FileName)))
-    id should be(TestFileID)
+    runOp(fs.resolvePath(FileName)) map (_ should be(TestFileID))
   }
 
   it should "handle a path in the root folder that cannot be resolved" in {
@@ -755,8 +782,9 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubFailedResolveRequest("root", FileName)
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val exception = expectFailedFuture[IllegalArgumentException](runOp(fs.resolvePath(FileName)))
-    exception.getMessage should include(FileName)
+    recoverToExceptionIf[IllegalArgumentException](runOp(fs.resolvePath(FileName))) map { exception =>
+      exception.getMessage should include(FileName)
+    }
   }
 
   it should "resolve a path with multiple components" in {
@@ -768,15 +796,19 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubResolveRequest("id2", "file.txt", resolveResponse(generateResolvedIDs(TestFileID)))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val id = futureResult(runOp(fs.resolvePath(Path)))
-    id should be(TestFileID)
+    runOp(fs.resolvePath(Path)) map (_ should be(TestFileID))
   }
 
   it should "correctly resolve an empty path" in {
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.resolvePath(""))) should be("root")
-    futureResult(runOp(fs.resolvePathComponents(Seq.empty))) should be("root")
+    runOp(fs.resolvePath("")) map (_ should be("root"))
+  }
+
+  it should "correctly resolve empty path components" in {
+    val fs = new GoogleDriveFileSystem(createConfig())
+
+    runOp(fs.resolvePathComponents(Seq.empty)) map (_ should be("root"))
   }
 
   it should "try different paths in a resolve operation" in {
@@ -790,8 +822,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubResolveRequest("id2", "path", resolveResponse(generateResolvedIDs(TestFileID)))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val id = futureResult(runOp(fs.resolvePath(Path)))
-    id should be(TestFileID)
+    runOp(fs.resolvePath(Path)) map (_ should be(TestFileID))
   }
 
   it should "deal with paging in a resolve operation" in {
@@ -812,8 +843,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubResolveRequest("id3", File, resolveResponse(generateResolvedIDs(TestFileID)))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    val id = futureResult(runOp(fs.resolvePath(Path)))
-    id should be(TestFileID)
+    runOp(fs.resolvePath(Path)) map (_ should be(TestFileID))
   }
 
   it should "resolve the root path if it is specified" in {
@@ -823,8 +853,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubResolveRequest("id1", "root", resolveResponse(generateResolvedIDs(TestFileID)))
     val fs = new GoogleDriveFileSystem(createConfig(optRoot = Some(RootPath)))
 
-    val rootID = futureResult(runOp(fs.rootID))
-    rootID should be(TestFileID)
+    runOp(fs.rootID) map (_ should be(TestFileID))
   }
 
   it should "resolve the root path if it starts with a slash" in {
@@ -832,8 +861,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubResolveRequest("root", RootFolder, resolveResponse(generateResolvedIDs(TestFileID)))
     val fs = new GoogleDriveFileSystem(createConfig(optRoot = Some("/" + RootFolder)))
 
-    val rootID = futureResult(runOp(fs.rootID))
-    rootID should be(TestFileID)
+    runOp(fs.rootID) map (_ should be(TestFileID))
   }
 
   it should "take the root path into account when resolving a path" in {
@@ -844,8 +872,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubResolveRequest("id2", "data", resolveResponse(generateResolvedIDs(TestFileID)))
     val fs = new GoogleDriveFileSystem(createConfig(optRoot = Some("the/root%20path")))
 
-    val id = futureResult(runOp(fs.resolvePath("/data")))
-    id should be(TestFileID)
+    runOp(fs.resolvePath("/data")) map (_ should be(TestFileID))
   }
 
   it should "query the content of a folder if trashed files should be included" in {
@@ -856,8 +883,10 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aJsonResponse().withBodyFile("folderContentResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig(includeTrashed = true))
 
-    val content = futureResult(runOp(fs.folderContent(TestFileID)))
-    checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+    runOp(fs.folderContent(TestFileID)) map { content =>
+      checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+      succeed
+    }
   }
 
   it should "query the content of a folder, allowing to override the includeTrashed flag" in {
@@ -867,8 +896,10 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aJsonResponse().withBodyFile("folderContentResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig(includeTrashed = true))
 
-    val content = futureResult(runOp(fs.folderContent(TestFileID, includeTrashed = false)))
-    checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+    runOp(fs.folderContent(TestFileID, includeTrashed = false)) map { content =>
+      checkFolderContent(content, expFileCount = 3, expFolderCount = 2)
+      succeed
+    }
   }
 
   it should "resolve a path if trashed files should be included" in {
@@ -880,8 +911,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       includeTrashed = true)
     val fs = new GoogleDriveFileSystem(createConfig(includeTrashed = true))
 
-    val id = futureResult(runOp(fs.resolvePathComponents(List("my", "test", "file.txt"))))
-    id should be(TestFileID)
+    runOp(fs.resolvePathComponents(List("my", "test", "file.txt"))) map (_ should be(TestFileID))
   }
 
   it should "resolve a path, allowing to override the includeTrashed flag" in {
@@ -890,8 +920,7 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
     stubResolveRequest("root", FileName, response)
     val fs = new GoogleDriveFileSystem(createConfig(includeTrashed = true))
 
-    val id = futureResult(runOp(fs.resolvePath(FileName, includeTrashed = false)))
-    id should be(TestFileID)
+    runOp(fs.resolvePath(FileName, includeTrashed = false)) map (_ should be(TestFileID))
   }
 
   it should "update an element based on a WritableFile" in {
@@ -904,9 +933,11 @@ class GoogleDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AnyFlat
       .willReturn(aJsonResponse(StatusCodes.Created).withBodyFile("resolveFileResponse.json")))
     val fs = new GoogleDriveFileSystem(createConfig())
 
-    futureResult(runOp(fs.updateElement(TestFileID, updateSpec)))
-    verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
-      .withHeader(HeaderContent, equalTo(ContentJson))
-      .withRequestBody(equalToFile(updateSpec)))
+    runOp(fs.updateElement(TestFileID, updateSpec)) map { _ =>
+      verify(patchRequestedFor(urlPathEqualTo(filePath(TestFileID)))
+        .withHeader(HeaderContent, equalTo(ContentJson))
+        .withRequestBody(equalToFile(updateSpec)))
+      succeed
+    }
   }
 }

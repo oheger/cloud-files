@@ -16,14 +16,14 @@
 
 package com.github.cloudfiles.webdav
 
+import com.github.cloudfiles.core.FileTestHelper
 import com.github.cloudfiles.core.http.HttpRequestSender.FailedResponseException
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
 import com.github.cloudfiles.webdav.DavModel.AttributeKey
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.apache.pekko.http.scaladsl.model.{StatusCodes, Uri}
 import org.apache.pekko.stream.scaladsl.{FileIO, Source}
 import org.apache.pekko.util.ByteString
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.xml.sax.SAXParseException
 
@@ -49,8 +49,7 @@ object DavParserSpec {
 /**
  * Test class for ''DavParser''.
  */
-class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with AsyncTestHelper
-  with FileTestHelper {
+class DavParserSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers with FileTestHelper {
 
   import DavParserSpec._
 
@@ -59,19 +58,20 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser()
 
-    val result = futureResult(parser.parseFolderContent(source))
-    result.folderID should be(Uri("/test/folder1/"))
-    val subFolderUri = Uri("/test%20data/subFolder%20%281%29/")
-    result.folders.keys should contain only subFolderUri
-    val folder = result.folders(subFolderUri)
-    folder.id should be(subFolderUri)
-    folder.description should be(None)
-    folder.createdAt should be(toInstant("2018-08-27T18:38:25Z"))
-    folder.lastModifiedAt should be(toInstant("2018-08-28T19:39:26Z"))
-    folder.name should be("subFolder (1)")
-    folder.attributes.values(AttributeKey(NS_DAV, "getcontentlanguage")) should be("de")
-    folder.attributes.values(AttributeKey(NS_DAV, "getetag")) should be("AAABZYIMQzwAAAFlggunMA")
-    folder.attributes.values.keys should not contain AttributeKey(NS_DAV, "displayname")
+    parser.parseFolderContent(source) map { result =>
+      result.folderID should be(Uri("/test/folder1/"))
+      val subFolderUri = Uri("/test%20data/subFolder%20%281%29/")
+      result.folders.keys should contain only subFolderUri
+      val folder = result.folders(subFolderUri)
+      folder.id should be(subFolderUri)
+      folder.description should be(None)
+      folder.createdAt should be(toInstant("2018-08-27T18:38:25Z"))
+      folder.lastModifiedAt should be(toInstant("2018-08-28T19:39:26Z"))
+      folder.name should be("subFolder (1)")
+      folder.attributes.values(AttributeKey(NS_DAV, "getcontentlanguage")) should be("de")
+      folder.attributes.values(AttributeKey(NS_DAV, "getetag")) should be("AAABZYIMQzwAAAFlggunMA")
+      folder.attributes.values.keys should not contain AttributeKey(NS_DAV, "displayname")
+    }
   }
 
   it should "extract files from a folder content" in {
@@ -79,21 +79,22 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser()
 
-    val result = futureResult(parser.parseFolderContent(source))
-    val fileUri1 = Uri("/test%20data/folder%20%281%29/file%20%281%29.mp3")
-    val fileUri2 = Uri("/test%20data/folder%20%281%29/file%20%282%29.mp3")
-    val fileUri3 = Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3")
-    result.files.keys should contain only(fileUri1, fileUri2, fileUri3)
-    val file1 = result.files(fileUri1)
-    file1.id should be(fileUri1)
-    file1.name should be("file1.mp3")
-    file1.createdAt should be(toInstant("2018-09-19T20:08:00Z"))
-    file1.size should be(100)
-    val file3 = result.files(fileUri3)
-    file3.name should be("file3.mp3")
-    file3.size should be(300)
-    file3.attributes.values(AttributeKey(NS_MICROSOFT,
-      "Win32LastModifiedTime")) should be("Wed, 19 Sep 2018 20:12:00 GMT")
+    parser.parseFolderContent(source) map { result =>
+      val fileUri1 = Uri("/test%20data/folder%20%281%29/file%20%281%29.mp3")
+      val fileUri2 = Uri("/test%20data/folder%20%281%29/file%20%282%29.mp3")
+      val fileUri3 = Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3")
+      result.files.keys should contain only(fileUri1, fileUri2, fileUri3)
+      val file1 = result.files(fileUri1)
+      file1.id should be(fileUri1)
+      file1.name should be("file1.mp3")
+      file1.createdAt should be(toInstant("2018-09-19T20:08:00Z"))
+      file1.size should be(100)
+      val file3 = result.files(fileUri3)
+      file3.name should be("file3.mp3")
+      file3.size should be(300)
+      file3.attributes.values(AttributeKey(NS_MICROSOFT,
+        "Win32LastModifiedTime")) should be("Wed, 19 Sep 2018 20:12:00 GMT")
+    }
   }
 
   it should "add slashes to folder URIs if necessary" in {
@@ -103,9 +104,10 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val subFolder2Uri = Uri("/test%20data/subFolder2/")
     val parser = new DavParser()
 
-    val result = futureResult(parser.parseFolderContent(source))
-    result.folderID should be(Uri("/test/folder1/"))
-    result.folders.keys should contain only(subFolder1Uri, subFolder2Uri)
+    parser.parseFolderContent(source) map { result =>
+      result.folderID should be(Uri("/test/folder1/"))
+      result.folders.keys should contain only(subFolder1Uri, subFolder2Uri)
+    }
   }
 
   it should "extract the content of an empty folder" in {
@@ -113,10 +115,11 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser()
 
-    val result = futureResult(parser.parseFolderContent(source))
-    result.folderID should be(Uri("/destination/"))
-    result.files should have size 0
-    result.folders should have size 0
+    parser.parseFolderContent(source) map { result =>
+      result.folderID should be(Uri("/destination/"))
+      result.files should have size 0
+      result.folders should have size 0
+    }
   }
 
   it should "handle invalid date and time values in standard attributes" in {
@@ -124,11 +127,12 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser()
 
-    val result = futureResult(parser.parseFolderContent(source))
-    val file = result.files(Uri("/test/folder1/test.txt"))
-    file.createdAt should be(DavParser.UndefinedDate)
-    file.lastModifiedAt should be(DavParser.UndefinedDate)
-    file.size should be(-1)
+    parser.parseFolderContent(source) map { result =>
+      val file = result.files(Uri("/test/folder1/test.txt"))
+      file.createdAt should be(DavParser.UndefinedDate)
+      file.lastModifiedAt should be(DavParser.UndefinedDate)
+      file.size should be(-1)
+    }
   }
 
   it should "deal with missing attributes for elements" in {
@@ -136,12 +140,13 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser()
 
-    val result = futureResult(parser.parseFolderContent(source))
-    val file = result.files(Uri("/test/folder1/test.txt"))
-    file.createdAt should be(DavParser.UndefinedDate)
-    file.lastModifiedAt should be(DavParser.UndefinedDate)
-    file.size should be(-1)
-    file.name should be("test.txt")
+    parser.parseFolderContent(source) map { result =>
+      val file = result.files(Uri("/test/folder1/test.txt"))
+      file.createdAt should be(DavParser.UndefinedDate)
+      file.lastModifiedAt should be(DavParser.UndefinedDate)
+      file.size should be(-1)
+      file.name should be("test.txt")
+    }
   }
 
   it should "ignore a response element with unexpected content" in {
@@ -149,11 +154,12 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser()
 
-    val result = futureResult(parser.parseFolderContent(source))
-    val fileUri = Uri("/test/folder1/music.mp3")
-    result.files.keys should contain only fileUri
-    val file = result.files(fileUri)
-    file.name should be("music.mp3")
+    parser.parseFolderContent(source) map { result =>
+      val fileUri = Uri("/test/folder1/music.mp3")
+      result.files.keys should contain only fileUri
+      val file = result.files(fileUri)
+      file.name should be("music.mp3")
+    }
   }
 
   it should "extract a description if the property is defined" in {
@@ -162,10 +168,11 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser(optDescriptionKey = Some(KeyDesc))
 
-    val result = futureResult(parser.parseFolderContent(source))
-    val file = result.files(Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3"))
-    file.description should be(Some("A test description"))
-    file.attributes.values.keys should not contain KeyDesc
+    parser.parseFolderContent(source) map { result =>
+      val file = result.files(Uri("/test%20data/folder%20%281%29/file%20%283%29.mp3"))
+      file.description should be(Some("A test description"))
+      file.attributes.values.keys should not contain KeyDesc
+    }
   }
 
   it should "handle a non-XML response" in {
@@ -173,7 +180,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = Source.single(content)
     val parser = new DavParser()
 
-    expectFailedFuture[SAXParseException](parser.parseFolderContent(source))
+    recoverToSucceededIf[SAXParseException](parser.parseFolderContent(source))
   }
 
   it should "handle multiple propstat elements per element" in {
@@ -181,14 +188,15 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser
 
-    val result = futureResult(parser.parseFolderContent(source))
-    val file1 = result.files(Uri("/test%20data/folder%20%281%29/file%20%281%29.mp3"))
-    file1.name should be("testFile")
-    val file2 = result.files(Uri("/test%20data/folder%20%281%29/file%20%282%29.mp3"))
-    file2.name should be("testFile2")
-    val folder = result.folders(Uri("/test%20data/subFolder%20%281%29/"))
-    folder.attributes.values(AttributeKey(NS_MICROSOFT,
-      "Win32LastModifiedTime")) should be("Tue, 8 Mar 2022 20:35:10 GMT")
+    parser.parseFolderContent(source) map { result =>
+      val file1 = result.files(Uri("/test%20data/folder%20%281%29/file%20%281%29.mp3"))
+      file1.name should be("testFile")
+      val file2 = result.files(Uri("/test%20data/folder%20%281%29/file%20%282%29.mp3"))
+      file2.name should be("testFile2")
+      val folder = result.folders(Uri("/test%20data/subFolder%20%281%29/"))
+      folder.attributes.values(AttributeKey(NS_MICROSOFT,
+        "Win32LastModifiedTime")) should be("Tue, 8 Mar 2022 20:35:10 GMT")
+    }
   }
 
   it should "parse a folder element" in {
@@ -196,7 +204,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser()
 
-    futureResult(parser.parseElement(source)) match {
+    parser.parseElement(source) map {
       case folder: DavModel.DavFolder =>
         folder.name should be("test")
         folder.lastModifiedAt should be(toInstant("2018-08-30T20:07:40Z"))
@@ -212,7 +220,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser(optDescriptionKey = Some(KeyDesc))
 
-    futureResult(parser.parseElement(source)) match {
+    parser.parseElement(source) map {
       case file: DavModel.DavFile =>
         file.name should be("test.txt")
         file.lastModifiedAt should be(toInstant("2020-12-31T19:23:52Z"))
@@ -227,7 +235,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser()
 
-    expectFailedFuture[Throwable](parser.parseElement(source))
+    recoverToSucceededIf[Throwable](parser.parseElement(source))
   }
 
   it should "parse a successful multi-status response" in {
@@ -235,7 +243,7 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser
 
-    futureResult(parser.parseMultiStatus(source))
+    parser.parseMultiStatus(source) map (_ => succeed)
   }
 
   it should "parse a failed multi-status response" in {
@@ -243,8 +251,9 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser
 
-    val exception = expectFailedFuture[FailedResponseException](parser.parseMultiStatus(source))
-    exception.response.status should be(StatusCodes.Conflict)
+    recoverToExceptionIf[FailedResponseException](parser.parseMultiStatus(source)) map { exception =>
+      exception.response.status should be(StatusCodes.Conflict)
+    }
   }
 
   it should "handle an invalid status code in a multi-status response" in {
@@ -252,8 +261,9 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser
 
-    val exception = expectFailedFuture[IllegalStateException](parser.parseMultiStatus(source))
-    exception.getMessage should include("an_invalid_response_code")
+    recoverToExceptionIf[IllegalStateException](parser.parseMultiStatus(source)) map { exception =>
+      exception.getMessage should include("an_invalid_response_code")
+    }
   }
 
   it should "handle an empty multi-status response" in {
@@ -261,13 +271,13 @@ class DavParserSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with 
     val source = FileIO.fromPath(testResponse)
     val parser = new DavParser
 
-    futureResult(parser.parseMultiStatus(source))
+    parser.parseMultiStatus(source) map (_ => succeed)
   }
 
   it should "handle a non XML multi-status response" in {
     val source = Source.single(ByteString("This is not an XML response"))
     val parser = new DavParser
 
-    expectFailedFuture[SAXParseException](parser.parseMultiStatus(source))
+    recoverToSucceededIf[SAXParseException](parser.parseMultiStatus(source))
   }
 }

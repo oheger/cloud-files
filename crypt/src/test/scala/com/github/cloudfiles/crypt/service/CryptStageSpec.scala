@@ -16,17 +16,19 @@
 
 package com.github.cloudfiles.crypt.service
 
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
+import com.github.cloudfiles.core.FileTestHelper
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.apache.pekko.stream.FlowShape
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.stream.stage.GraphStage
 import org.apache.pekko.util.ByteString
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.security.SecureRandom
+import scala.concurrent.Future
 
 object CryptStageSpec {
 
@@ -56,7 +58,7 @@ object CryptStageSpec {
     data.foldLeft(ByteString.empty)((buf, s) => buf ++ s).utf8String
 }
 
-class CryptStageSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with AsyncTestHelper {
+class CryptStageSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers {
 
   import CryptStageSpec._
 
@@ -65,15 +67,15 @@ class CryptStageSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
    *
    * @param data       the data to be processed
    * @param cryptStage the stage for encryption / decryption
-   * @return the list with resulting data chunks
+   * @return a ''Future'' with the list with resulting data chunks
    */
   private def runCryptStream(data: List[ByteString], cryptStage: GraphStage[FlowShape[ByteString, ByteString]]):
-  List[ByteString] = {
+  Future[List[ByteString]] = {
     val source = Source(data)
     val sink = Sink.fold[List[ByteString], ByteString](Nil)((list, bs) => bs :: list)
-    val futResult = source.via(cryptStage)
+    source.via(cryptStage)
       .runWith(sink)
-    futureResult(futResult).reverse
+      .map(_.reverse)
   }
 
   /**
@@ -81,9 +83,9 @@ class CryptStageSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
    * chunks before.
    *
    * @param message the message to be encrypted
-   * @return the resulting encrypted chunks
+   * @return a ''Future'' with the resulting encrypted chunks
    */
-  private def encrypt(message: String): List[ByteString] =
+  private def encrypt(message: String): Future[List[ByteString]] =
     runCryptStream(splitPlainText(message),
       new CryptStage(ShiftCryptAlgorithm.encryptCipher(ShiftCryptAlgorithm.encryptKey)))
 
@@ -92,23 +94,24 @@ class CryptStageSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
    * as string.
    *
    * @param cipherText the chunks of the encrypted message
-   * @return the resulting decrypted text
+   * @return a ''Future'' with the resulting decrypted text
    */
-  private def decrypt(cipherText: List[ByteString]): String =
-    combine(runCryptStream(cipherText,
-      new CryptStage(ShiftCryptAlgorithm.decryptCipher(ShiftCryptAlgorithm.decryptKey))))
+  private def decrypt(cipherText: List[ByteString]): Future[String] =
+    runCryptStream(cipherText,
+      new CryptStage(ShiftCryptAlgorithm.decryptCipher(ShiftCryptAlgorithm.decryptKey))) map combine
 
   /**
    * Checks an encryption followed by a decryption. This should result in the
    * original message.
    *
    * @param message the message to be processed
+   * @return a ''Future'' with the test assertion
    */
-  private def checkRoundTrip(message: String): Unit = {
-    val encrypted = encrypt(message)
-    val processed = decrypt(encrypted)
-    processed should be(message)
-  }
+  private def checkRoundTrip(message: String): Future[Assertion] =
+    for {
+      encrypted <- encrypt(message)
+      processed <- decrypt(encrypted)
+    } yield processed should be(message)
 
   "A CryptStage" should "produce the same text when encrypting and decrypting" in {
     checkRoundTrip(FileTestHelper.TestData)
@@ -117,17 +120,17 @@ class CryptStageSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with
   it should "handle an empty source to encrypt" in {
     val stage = new CryptStage(ShiftCryptAlgorithm.encryptCipher(ShiftCryptAlgorithm.encryptKey))
 
-    runCryptStream(Nil, stage) should have size 0
+    runCryptStream(Nil, stage) map (_ should have size 0)
   }
 
   it should "handle an empty source to decrypt" in {
-    decrypt(Nil) should be("")
+    decrypt(Nil) map (_ should be(""))
   }
 
   it should "produce encrypted text" in {
-    val cipherText = combine(encrypt(FileTestHelper.TestData))
-
-    cipherText should be(ShiftCryptAlgorithm.encrypt(ByteString(FileTestHelper.TestData)).utf8String)
+    encrypt(FileTestHelper.TestData).map(combine) map { cipherText =>
+      cipherText should be(ShiftCryptAlgorithm.encrypt(ByteString(FileTestHelper.TestData)).utf8String)
+    }
   }
 
   it should "handle small messages as well" in {

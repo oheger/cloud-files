@@ -19,14 +19,14 @@ package com.github.cloudfiles.crypt.fs.resolver
 import com.github.cloudfiles.core.{FileSystem, Model}
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.mockito.Mockito.when
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 /**
  * Test class for ''PathComponentResolver''.
  */
-class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers
+class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers
   with MockitoSugar {
 
   import com.github.cloudfiles.crypt.fs.CryptFileSystemTestHelper._
@@ -74,7 +74,9 @@ class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.rootID).thenReturn(stubOperation(FileID))
     val resolver = createResolver()
 
-    runOp(testKit, resolver.resolve(Nil, fs, DefaultCryptConfig)) should be(FileID)
+    runOpFuture(testKit, resolver.resolve(Nil, fs, DefaultCryptConfig)) map { result =>
+      result should be(FileID)
+    }
   }
 
   it should "resolve a path to an existing folder" in {
@@ -101,7 +103,9 @@ class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.folderContent(level2Content.folderID)).thenReturn(stubOperation(level2Content))
     val resolver = createResolver()
 
-    runOp(testKit, resolver.resolve(components, fs, DefaultCryptConfig)) should be(folderID(8))
+    runOpFuture(testKit, resolver.resolve(components, fs, DefaultCryptConfig)) map { result =>
+      result should be(folderID(8))
+    }
   }
 
   it should "resolve a path to an existing file" in {
@@ -127,7 +131,9 @@ class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.folderContent(level2Content.folderID)).thenReturn(stubOperation(level2Content))
     val resolver = createResolver()
 
-    runOp(testKit, resolver.resolve(components, fs, DefaultCryptConfig)) should be(fileID(3))
+    runOpFuture(testKit, resolver.resolve(components, fs, DefaultCryptConfig)) map { result =>
+      result should be(fileID(3))
+    }
   }
 
   it should "ignore invalid element names when resolving a path" in {
@@ -146,7 +152,9 @@ class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.folderContent(level1Content.folderID)).thenReturn(stubOperation(level1Content))
     val resolver = createResolver()
 
-    runOp(testKit, resolver.resolve(components, fs, DefaultCryptConfig)) should be(fileID(1))
+    runOpFuture(testKit, resolver.resolve(components, fs, DefaultCryptConfig)) map { result =>
+      result should be(fileID(1))
+    }
   }
 
   it should "handle a path that cannot be resolved" in {
@@ -168,9 +176,10 @@ class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.folderContent(level1Content.folderID)).thenReturn(stubOperation(level1Content))
     val resolver = createResolver()
 
-    val ex = expectFailedFuture[IllegalArgumentException](runOpFuture(testKit,
-      resolver.resolve(components, fs, DefaultCryptConfig)))
-    ex.getMessage should include(components.tail.toString())
+    val futOp = runOpFuture(testKit, resolver.resolve(components, fs, DefaultCryptConfig))
+    recoverToExceptionIf[IllegalArgumentException](futOp) map { ex =>
+      ex.getMessage should include(components.tail.toString())
+    }
   }
 
   it should "have an empty close() function" in {
@@ -178,5 +187,6 @@ class PathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatS
 
     // We can only test that no exception is thrown.
     resolver.close()
+    succeed
   }
 }

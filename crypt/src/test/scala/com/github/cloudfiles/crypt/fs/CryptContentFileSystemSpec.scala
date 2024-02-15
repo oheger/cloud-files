@@ -17,7 +17,7 @@
 package com.github.cloudfiles.crypt.fs
 
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, Model}
+import com.github.cloudfiles.core.{FileTestHelper, Model}
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
@@ -27,15 +27,18 @@ import org.apache.pekko.util.ByteString
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => argEq}
 import org.mockito.Mockito.{doReturn, verify, when}
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
+
+import scala.concurrent.Future
 
 /**
  * Test class for ''CryptContentFileSystem''.
  */
-class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
-  with AsyncTestHelper {
+class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers
+  with MockitoSugar {
 
   import CryptFileSystemTestHelper._
 
@@ -73,7 +76,7 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.delegate.resolveFile(FileID)).thenReturn(stubOperation(orgFile))
     when(fs.delegate.patchFile(orgFile, ElementPatchSpec(patchSize = Some(CryptFileSize)))).thenReturn(patchedFile)
 
-    runOp(testKit, fs.resolveFile(FileID)) should be(patchedFile)
+    runOpFuture(testKit, fs.resolveFile(FileID)) map (_ should be(patchedFile))
   }
 
   it should "return a patched content of a folder" in {
@@ -95,13 +98,14 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
       ElementPatchSpec(patchSize = Some(ShiftCryptAlgorithm.decryptedSize(file2.size)))))
       .thenReturn(file2Patched)
 
-    val actContent = runOp(testKit, fs.folderContent(FileID))
-    actContent.folderID should be(content.folderID)
-    actContent.folders should have size 1
-    actContent.folders("folder") should be(folder)
-    actContent.files should have size 2
-    actContent.files("f1") should be(file1Patched)
-    actContent.files("f2") should be(file2Patched)
+    runOpFuture(testKit, fs.folderContent(FileID)) map { actContent =>
+      actContent.folderID should be(content.folderID)
+      actContent.folders should have size 1
+      actContent.folders("folder") should be(folder)
+      actContent.files should have size 2
+      actContent.files("f1") should be(file1Patched)
+      actContent.files("f2") should be(file2Patched)
+    }
   }
 
   it should "decrypt file content on download" in {
@@ -111,9 +115,10 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
     val fs = createCryptFileSystem()
     doReturn(operation, null).when(fs.delegate).downloadFile(FileID)
 
-    val fileSource = runOp(testKit, fs.downloadFile(FileID))
-    val fileContent = futureResult(ShiftCryptAlgorithm.concatStream(fileSource.dataBytes))
-    fileContent.utf8String should be(FileTestHelper.TestData)
+    for {
+      fileSource <- runOpFuture(testKit, fs.downloadFile(FileID))
+      fileContent <- ShiftCryptAlgorithm.concatStream(fileSource.dataBytes)
+    } yield fileContent.utf8String should be(FileTestHelper.TestData)
   }
 
   /**
@@ -128,10 +133,12 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
    * Checks whether the correct encrypted content of a file is uploaded.
    *
    * @param capSource the captor for the source
+   * @return a ''Future'' with the test assertion
    */
-  private def checkUploadSource(capSource: ArgumentCaptor[Source[ByteString, Any]]): Unit = {
-    val content = futureResult(ShiftCryptAlgorithm.concatStream(capSource.getValue))
-    content should be(ShiftCryptAlgorithm.CipherText)
+  private def checkUploadSource(capSource: ArgumentCaptor[Source[ByteString, Any]]): Future[Assertion] = {
+    ShiftCryptAlgorithm.concatStream(capSource.getValue) map { content =>
+      content should be(ShiftCryptAlgorithm.CipherText)
+    }
   }
 
   it should "encrypt the content of a file when it is created" in {
@@ -143,10 +150,12 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
       .thenReturn(patchedFile)
     when(fs.delegate.createFile(argEq(ParentID), argEq(patchedFile), any())(any())).thenReturn(stubOperation(FileID))
 
-    runOp(testKit, fs.createFile(ParentID, file, fileContentSource)) should be(FileID)
-    val captSource = ArgumentCaptor.forClass(classOf[Source[ByteString, Any]])
-    verify(fs.delegate).createFile(argEq(ParentID), argEq(patchedFile), captSource.capture())(any())
-    checkUploadSource(captSource)
+    runOpFuture(testKit, fs.createFile(ParentID, file, fileContentSource)) flatMap { result =>
+      result should be(FileID)
+      val captSource = ArgumentCaptor.forClass(classOf[Source[ByteString, Any]])
+      verify(fs.delegate).createFile(argEq(ParentID), argEq(patchedFile), captSource.capture())(any())
+      checkUploadSource(captSource)
+    }
   }
 
   it should "encrypt the content of a file when it is updated" in {
@@ -156,9 +165,10 @@ class CryptContentFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatS
     when(fs.delegate.updateFileContent(argEq(FileID), argEq(CryptFileSize), any())(any()))
       .thenReturn(stubOperation(()))
 
-    runOp(testKit, fs.updateFileContent(FileID, FileSize, fileContentSource))
-    val captSource = ArgumentCaptor.forClass(classOf[Source[ByteString, Any]])
-    verify(fs.delegate).updateFileContent(argEq(FileID), argEq(CryptFileSize), captSource.capture())(any())
-    checkUploadSource(captSource)
+    runOpFuture(testKit, fs.updateFileContent(FileID, FileSize, fileContentSource)) flatMap { _ =>
+      val captSource = ArgumentCaptor.forClass(classOf[Source[ByteString, Any]])
+      verify(fs.delegate).updateFileContent(argEq(FileID), argEq(CryptFileSize), captSource.capture())(any())
+      checkUploadSource(captSource)
+    }
   }
 }

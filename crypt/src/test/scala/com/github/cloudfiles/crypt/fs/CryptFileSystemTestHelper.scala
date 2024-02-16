@@ -17,8 +17,8 @@
 package com.github.cloudfiles.crypt.fs
 
 import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.Model
 import com.github.cloudfiles.core.http.HttpRequestSender
-import com.github.cloudfiles.core.{AsyncTestHelper, Model}
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
 import com.github.cloudfiles.crypt.service.CryptService
 import org.apache.pekko.actor.testkit.typed.scaladsl.ActorTestKit
@@ -33,7 +33,7 @@ import scala.concurrent.Future
  * A test helper module providing common functionality that is needed when
  * testing cryptographic file systems.
  */
-object CryptFileSystemTestHelper extends Matchers with AsyncTestHelper {
+object CryptFileSystemTestHelper extends Matchers {
   /** Alias for the type of files. */
   type FileType = Model.File[String]
 
@@ -134,16 +134,4 @@ object CryptFileSystemTestHelper extends Matchers with AsyncTestHelper {
     val sender = testKit.spawn(HttpRequestSender.apply("http://localhost"))
     op.run(sender)
   }
-
-  /**
-   * Executes the passed in operation and returns the result contained in the
-   * ''Future'' produced by the operation.
-   *
-   * @param testKit the actor testkit
-   * @param op      the operation to execute
-   * @tparam A the result type of the operation
-   * @return the result returned by the operation
-   */
-  def runOp[A](testKit: ActorTestKit, op: Operation[A]): A =
-    futureResult(runOpFuture(testKit, op))
 }

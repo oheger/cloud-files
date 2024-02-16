@@ -18,13 +18,13 @@ package com.github.cloudfiles.crypt.fs
 
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSystem}
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper, Model}
+import com.github.cloudfiles.core.{FileTestHelper, Model}
 import com.github.cloudfiles.crypt.fs.resolver.PathResolver
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
 import org.mockito.Mockito.{verify, verifyNoInteractions, when}
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -33,8 +33,8 @@ import java.io.IOException
 /**
  * Test class for ''CryptNamesFileSystem''.
  */
-class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with MockitoSugar
-  with AsyncTestHelper {
+class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers
+  with MockitoSugar {
 
   import CryptFileSystemTestHelper._
 
@@ -82,7 +82,7 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     when(fs.delegate.patchFolder(cryptFolder, ElementPatchSpec(patchName = Some(folder.name))))
       .thenReturn(folder)
 
-    runOp(testKit, fs.resolveFolder(FileID)) should be(folder)
+    runOpFuture(testKit, fs.resolveFolder(FileID)) map (_ should be(folder))
   }
 
   it should "fail to resolve a folder with an invalid name with a meaningful exception" in {
@@ -91,8 +91,9 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fs = createCryptFileSystem()
     when(fs.delegate.resolveFolder(FileID)).thenReturn(stubOperation(folder))
 
-    val exception = expectFailedFuture[IOException](runOpFuture(testKit, fs.resolveFolder(FileID)))
-    exception.getMessage should include(InvalidFolderName)
+    recoverToExceptionIf[IOException](runOpFuture(testKit, fs.resolveFolder(FileID))) map { exception =>
+      exception.getMessage should include(InvalidFolderName)
+    }
   }
 
   it should "resolve a file" in {
@@ -103,7 +104,7 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     when(fs.delegate.patchFile(cryptFile, ElementPatchSpec(patchName = Some(file.name))))
       .thenReturn(file)
 
-    runOp(testKit, fs.resolveFile(FileID)) should be(file)
+    runOpFuture(testKit, fs.resolveFile(FileID)) map (_ should be(file))
   }
 
   it should "fail to resolve a file with an invalid name with a meaningful exception" in {
@@ -112,8 +113,9 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fs = createCryptFileSystem()
     when(fs.delegate.resolveFile(FileID)).thenReturn(stubOperation(file))
 
-    val exception = expectFailedFuture[IOException](runOpFuture(testKit, fs.resolveFile(FileID)))
-    exception.getMessage should include(InvalidFileName)
+    recoverToExceptionIf[IOException](runOpFuture(testKit, fs.resolveFile(FileID))) map { exception =>
+      exception.getMessage should include(InvalidFileName)
+    }
   }
 
   it should "create a new folder" in {
@@ -125,7 +127,7 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .thenReturn(cryptFolder)
     when(fs.delegate.createFolder(ParentID, cryptFolder)).thenReturn(stubOperation(FileID))
 
-    runOp(testKit, fs.createFolder(ParentID, folder)) should be(FileID)
+    runOpFuture(testKit, fs.createFolder(ParentID, folder)) map (_ should be(FileID))
   }
 
   it should "create a new file" in {
@@ -138,7 +140,7 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
       .thenReturn(cryptFile)
     when(fs.delegate.createFile(ParentID, cryptFile, source)).thenReturn(stubOperation(FileID))
 
-    runOp(testKit, fs.createFile(ParentID, file, source)) should be(FileID)
+    runOpFuture(testKit, fs.createFile(ParentID, file, source)) map (_ should be(FileID))
   }
 
   it should "return the content of a folder" in {
@@ -167,7 +169,7 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     }
     when(fs.delegate.folderContent(FileID)).thenReturn(stubOperation(cryptContent))
 
-    runOp(testKit, fs.folderContent(FileID)) should be(content)
+    runOpFuture(testKit, fs.folderContent(FileID)) map (_ should be(content))
   }
 
   it should "handle invalid file names when querying the content of a folder" in {
@@ -179,8 +181,9 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fs = createCryptFileSystem()
     when(fs.delegate.folderContent(FileID)).thenReturn(stubOperation(cryptContent))
 
-    val exception = expectFailedFuture[IOException](runOpFuture(testKit, fs.folderContent(FileID)))
-    exception.getMessage should include(InvalidFileName)
+    recoverToExceptionIf[IOException](runOpFuture(testKit, fs.folderContent(FileID))) map { exception =>
+      exception.getMessage should include(InvalidFileName)
+    }
   }
 
   it should "handle invalid folder names when querying the content of a folder" in {
@@ -192,8 +195,9 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     val fs = createCryptFileSystem()
     when(fs.delegate.folderContent(FileID)).thenReturn(stubOperation(cryptContent))
 
-    val exception = expectFailedFuture[IOException](runOpFuture(testKit, fs.folderContent(FileID)))
-    exception.getMessage should include(InvalidFolderName)
+    recoverToExceptionIf[IOException](runOpFuture(testKit, fs.folderContent(FileID))) map { exception =>
+      exception.getMessage should include(InvalidFolderName)
+    }
   }
 
   it should "ignore invalid element names when querying the content of a folder if configured" in {
@@ -212,9 +216,10 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
     when(fs.delegate.patchFolder(cryptFolder, ElementPatchSpec(patchName = Some(plainFolder.name))))
       .thenReturn(plainFolder)
 
-    val content = runOp(testKit, fs.folderContent(FileID))
-    content.files should contain only (plainFile.id -> plainFile)
-    content.folders should contain only (plainFolder.id -> plainFolder)
+    runOpFuture(testKit, fs.folderContent(FileID)) map { content =>
+      content.files should contain only (plainFile.id -> plainFile)
+      content.folders should contain only (plainFolder.id -> plainFolder)
+    }
   }
 
   it should "resolve path components using the resolver" in {
@@ -246,6 +251,7 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     fs.resolvePath("") should be(operation)
     verifyNoInteractions(resolver)
+    succeed
   }
 
   it should "close the resolver in its close() implementation" in {
@@ -254,5 +260,6 @@ class CryptNamesFileSystemSpec extends ScalaTestWithActorTestKit with AnyFlatSpe
 
     fs.close()
     verify(resolver).close()
+    succeed
   }
 }

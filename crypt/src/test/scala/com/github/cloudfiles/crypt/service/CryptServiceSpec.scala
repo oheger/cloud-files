@@ -16,17 +16,19 @@
 
 package com.github.cloudfiles.crypt.service
 
-import com.github.cloudfiles.core.{AsyncTestHelper, FileTestHelper}
+import com.github.cloudfiles.core.FileTestHelper
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm
 import com.github.cloudfiles.crypt.alg.ShiftCryptAlgorithm.CipherText
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.io.IOException
 import java.security.SecureRandom
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
 object CryptServiceSpec {
@@ -34,7 +36,7 @@ object CryptServiceSpec {
   private implicit val secRandom: SecureRandom = new SecureRandom
 }
 
-class CryptServiceSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers with AsyncTestHelper {
+class CryptServiceSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers {
 
   import CryptServiceSpec._
 
@@ -43,8 +45,9 @@ class CryptServiceSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike wi
    * that the string contains only valid characters.
    *
    * @param base64 the string to be checked
+   * @return a ''Future'' with the test assertion
    */
-  private def checkBase64Encoding(base64: String): Unit = {
+  private def checkBase64Encoding(base64: String): Future[Assertion] = {
     base64.forall { c =>
       (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '='
     } shouldBe true
@@ -97,24 +100,22 @@ class CryptServiceSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike wi
    * Runs a stream with the given source and collects the resulting data.
    *
    * @param source the source
-   * @return the bytes received from the source
+   * @return a ''Future'' with the bytes received from the source
    */
-  private def runSource(source: Source[ByteString, Any]): ByteString =
-    futureResult(ShiftCryptAlgorithm.concatStream(source))
+  private def runSource(source: Source[ByteString, Any]): Future[ByteString] =
+    ShiftCryptAlgorithm.concatStream(source)
 
   it should "encrypt a source" in {
     val source = Source(FileTestHelper.TestData.grouped(32).map(ByteString(_)).toList)
     val cryptSource = CryptService.encryptSource(ShiftCryptAlgorithm, ShiftCryptAlgorithm.encryptKey, source)
 
-    val result = runSource(cryptSource)
-    result should be(CipherText)
+    runSource(cryptSource) map (_ should be(CipherText))
   }
 
   it should "decrypt a source" in {
     val source = Source(CipherText.grouped(32).toList)
     val decryptSource = CryptService.decryptSource(ShiftCryptAlgorithm, ShiftCryptAlgorithm.decryptKey, source)
 
-    val result = runSource(decryptSource)
-    result.utf8String should be(FileTestHelper.TestData)
+    runSource(decryptSource) map (_.utf8String should be(FileTestHelper.TestData))
   }
 }

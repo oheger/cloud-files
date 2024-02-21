@@ -19,13 +19,14 @@ package com.github.cloudfiles.crypt.fs.resolver
 import com.github.cloudfiles.core.FileSystem.Operation
 import com.github.cloudfiles.core.http.HttpRequestSender
 import com.github.cloudfiles.core.http.factory.Spawner
-import com.github.cloudfiles.core.{AsyncTestHelper, FileSystem, Model}
+import com.github.cloudfiles.core.{FileSystem, Model}
 import com.github.cloudfiles.crypt.fs.resolver.CachePathComponentsResolver.PathLookupCommand
 import org.apache.pekko.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, Props}
 import org.mockito.Mockito.{verify, when}
-import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.Assertion
+import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -93,8 +94,8 @@ object CachePathComponentsResolverSpec {
 /**
  * Test class for ''CachePathComponentsResolver''.
  */
-class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike with Matchers
-  with AsyncTestHelper with MockitoSugar {
+class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with AsyncFlatSpecLike with Matchers
+  with MockitoSugar {
 
   import CachePathComponentsResolverSpec._
   import com.github.cloudfiles.crypt.fs.CryptFileSystemTestHelper._
@@ -207,9 +208,14 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
     helper.prepareRootID()
       .prepareFolderContent(rootContent)
-      .resolveAndExpect(Seq(fileName(1)), fileID(1))
-      .resolveAndExpect(Seq(folderName(1)), folderID(1))
-      .verifyFolderRequestedOnce(RootID)
+
+    for {
+      _ <- helper.resolveAndExpect(Seq(fileName(1)), fileID(1))
+      _ <- helper.resolveAndExpect(Seq(folderName(1)), folderID(1))
+    } yield {
+      helper.verifyFolderRequestedOnce(RootID)
+      succeed
+    }
   }
 
   it should "request a folder only once if there are concurrent requests" in {
@@ -222,9 +228,15 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
     val futRes1 = helper.resolve(Seq(fileName(1)))
     val futRes2 = helper.resolve(Seq(fileName(2)))
     promiseFolderContent.complete(Success(rootContent))
-    futureResult(futRes1) should be(fileID(1))
-    futureResult(futRes2) should be(fileID(2))
-    helper.verifyFolderRequestedOnce(RootID)
+
+    for {
+      res1 <- futRes1
+      res2 <- futRes2
+    } yield {
+      helper.verifyFolderRequestedOnce(RootID)
+      res1 should be(fileID(1))
+      res2 should be(fileID(2))
+    }
   }
 
   it should "handle a failed request for the root folder" in {
@@ -236,8 +248,12 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
     val futRes1 = helper.resolve(Seq(fileName(1)))
     val futRes2 = helper.resolve(Seq(folderName(1)))
     promiseRoot.complete(Failure(exceptionRootFolder))
-    expectFailedFuture[IOException](futRes1) should be(exceptionRootFolder)
-    expectFailedFuture[IOException](futRes2) should be(exceptionRootFolder)
+    recoverToExceptionIf[IOException](futRes1) flatMap { ex1 =>
+      ex1 should be(exceptionRootFolder)
+      recoverToExceptionIf[IOException](futRes2) map { ex2 =>
+        ex2 should be(exceptionRootFolder)
+      }
+    }
   }
 
   it should "recover from a failure to resolve the root folder" in {
@@ -245,10 +261,11 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
     val futFailed = helper.prepareRootID(Future.failed(new IOException("Test exception: No root folder!")))
       .prepareFolderContent(createFolderContent(RootID))
       .resolve(Seq(fileName(1)))
-    expectFailedFuture[IOException](futFailed)
 
-    helper.prepareRootID()
-      .resolveAndExpect(Seq(fileName(1)), fileID(1))
+    recoverToSucceededIf[IOException](futFailed) flatMap { _ =>
+      helper.prepareRootID()
+        .resolveAndExpect(Seq(fileName(1)), fileID(1))
+    }
   }
 
   it should "handle a failed request for the content of a folder" in {
@@ -258,7 +275,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
     val futRes = helper.prepareRootID()
       .prepareFolderContentFuture(RootID, Future.failed(exception))
       .resolve(Seq(fileID(1)))
-    expectFailedFuture[IOException](futRes) should be(exception)
+    recoverToExceptionIf[IOException](futRes) map (_ should be(exception))
   }
 
   it should "handle a path that cannot be resolved" in {
@@ -268,8 +285,9 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
     val futRes = helper.prepareRootID()
       .prepareFolderContent(createFolderContent(RootID))
       .resolve(components)
-    val exception = expectFailedFuture[IllegalArgumentException](futRes)
-    exception.getMessage should include(components.mkString(","))
+    recoverToExceptionIf[IllegalArgumentException](futRes) map { exception =>
+      exception.getMessage should include(components.mkString(","))
+    }
   }
 
   it should "handle path resolve requests with multiple components" in {
@@ -296,15 +314,20 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
     val futRes2 = helper.resolve(components2)
     val futRes3 = helper.resolve(components3)
     val futRes4 = helper.resolve(components4)
-    futureResult(futRes1) should be(fileID(10))
-    futureResult(futRes2) should be(fileID(20))
-    val ex1 = expectFailedFuture[IllegalArgumentException](futRes3)
-    val ex2 = expectFailedFuture[IllegalArgumentException](futRes4)
-    ex1.getMessage should include(components3.last)
-    components4.drop(2) foreach (comp => ex2.getMessage should include(comp))
-    helper.verifyFolderRequestedOnce(rootContent.folderID)
-      .verifyFolderRequestedOnce(subContent.folderID)
-      .verifyFolderRequestedOnce(subSub1Content.folderID)
+    for {
+      res1 <- futRes1
+      res2 <- futRes2
+      ex1 <- recoverToExceptionIf[IllegalArgumentException](futRes3)
+      ex2 <- recoverToExceptionIf[IllegalArgumentException](futRes4)
+    } yield {
+      helper.verifyFolderRequestedOnce(rootContent.folderID)
+        .verifyFolderRequestedOnce(subContent.folderID)
+        .verifyFolderRequestedOnce(subSub1Content.folderID)
+      ex1.getMessage should include(components3.last)
+      components4.drop(2) foreach (comp => ex2.getMessage should include(comp))
+      res1 should be(fileID(10))
+      res2 should be(fileID(20))
+    }
   }
 
   it should "correctly encode and decode path components" in {
@@ -337,8 +360,10 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
     helper.prepareRootID()
       .prepareFolderContent(content)
-      .resolveAndExpect(components1, fileID(1))
-      .resolveAndExpect(components2, fileID(2 * CacheSize))
+
+    helper.resolveAndExpect(components1, fileID(1)) flatMap { _ =>
+      helper.resolveAndExpect(components2, fileID(2 * CacheSize))
+    }
   }
 
   it should "stop the resolver actor in its close() function in initialization phase" in {
@@ -348,6 +373,7 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
     helper.closeResolver()
     expectTerminated(resolverActor)
+    succeed
   }
 
   it should "stop the resolver actor in its close() function in request processing phase" in {
@@ -357,9 +383,11 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
 
     helper.prepareRootID()
       .prepareFolderContent(createFolderContent(RootID))
-      .resolveAndExpect(Seq(fileName(1)), fileID(1))
-      .closeResolver()
-    expectTerminated(resolverActor)
+      .resolveAndExpect(Seq(fileName(1)), fileID(1)) map { _ =>
+      helper.closeResolver()
+      expectTerminated(resolverActor)
+      succeed
+    }
   }
 
   it should "support a chunk size for decrypt operations" in {
@@ -456,12 +484,10 @@ class CachePathComponentsResolverSpec extends ScalaTestWithActorTestKit with Any
      *
      * @param components the sequence with components to resolve
      * @param expID      the expected resulting ID
-     * @return this test helper
+     * @return a ''Future'' with the test assertion
      */
-    def resolveAndExpect(components: Seq[String], expID: String): ResolverTestHelperBase = {
-      val id = futureResult(resolve(components))
-      id should be(expID)
-      this
+    def resolveAndExpect(components: Seq[String], expID: String): Future[Assertion] = {
+      resolve(components) map (_ should be(expID))
     }
 
     /**

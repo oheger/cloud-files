@@ -27,6 +27,7 @@ import org.apache.pekko.http.scaladsl.model.{HttpResponse, StatusCode, StatusCod
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Sink
 import org.apache.pekko.util.ByteString
+import org.scalatest.concurrent.Eventually
 import org.scalatest.{Assertion, BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -147,7 +148,7 @@ object WireMockSupport {
  * use case for this project). The companion object defines some useful
  * constants.
  */
-trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
+trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll with Eventually {
   this: Suite =>
 
   import WireMockSupport._
@@ -271,14 +272,10 @@ trait WireMockSupport extends BeforeAndAfterEach with BeforeAndAfterAll {
    *
    * @param testKit      the test kit
    * @param requestCount the number of requests to wait for
-   * @param maxWait      the maximum time to wait
-   * @param period       the period to check for the condition to be satisfied
    */
-  protected def waitForRequests(testKit: ActorTestKit, requestCount: Int,
-                                maxWait: FiniteDuration = DefaultMaxRequestWait,
-                                period: FiniteDuration = DefaultRequestWaitPeriod): Unit = {
-    WaitFor.condition(testKit, 3.seconds, 100.millis) {
-      wireMockServer.getAllServeEvents.size() == 2
+  protected def waitForRequests(testKit: ActorTestKit, requestCount: Int): Unit = {
+    eventually {
+      wireMockServer.getAllServeEvents.size() == requestCount
     }
   }
 

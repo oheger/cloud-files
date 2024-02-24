@@ -30,10 +30,10 @@ lazy val VersionPekkoHttp = "1.0.0"
 lazy val VersionSlf4j = "2.0.10"
 
 /** Versions of test dependencies. */
-lazy val VersionScalaTest = "3.2.17"
-lazy val VersionScalaTestMockito = "3.2.17.0"
+lazy val VersionScalaTest = "3.2.18"
+lazy val VersionScalaTestMockito = "3.2.18.0"
 lazy val VersionScalaXml = "2.2.0"
-lazy val VersionWireMock = "3.3.1"
+lazy val VersionWireMock = "3.4.1"
 
 lazy val supportedScalaVersions = List(VersionScala213, VersionScala212, VersionScala3)
 
@@ -48,7 +48,7 @@ lazy val pekkoDependencies = Seq(
 
 lazy val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % VersionScalaTest % Test,
-  "org.scalatestplus" %% "mockito-4-11" % VersionScalaTestMockito % Test,
+  "org.scalatestplus" %% "mockito-5-10" % VersionScalaTestMockito % Test,
   "org.apache.pekko" %% "pekko-actor-testkit-typed" % VersionPekko % Test,
   "org.wiremock" % "wiremock" % VersionWireMock % Test,
   "org.slf4j" % "slf4j-simple" % VersionSlf4j % Test

@@ -26,8 +26,8 @@ lazy val VersionScala3 = "3.3.1"
 
 /** Versions of compile-time dependencies. */
 lazy val VersionPekko = "1.0.2"
-lazy val VersionPekkoHttp = "1.0.0"
-lazy val VersionSlf4j = "2.0.10"
+lazy val VersionPekkoHttp = "1.0.1"
+lazy val VersionSlf4j = "2.0.12"
 
 /** Versions of test dependencies. */
 lazy val VersionScalaTest = "3.2.18"

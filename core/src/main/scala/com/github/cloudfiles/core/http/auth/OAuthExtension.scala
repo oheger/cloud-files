@@ -46,7 +46,7 @@ import scala.util.{Failure, Success, Try}
  * Token refresh operations and their outcome can be monitored, so that clients
  * can take additional actions, e.g. store a new access token for later reuse.
  */
-object OAuthExtension {
+object OAuthExtension extends AuthExtension {
   /** Parameter for the client ID. */
   private val ParamClientId = "client_id"
 
@@ -355,20 +355,5 @@ object OAuthExtension {
     }
     oauthConfig.refreshNotificationFunc(Failure(cause))
     handleRequests(requestSender, idpRequestSender, oauthConfig, currentTokens)
-  }
-
-  /**
-   * Handles the ''Stop'' message. Stops the actors this actor interacts with.
-   *
-   * @param requestSender    the underlying request sender actor
-   * @param idpRequestSender the actor to contact the IDP
-   * @return the next behavior
-   */
-  private def handleStop(requestSender: ActorRef[HttpRequestSender.HttpCommand],
-                         idpRequestSender: ActorRef[HttpRequestSender.HttpCommand]):
-  Behavior[HttpRequestSender.HttpCommand] = {
-    requestSender ! HttpRequestSender.Stop
-    idpRequestSender ! HttpRequestSender.Stop
-    Behaviors.stopped
   }
 }

@@ -28,7 +28,7 @@ import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCre
  * added to HTTP requests before they are forwarded to the actual actor
  * responsible for sending requests.
  */
-object BasicAuthExtension {
+object BasicAuthExtension extends AuthExtension {
   def apply(requestSender: ActorRef[HttpRequestSender.HttpCommand], config: BasicAuthConfig):
   Behavior[HttpRequestSender.HttpCommand] = {
     val authHeader = createAuthHeader(config)
@@ -40,8 +40,7 @@ object BasicAuthExtension {
         Behaviors.same
 
       case HttpRequestSender.Stop =>
-        requestSender ! HttpRequestSender.Stop
-        Behaviors.stopped
+        handleStop(requestSender)
     }
   }
 

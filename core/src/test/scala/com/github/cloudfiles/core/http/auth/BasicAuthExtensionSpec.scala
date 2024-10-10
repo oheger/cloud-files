@@ -42,6 +42,22 @@ class BasicAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
 
   import BasicAuthExtensionSpec._
 
+  /**
+   * Checks the properties of the actual received request against the expected
+   * ones.
+   * @param expected the expected request
+   * @param actual the actual request
+   * @return the actual request if comparison was successful
+   */
+  private def checkForwardRequest(expected: HttpRequestSender.SendRequest,
+                                  actual: HttpRequestSender.SendRequest): HttpRequestSender.SendRequest = {
+    actual.data should be(expected.data)
+    actual.replyTo should be(expected.replyTo)
+    actual.request.method should be(expected.request.method)
+    actual.request.uri should be(expected.request.uri)
+    actual
+  }
+
   "BasicAuthExtension" should "add an authorization header to requests" in {
     val requestActorProbe = testKit.createTestProbe[HttpRequestSender.HttpCommand]()
     val resultProbe = testKit.createTestProbe[HttpRequestSender.Result]()
@@ -53,12 +69,42 @@ class BasicAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecL
     val authActor = testKit.spawn(BasicAuthExtension(requestActorProbe.ref, TestAuthConfig))
 
     authActor ! request
-    val forwardRequest = requestActorProbe.expectMessageType[HttpRequestSender.SendRequest]
-    forwardRequest.data should be(request.data)
-    forwardRequest.replyTo should be(request.replyTo)
-    forwardRequest.request.method should be(httpRequest.method)
-    forwardRequest.request.uri should be(httpRequest.uri)
+
+    val forwardRequest = checkForwardRequest(request,
+      requestActorProbe.expectMessageType[HttpRequestSender.SendRequest])
     forwardRequest.request.headers should contain only(headerTest, headerAuth)
+  }
+
+  it should "keep an existing defined authorization header" in {
+    val requestActorProbe = testKit.createTestProbe[HttpRequestSender.HttpCommand]()
+    val resultProbe = testKit.createTestProbe[HttpRequestSender.Result]()
+    val headerTest = RawHeader("foo", "bar")
+    val headerAuth = Authorization(BasicHttpCredentials("other" + User, Password + "2"))
+    val httpRequest = HttpRequest(method = HttpMethods.POST, uri = Uri("/path/to/post"),
+      headers = List(headerTest, headerAuth))
+    val request = HttpRequestSender.SendRequest(httpRequest, new Object, resultProbe.ref)
+    val authActor = testKit.spawn(BasicAuthExtension(requestActorProbe.ref, TestAuthConfig))
+
+    authActor ! request
+    val forwardRequest = checkForwardRequest(request,
+      requestActorProbe.expectMessageType[HttpRequestSender.SendRequest])
+    forwardRequest.request.headers should contain only(headerTest, headerAuth)
+  }
+
+  it should "drop an empty authorization header from the request" in {
+    val requestActorProbe = testKit.createTestProbe[HttpRequestSender.HttpCommand]()
+    val resultProbe = testKit.createTestProbe[HttpRequestSender.Result]()
+    val headerTest = RawHeader("foo", "bar")
+    val headerAuth = RawHeader("authorization", "")
+    val httpRequest = HttpRequest(method = HttpMethods.PUT, uri = Uri("/path/to/put"),
+      headers = List(headerTest, headerAuth))
+    val request = HttpRequestSender.SendRequest(httpRequest, new Object, resultProbe.ref)
+    val authActor = testKit.spawn(BasicAuthExtension(requestActorProbe.ref, TestAuthConfig))
+
+    authActor ! request
+    val forwardRequest = checkForwardRequest(request,
+      requestActorProbe.expectMessageType[HttpRequestSender.SendRequest])
+    forwardRequest.request.headers should contain only headerTest
   }
 
   it should "stop the request actor when it is stopped" in {

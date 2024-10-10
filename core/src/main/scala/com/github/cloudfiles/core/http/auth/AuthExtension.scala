@@ -19,12 +19,37 @@ package com.github.cloudfiles.core.http.auth
 import com.github.cloudfiles.core.http.HttpRequestSender
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.http.scaladsl.model.headers.RawHeader
+import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpRequest}
 
 /**
  * A trait providing some common functionality that is useful for typical
  * implementations of extensions that handle authentication.
  */
 trait AuthExtension {
+  /**
+   * Adds the given auth header (typically a header of type ''Authorization'')
+   * to a request if necessary. This function checks whether the given request
+   * already contains an ''Authorization'' header. If so, the request is
+   * returned as is - except if the value of the header is empty; then it is
+   * dropped. This can be used to override the default authorization provided
+   * by this extension for single requests.
+   *
+   * @param request    the request
+   * @param authHeader the header to be added
+   * @return the modified request
+   */
+  def withAuthorization(request: HttpRequest, authHeader: => HttpHeader): HttpRequest = {
+    request.headers.find(_.is("authorization")) match {
+      case Some(auth) if auth.value().isBlank =>
+        request.withHeaders(request.headers.filterNot(_.is("authorization")))
+      case Some(_) =>
+        request
+      case None =>
+        request.withHeaders(request.headers :+ authHeader)
+    }
+  }
+
   /**
    * Handles a command to stop this extension by stopping all the provided
    * managed actors and returning the stopped behavior.

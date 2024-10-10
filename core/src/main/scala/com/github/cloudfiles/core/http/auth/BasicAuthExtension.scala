@@ -34,7 +34,7 @@ object BasicAuthExtension extends AuthExtension {
     val authHeader = createAuthHeader(config)
     Behaviors.receiveMessagePartial {
       case request: HttpRequestSender.SendRequest =>
-        val authHttpRequest = request.request.withHeaders(request.request.headers :+ authHeader)
+        val authHttpRequest = withAuthorization(request.request, authHeader)
         val authRequest = request.copy(request = authHttpRequest)
         requestSender ! authRequest
         Behaviors.same

@@ -69,6 +69,9 @@ object OneDriveFileSystemITSpec {
   /** Constant for the Accept header. */
   private val HeaderAccept = "Accept"
 
+  /** Constant for the Authorization header. */
+  private val HeaderAuthorization = "Authorization"
+
   /** Constant for the JSON content type for the accept header. */
   private val ContentJson = "application/json"
 
@@ -418,6 +421,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
         .willReturn(aResponse().withStatus(StatusCodes.Found.intValue)
           .withHeader("Location", WireMockSupport.serverUri(server, DownloadUri))))
       server.stubFor(get(urlPathEqualTo(DownloadUri))
+        .withHeader(HeaderAuthorization, equalTo(""))
         .willReturn(aResponse().withStatus(StatusCodes.OK.intValue)
           .withBody(FileTestHelper.TestData)))
       val fs = new OneDriveFileSystem(createConfig())
@@ -494,6 +498,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
             val rangeHeader = s"bytes $startRange-$endRange/${Content.length}"
             val lastChunk = endRange == Content.length - 1
             server.stubFor(put(urlPathEqualTo(UploadUri))
+              .withHeader(HeaderAuthorization, equalTo(""))
               .withHeader("Content-Range", equalTo(rangeHeader))
               .withRequestBody(equalTo(t._1))
               .willReturn(aJsonResponse(if (lastChunk) StatusCodes.Created else StatusCodes.Accepted)
@@ -580,6 +585,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
           .withBody(uploadSessionResponse(server))))
       val range = s"bytes 0-${FileTestHelper.TestData.length - 1}/${FileTestHelper.TestData.length()}"
       server.stubFor(put(urlPathEqualTo(UploadUri))
+        .withHeader(HeaderAuthorization, equalTo(""))
         .withHeader("Content-Range", equalTo(range))
         .withRequestBody(equalTo(FileTestHelper.TestData))
         .willReturn(aJsonResponse(StatusCodes.Created)
@@ -704,7 +710,7 @@ class OneDriveFileSystemITSpec extends ScalaTestWithActorTestKit with AsyncFlatS
             .willReturn(aJsonResponse()
               .withBody(uploadSessionResponse(uploadServer))))
           uploadServer.stubFor(put(urlPathEqualTo(UploadUri))
-            .withHeader("Authorization", AbsentPattern.ABSENT)
+            .withHeader("Authorization", equalTo(""))
             .willReturn(aJsonResponse(StatusCodes.Created)
               .withBodyFile("upload_complete_response.json")))
           val proxy = ProxySupport.withProxy(proxySpec)

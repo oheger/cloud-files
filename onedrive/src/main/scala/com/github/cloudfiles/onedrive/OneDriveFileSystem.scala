@@ -22,7 +22,7 @@ import com.github.cloudfiles.core.delegate.{ElementPatchSpec, ExtensibleFileSyst
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode
 import com.github.cloudfiles.core.http.HttpRequestSender.DiscardEntityMode.DiscardEntityMode
 import com.github.cloudfiles.core.http.ProxySupport.{ProxySelectorFunc, SystemProxy}
-import com.github.cloudfiles.core.http.auth.{OAuthConfig, OAuthExtension}
+import com.github.cloudfiles.core.http.auth.{AuthExtension, OAuthConfig, OAuthExtension}
 import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, UriEncodingHelper}
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -469,7 +469,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
     val location = downloadUriResponse.response.header[Location]
     location match {
       case Some(downloadUri) =>
-        val request = HttpRequest(uri = downloadUri.uri)
+        val request = HttpRequest(uri = downloadUri.uri, headers = List(AuthExtension.EmptyAuthHeader))
         executeRequest(httpSender, request, discardMode = DiscardEntityMode.OnFailure)
       case None =>
         Future.failed(

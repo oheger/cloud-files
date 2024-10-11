@@ -17,6 +17,7 @@
 package com.github.cloudfiles.onedrive
 
 import com.github.cloudfiles.core.http.HttpRequestSender
+import com.github.cloudfiles.core.http.auth.AuthExtension
 import com.github.cloudfiles.onedrive.OneDriveJsonProtocol._
 import com.github.cloudfiles.onedrive.OneDriveUpload.UploadStreamCoordinatorActor.{NextUploadChunk, UploadChunk, UploadStreamCoordinationMessage}
 import org.apache.pekko.actor.typed.scaladsl.AskPattern._
@@ -432,10 +433,10 @@ private object OneDriveUpload {
     val requestSource = createUploadRequestsSource(config, fileSize, fileSource, uploadUri)
     val sink = Sink.last[UploadChunkResponse]
     requestSource.mapAsync(1) { req =>
-      HttpRequestSender.sendRequestSuccess(httpSender, req)
-    }.mapAsync(1) { result =>
-      Unmarshal(result.response).to[UploadChunkResponse]
-    }.runWith(sink)
+        HttpRequestSender.sendRequestSuccess(httpSender, req)
+      }.mapAsync(1) { result =>
+        Unmarshal(result.response).to[UploadChunkResponse]
+      }.runWith(sink)
       .flatMap { response =>
         response.id match {
           case Some(id) => Future.successful(id)
@@ -478,7 +479,11 @@ private object OneDriveUpload {
    */
   private def createUploadRequest(uploadUri: Uri, chunkStart: Long, chunkEnd: Long, totalSize: Long,
                                   dataSource: Source[ByteString, Any]): HttpRequest =
-    HttpRequest(method = HttpMethods.PUT, uri = uploadUri,
-      headers = List(ContentRangeHeader.fromChunk(chunkStart, chunkEnd, totalSize)),
+    HttpRequest(method = HttpMethods.PUT,
+      uri = uploadUri,
+      headers = List(
+        ContentRangeHeader.fromChunk(chunkStart, chunkEnd, totalSize),
+        AuthExtension.EmptyAuthHeader
+      ),
       entity = HttpEntity(ContentTypes.`application/octet-stream`, chunkEnd - chunkStart + 1, dataSource))
 }

@@ -119,7 +119,7 @@ object OAuthExtension extends AuthExtension {
         if (usesCurrentToken(request, currentTokens.accessToken)) {
           refreshing(requestSender, idpRequestSender, oauthConfig, currentTokens, List(data))
         } else {
-          context.self ! data
+          reprocess(context, data)
           Behaviors.same
         }
 
@@ -231,11 +231,8 @@ object OAuthExtension extends AuthExtension {
    * @param token   the current access token
    * @return the updated request
    */
-  private def addAuthorization(request: HttpRequest, token: String): HttpRequest = {
-    val orgHeaders = request.headers.filterNot(_.is("authorization"))
-    val auth = Authorization(OAuth2BearerToken(token))
-    request.withHeaders(auth :: orgHeaders.toList)
-  }
+  private def addAuthorization(request: HttpRequest, token: String): HttpRequest =
+    withAuthorization(request, Authorization(OAuth2BearerToken(token)))
 
   /**
    * Checks whether the given request has the current access token set in its
@@ -324,7 +321,7 @@ object OAuthExtension extends AuthExtension {
                            pendingRequests: List[SendRequest],
                            newTokens: OAuthTokenData): Behavior[HttpRequestSender.HttpCommand] = {
     pendingRequests foreach { pr =>
-      context.self ! pr
+      reprocess(context, pr)
     }
     oauthConfig.refreshNotificationFunc(Success(newTokens))
     handleRequests(requestSender, idpRequestSender, oauthConfig, newTokens)
@@ -355,5 +352,17 @@ object OAuthExtension extends AuthExtension {
     }
     oauthConfig.refreshNotificationFunc(Failure(cause))
     handleRequests(requestSender, idpRequestSender, oauthConfig, currentTokens)
+  }
+
+  /**
+   * Sends the given request to self, making sure that it gets processed anew.
+   * To make sure that this happens, any existing ''Authorization'' header
+   * needs to be removed.
+   *
+   * @param context the context of this actor
+   * @param request the request to be reprocessed
+   */
+  private def reprocess(context: ActorContext[HttpRequestSender.HttpCommand], request: SendRequest): Unit = {
+    context.self ! request.copy(request = dropAuthorization(request.request))
   }
 }

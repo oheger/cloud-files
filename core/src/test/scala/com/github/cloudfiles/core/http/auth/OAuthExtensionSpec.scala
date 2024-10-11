@@ -26,7 +26,7 @@ import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.actor.{ActorSystem, DeadLetter}
 import org.apache.pekko.http.scaladsl.model.Uri.Query
 import org.apache.pekko.http.scaladsl.model._
-import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken, RawHeader}
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials, OAuth2BearerToken, RawHeader}
 import org.apache.pekko.stream.scaladsl.Sink
 import org.apache.pekko.util.ByteString
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -125,7 +125,7 @@ object OAuthExtensionSpec {
    */
   private def createAuthorizedTestRequest(accessToken: String = TestTokens.accessToken): HttpRequest = {
     val headerAuth = Authorization(OAuth2BearerToken(accessToken))
-    val newHeaders = headerAuth :: TestRequest.headers.toList
+    val newHeaders = TestRequest.headers :+ headerAuth
     TestRequest.withHeaders(newHeaders)
   }
 
@@ -265,6 +265,37 @@ class OAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
     val fwdRequest = request.copy(data = request)
     val result = HttpRequestSender.SuccessResult(fwdRequest, HttpResponse(status = StatusCodes.Accepted))
     val stubs = List(StubData(createAuthorizedTestRequest(), result))
+    val helper = new ExtensionTestHelper(stubs, Nil)
+
+    helper.sendTestRequest(request)
+    val response = probe.expectMessageType[HttpRequestSender.SuccessResult]
+    checkRequest(request, response.request)
+    response.response should be(result.response)
+  }
+
+  it should "drop an empty Authorization header" in {
+    val probe = testKit.createTestProbe[HttpRequestSender.Result]()
+    val httpRequestWithEmptyAuth = TestRequest.withHeaders(TestRequest.headers :+ AuthExtension.EmptyAuthHeader)
+    val request = createSendRequest(probe, httpRequestWithEmptyAuth)
+    val fwdRequest = request.copy(data = request)
+    val result = HttpRequestSender.SuccessResult(fwdRequest, HttpResponse(status = StatusCodes.Accepted))
+    val stubs = List(StubData(TestRequest, result))
+    val helper = new ExtensionTestHelper(stubs, Nil)
+
+    helper.sendTestRequest(request)
+    val response = probe.expectMessageType[HttpRequestSender.SuccessResult]
+    checkRequest(request, response.request)
+    response.response should be(result.response)
+  }
+
+  it should "pass an existing Authorization header through" in {
+    val probe = testKit.createTestProbe[HttpRequestSender.Result]()
+    val authHeader = Authorization(BasicHttpCredentials("scott", "tiger"))
+    val httpRequestAuth = TestRequest.withHeaders(TestRequest.headers :+ authHeader)
+    val request = createSendRequest(probe, httpRequestAuth)
+    val fwdRequest = request.copy(data = request)
+    val result = HttpRequestSender.SuccessResult(fwdRequest, HttpResponse(status = StatusCodes.OK))
+    val stubs = List(StubData(httpRequestAuth, result))
     val helper = new ExtensionTestHelper(stubs, Nil)
 
     helper.sendTestRequest(request)

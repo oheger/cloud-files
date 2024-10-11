@@ -22,11 +22,26 @@ import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpRequest}
 
+object AuthExtension {
+  /** Constant for the name of the authorization header. */
+  private final val AuthorizationHeaderName = "authorization"
+
+  /**
+   * Constant for an empty authorization header. This header can be added to a
+   * request to disable the automatic authorization provided by an extension
+   * for this single request.
+   */
+  final val EmptyAuthHeader = RawHeader(AuthorizationHeaderName, "")
+}
+
 /**
  * A trait providing some common functionality that is useful for typical
  * implementations of extensions that handle authentication.
  */
 trait AuthExtension {
+
+  import AuthExtension._
+
   /**
    * Adds the given auth header (typically a header of type ''Authorization'')
    * to a request if necessary. This function checks whether the given request
@@ -40,15 +55,25 @@ trait AuthExtension {
    * @return the modified request
    */
   def withAuthorization(request: HttpRequest, authHeader: => HttpHeader): HttpRequest = {
-    request.headers.find(_.is("authorization")) match {
+    request.headers.find(_.is(AuthorizationHeaderName)) match {
       case Some(auth) if auth.value().isBlank =>
-        request.withHeaders(request.headers.filterNot(_.is("authorization")))
+        dropAuthorization(request)
       case Some(_) =>
         request
       case None =>
         request.withHeaders(request.headers :+ authHeader)
     }
   }
+
+  /**
+   * Drops an existing ''Authorization'' header from the given request. If no
+   * such header exists, the request is returned without changes.
+   *
+   * @param request the request
+   * @return the request without an ''Authorization'' header
+   */
+  def dropAuthorization(request: HttpRequest): HttpRequest =
+    request.withHeaders(request.headers.filterNot(_.is(AuthorizationHeaderName)))
 
   /**
    * Handles a command to stop this extension by stopping all the provided

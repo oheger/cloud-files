@@ -242,6 +242,7 @@ class OneDriveFileSystem(val config: OneDriveConfig)
     httpSender =>
       val createUrl = itemUri(parent) + ChildrenSuffix
       val writableItem = toWritableItem(itemFor(folder))
+        .copy(fileSystemInfo = None) // A FileSystemInfo is obviously not allowed for new folders.
       for {
         entity <- prepareJsonRequestEntity(writableItem)
         request = jsonRequest(method = HttpMethods.POST, uri = createUrl, entity = entity)

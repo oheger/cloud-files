@@ -3,6 +3,14 @@
 This page contains information about the changes between the different versions
 of the CloudFiles library.
 
+== Release 0.8 (TBD)
+
+* Added README files as documentation for the single modules.
+* The extensions for authentication in the `core` module now support overriding the generated `Authorization` header for single requests.
+* Fixed problems with the `OneDrive` implementation that suddenly occurred. Obviously, there had been some issues with interacting with the OneDrive API that were revealed by implementation changes on OneDrive side:
+** When sending requests to download or upload file data, no `Authorization` header must be present; otherwise, OneDrive responds with a 401 Unauthorized failure status. Dropping the header could be achieved with the mentioned changes made on the authentication extensions.
+** The data model defined in `OneDriveJsonProtocol` has been tweaked to match real responses sent by OneDrive. Especially, the `id` property in `Identity` objects is no longer mandatory. OneDrive does not provide this information in some cases.
+
 == Release 0.7.1 (2023-11-24)
 
 * Fixed OSGi metadata for some projects that was not correctly generated in the 0.7 release.

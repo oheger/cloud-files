@@ -49,13 +49,16 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
 
   /**
    * A data class representing an identity. This is used to store information
-   * about actors that did something with drive items.
+   * about actors that did something with drive items. The fields available in
+   * a concrete case depend on the type of actor that is represented.
    *
-   * @param id          the ID of this identity
-   * @param displayName a human-readable name of this identity
+   * @param id          the ID of this identity if available
+   * @param displayName a human-readable name of this identity if available
+   * @param email       an email address of this identity if available
    */
-  case class Identity(id: String,
-                      displayName: Option[String])
+  case class Identity(id: Option[String],
+                      displayName: Option[String],
+                      email: Option[String])
 
   case class IdentitySet(application: Option[Identity],
                          device: Option[Identity],
@@ -280,7 +283,7 @@ object OneDriveJsonProtocol extends DefaultJsonProtocol {
   }
 
   implicit val hashesFormat: RootJsonFormat[Hashes] = jsonFormat3(Hashes.apply)
-  implicit val identityFormat: RootJsonFormat[Identity] = jsonFormat2(Identity.apply)
+  implicit val identityFormat: RootJsonFormat[Identity] = jsonFormat3(Identity.apply)
   implicit val identitySetFormat: RootJsonFormat[IdentitySet] = jsonFormat4(IdentitySet.apply)
   implicit val fileFormat: RootJsonFormat[File] = jsonFormat2(File.apply)
   implicit val folderFormat: RootJsonFormat[Folder] = jsonFormat1(Folder.apply)

@@ -21,7 +21,7 @@
         },
         "user": {
           "displayName": "Test User",
-          "id": "xxxyyyzzz1234567"
+          "email": "test.user@example.com"
         }
       },
       "lastModifiedBy": {

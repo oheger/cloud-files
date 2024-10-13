@@ -72,9 +72,10 @@ class OneDriveJsonProtocolSpec extends AnyFlatSpec with Matchers with FileTestHe
     val folderData = folder.folder.get
     folderData.childCount should be(1)
     val folderCreated = folder.createdBy
-    folderCreated.device.map(_.id) should be(Some("18400086c36a98"))
+    folderCreated.device.flatMap(_.id) should be(Some("18400086c36a98"))
     folderCreated.application.flatMap(_.displayName) should be(Some("MSOffice15"))
     folderCreated.user.flatMap(_.displayName) should be(Some("Test User"))
+    folderCreated.user.flatMap(_.email) should be(Some("test.user@example.com"))
     folderCreated.group should be(None)
     val folderParent = folder.parentReference.get
     folderParent.driveId should be("xxxyyyzzz1234567")

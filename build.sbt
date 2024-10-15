@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import com.typesafe.sbt.osgi.{OsgiKeys, SbtOsgi}
+import com.github.sbt.osgi.OsgiKeys
 
 /** The version of this project. */
 lazy val CloudFilesVersion = "0.8-SNAPSHOT"

@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-addSbtPlugin("com.typesafe.sbt" % "sbt-osgi" % "0.9.6")
+addSbtPlugin("com.github.sbt" % "sbt-osgi" % "0.10.0")

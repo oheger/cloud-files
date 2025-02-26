@@ -20,9 +20,9 @@ import com.github.sbt.osgi.OsgiKeys
 lazy val CloudFilesVersion = "0.9-SNAPSHOT"
 
 /** Supported Scala versions. */
-lazy val VersionScala213 = "2.13.15"
+lazy val VersionScala213 = "2.13.16"
 lazy val VersionScala212 = "2.12.20"
-lazy val VersionScala3 = "3.3.4"
+lazy val VersionScala3 = "3.3.5"
 
 /** Versions of compile-time dependencies. */
 lazy val VersionPekko = "1.1.3"

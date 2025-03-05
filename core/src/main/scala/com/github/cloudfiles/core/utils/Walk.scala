@@ -75,6 +75,35 @@ object Walk {
   }
 
   /**
+   * Returns a [[Source]] to iterate over a folder structure in depth-first
+   * search order.
+   *
+   * @param fileSystem the [[FileSystem]] that is the target of the iteration
+   * @param httpActor  the actor for sending HTTP requests
+   * @param rootID     the ID of the root folder of the iteration
+   * @param system     the actor system
+   * @tparam ID     the type of element IDs
+   * @tparam FILE   the type for files
+   * @tparam FOLDER the type for folders
+   * @return the [[Source]] with the encountered elements
+   */
+  def dfsSource[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](fileSystem: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
+                                httpActor: ActorRef[HttpRequestSender.HttpCommand],
+                                rootID: ID)
+                               (implicit system: ActorSystem[_]): Source[Model.Element[ID], NotUsed] = {
+    val walkSource = new WalkSource(fileSystem, httpActor, rootID) {
+      override type WalkState = DfsState[ID, FILE, FOLDER]
+
+      override protected val walkFunc: WalkFunc[ID, FILE, FOLDER, WalkState] = walkDfs
+
+      override protected def initialState: WalkState = DfsState(List.empty, Map.empty)
+    }
+
+    Source.fromGraph(walkSource)
+  }
+
+  /**
    * Definition of a function that controls the iteration over the folder 
    * structure. The function operates on a specific state that is managed by 
    * the source implementation. It is passed such a state object and a list
@@ -99,6 +128,69 @@ object Walk {
   private case class BfsState[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](currentFolderElements: List[Model.Element[ID]],
                                 foldersToProcess: Queue[Model.FolderContent[ID, FILE, FOLDER]])
+
+  /**
+   * A data class to store information about the currently processed folder in
+   * depth-first search iteration order.
+   *
+   * @param currentID the ID of the current folder
+   * @param elements  the remaining list of elements to iterate over
+   * @param folderIDs a set with the IDs of folder elements
+   * @tparam ID     the type of IDs of elements
+   * @tparam FILE   the type of files
+   * @tparam FOLDER the type of folders
+   */
+  private case class DfsCurrentFolder[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](currentID: ID,
+                                elements: List[Model.Element[ID]],
+                                folderIDs: Set[ID]) {
+    /**
+     * Returns a flag whether the given element is a folder.
+     *
+     * @param element the element in question
+     * @return '''true''' if this element is a folder; '''false''' otherwise
+     */
+    def isFolder(element: Model.Element[ID]): Boolean = folderIDs.contains(element.id)
+
+    /**
+     * Returns an [[Option]] with the ID of the next folder in the list of
+     * elements to be processed. This is used to determine which folder content
+     * should be retrieved next.
+     *
+     * @return an optional ID of the next folder in the processing list
+     */
+    def nextFolderID: Option[ID] =
+      elements.collectFirst {
+        case e if isFolder(e) => e.id
+      }
+
+    /**
+     * Returns an updated instance with the current element dropped and an
+     * [[Option]] with this current element. With this function, a single step
+     * of the iteration is performed.
+     *
+     * @return a tuple with the optional next element and the updated folder
+     */
+    def processNextElement(): (Option[Model.Element[ID]], DfsCurrentFolder[ID, FILE, FOLDER]) =
+      elements match {
+        case h :: t => (Some(h), copy(elements = t))
+        case Nil => (None, this)
+      }
+  }
+
+  /**
+   * A data class holding the state of an iteration in DFS order.
+   *
+   * @param activeFolders   the folders that are currently processed
+   * @param resolvedFolders a map with the folders whose content has already
+   *                        been resolved
+   * @tparam ID     the type of IDs of elements
+   * @tparam FILE   the type of files
+   * @tparam FOLDER the type of folders
+   */
+  private case class DfsState[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](activeFolders: List[DfsCurrentFolder[ID, FILE, FOLDER]],
+                                resolvedFolders: Map[ID, Model.FolderContent[ID, FILE, FOLDER]])
 
   /**
    * Implementation of a [[Source]] that produces the data of a walk operation
@@ -278,5 +370,86 @@ object Walk {
             None
         }
     }
+  }
+
+  /**
+   * A concrete [[WalkFunc]] for iterating over a folder structure in
+   * depth-first search.
+   *
+   * @param state    the current walk state
+   * @param contents the contents of resolved folders
+   * @tparam ID     the type of element IDs
+   * @tparam FILE   the type for files
+   * @tparam FOLDER the type for folders
+   * @return information to continue the walk operation
+   */
+  private def walkDfs[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](state: DfsState[ID, FILE, FOLDER],
+                                contents: Iterable[Model.FolderContent[ID, FILE, FOLDER]]):
+  Option[(DfsState[ID, FILE, FOLDER], Option[Model.Element[ID]], List[ID])] = {
+    val nextResolvedFolders = state.resolvedFolders ++ contents.map(c => c.folderID -> c)
+
+    state.activeFolders match {
+      case current :: nextElements =>
+        val (optNext, updatedCurrent) = current.processNextElement()
+        optNext match {
+          case optElem@Some(element) if current.isFolder(element) =>
+            val (nextCurrent, optFirstFolderID) = prepareFolderForDfs(nextResolvedFolders(element.id))
+            val nextState = state.copy(
+              activeFolders = nextCurrent :: updatedCurrent :: nextElements,
+              resolvedFolders = nextResolvedFolders
+            )
+            val foldersToResolve = List(optFirstFolderID, updatedCurrent.nextFolderID).flatten
+            Some(nextState, optElem, foldersToResolve)
+
+          case optElem@Some(_) =>
+            val nextState = state.copy(
+              activeFolders = updatedCurrent :: nextElements,
+              resolvedFolders = nextResolvedFolders
+            )
+            Some(nextState, optElem, Nil)
+
+          case None =>
+            val nextState = state.copy(
+              activeFolders = nextElements,
+              resolvedFolders = nextResolvedFolders - current.currentID
+            )
+            Some(nextState, None, Nil)
+        }
+
+      case Nil if nextResolvedFolders.nonEmpty =>
+        // This is the initial state.
+        val (nextCurrent, optFirstFolderID) = prepareFolderForDfs(nextResolvedFolders.values.head)
+        val nextState = state.copy(
+          activeFolders = List(nextCurrent),
+          resolvedFolders = nextResolvedFolders
+        )
+        val foldersToResolve = optFirstFolderID.fold(List.empty[ID])(f => List(f))
+        Some(nextState, None, foldersToResolve)
+
+      case Nil =>
+        None
+    }
+  }
+
+  /**
+   * Creates a new [[DfsCurrentFolder]] object for the given folder to continue
+   * the iteration with this element. Also, returns an [[Option]] with the
+   * first folder ID in the list of elements in this folder, which has to be
+   * resolved next.
+   *
+   * @param content the content of the next current folder
+   * @return a tuple with the new current DFS folder and an optional ID of a
+   *         folder whose content should be retrieved
+   */
+  private def prepareFolderForDfs[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](content: Model.FolderContent[ID, FILE, FOLDER]):
+  (DfsCurrentFolder[ID, FILE, FOLDER], Option[ID]) = {
+    val nextFolder = DfsCurrentFolder[ID, FILE, FOLDER](
+      content.folderID,
+      content.files.values.toList ::: content.folders.values.toList,
+      content.folders.keySet
+    )
+    (nextFolder, nextFolder.nextFolderID)
   }
 }

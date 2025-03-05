@@ -327,4 +327,73 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
       forAll(pathLevels.zip(compareLevels)) { t => t._1 should be <= t._2 }
     }
   }
+
+  it should "return all files in the scanned DFS directory structure" in {
+    val fileData = setUpDirectoryStructure()
+    val allFiles = fileData.values.flatten.toSeq
+
+    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+    runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFile])).map { files =>
+      files map (_.id) should contain theSameElementsAs allFiles
+    }
+  }
+
+  it should "return all folders in the scanned DFS directory structure" in {
+    val fileData = setUpDirectoryStructure()
+    val expectedFolders = fileData.keySet - testDirectory
+
+    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+    runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFolder])).map { folders =>
+      folders map (_.id) should contain theSameElementsAs expectedFolders
+    }
+  }
+
+  it should "process the files of a directory before sub dirs in DFS mode" in {
+    def indexOfFile(files: Seq[WalkItem], name: String): Int =
+      files.indexWhere(_.id.toString endsWith name)
+
+    setUpDirectoryStructure()
+    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+
+    runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFile])).map { files =>
+      val idxSettings = indexOfFile(files, "medium1.settings")
+      val idxSong = indexOfFile(files, "medium1Song1.mp3")
+      idxSettings should be < idxSong
+    }
+  }
+
+  it should "support an empty iteration in DFS order" in {
+    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+
+    runSource(source).map { elements =>
+      elements shouldBe empty
+    }
+  }
+
+  it should "support iteration in DFS order" in {
+    @tailrec def mapToParent(p: Path): Int =
+      if (testDirectory == p) 0
+      else if ("medium1" == p.getFileName.toString) 1
+      else if ("medium2" == p.getFileName.toString) 2
+      else mapToParent(p.getParent)
+
+    def filterByParent(p: Path): Boolean = {
+      val medium = mapToParent(p)
+      medium == 1 || medium == 2
+    }
+
+    setUpDirectoryStructure()
+    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+
+    runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFile])).map { files =>
+      val parentIndices = files.map(_.id)
+        .filter(filterByParent)
+        .map(mapToParent)
+      val (parentChanges, _) = parentIndices.foldLeft((0, 0)) { (s, e) =>
+        if (s._2 == e) s else (s._1 + 1, e)
+      }
+      // all elements under a given parent should be listed in a series
+      parentChanges should be(2)
+    }
+  }
 }

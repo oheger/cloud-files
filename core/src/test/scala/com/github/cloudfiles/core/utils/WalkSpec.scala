@@ -51,6 +51,15 @@ object WalkSpec {
   type WalkFolderContent = Model.FolderContent[Path, WalkFile, WalkFolder]
 
   /**
+   * The name of a folder which causes the test file system implementation to
+   * throw an error. This is used for testing error handling.
+   */
+  private val ErrorFolderName = "error"
+
+  /** The message of the test exception thrown for the error folder. */
+  private val TestExceptionMessage = "Test exception: Processing of folder failed."
+
+  /**
    * Creates a file element in the iteration from the given file.
    *
    * @param file the file
@@ -222,6 +231,10 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
                                 (implicit system: typed.ActorSystem[_]): FileSystem.Operation[WalkFolderContent] =
         Operation { _ =>
           Future {
+            if (id.getFileName.toString == ErrorFolderName) {
+              throw new IllegalStateException(TestExceptionMessage)
+            }
+
             val children = id.toFile.listFiles()
             val (subFiles, subFolders) = children.partition(_.isFile)
             val contentFiles = subFiles.map { f =>
@@ -292,7 +305,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
       val folder = Files.createDirectory(root.resolve(s"sub$idx"))
       writeFileContent(folder.resolve(s"testFile$idx.txt"), s"This is test file $idx.")
     }
-    val expectedNames = (1 to FolderCount).flatMap { idx => List(s"sub$idx", s"testFile$idx.txt")}
+    val expectedNames = (1 to FolderCount).flatMap { idx => List(s"sub$idx", s"testFile$idx.txt") }
 
     val source = Walk.bfsSource(createFileSystem(), null, testDirectory)
 
@@ -395,5 +408,15 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
       // all elements under a given parent should be listed in a series
       parentChanges should be(2)
     }
+  }
+
+  it should "fail the source if there is an error when executing a file system operation" in {
+    val folders = setUpDirectoryStructure().keySet
+    Files.createDirectory(folders.last.resolve(ErrorFolderName))
+    val source = Walk.bfsSource(createFileSystem(), null, testDirectory)
+
+    recoverToExceptionIf[IllegalStateException] {
+      runSource(source)
+    }.map(_.getMessage should be(TestExceptionMessage))
   }
 }

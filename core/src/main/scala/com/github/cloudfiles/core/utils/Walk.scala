@@ -27,6 +27,7 @@ import org.apache.pekko.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
 import scala.annotation.tailrec
 import scala.collection.immutable.Queue
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 /**
  * A module providing functionality to iterate over a folder structure in a
@@ -271,7 +272,7 @@ object Walk {
               .map { folderID =>
                 val operation = fileSystem.folderContent(folderID)
                 operation.run(httpActor)
-              }).foreach(resolvedFoldersCallback.invoke)
+              }).onComplete(resolvedFoldersCallback.invoke)
             resolveInProgress = true
             foldersToResolve = foldersToResolve.drop(ResolveFoldersChunkSize)
             true
@@ -280,15 +281,20 @@ object Walk {
 
         /**
          * Handles a result of a resolve operation on folders. Stores the
-         * folder contents and continues with the iteration if possible.
+         * folder contents and continues with the iteration if possible. In
+         * case of a failure, this [[Source]] completes with an error.
          *
-         * @param contents the resolved folder contents
+         * @param triedContents the [[Try]] with the resolved folder contents
          */
-        private def onFoldersResolved(contents: Vector[Model.FolderContent[ID, FILE, FOLDER]]): Unit = {
-          resolveInProgress = false
-          resolvedFolders = contents
-          continueWalking()
-        }
+        private def onFoldersResolved(triedContents: Try[Vector[Model.FolderContent[ID, FILE, FOLDER]]]): Unit =
+          triedContents match {
+            case Success(contents) =>
+              resolveInProgress = false
+              resolvedFolders = contents
+              continueWalking()
+            case Failure(exception) =>
+              failStage(exception)
+          }
 
         /**
          * Checks whether currently data is available that can be pushed

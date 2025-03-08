@@ -69,7 +69,11 @@ object Walk {
 
       override protected val walkFunc: WalkFunc[ID, FILE, FOLDER, WalkState] = walkBfs
 
-      override protected def initialState: WalkState = BfsState(List.empty, Queue.empty)
+      override protected def initWalk(rootFolder: Model.FolderContent[ID, FILE, FOLDER]): (WalkState, Iterable[ID]) = {
+        val initState = BfsState(List.empty, Queue(rootFolder.folderID), Map(rootFolder.folderID -> rootFolder))
+        val foldersToResolve = rootFolder.folders.keySet
+        (initState, foldersToResolve)
+      }
     }
 
     Source.fromGraph(walkSource)
@@ -98,37 +102,90 @@ object Walk {
 
       override protected val walkFunc: WalkFunc[ID, FILE, FOLDER, WalkState] = walkDfs
 
-      override protected def initialState: WalkState = DfsState(List.empty, Map.empty)
+      override protected def initWalk(rootFolder: Model.FolderContent[ID, FILE, FOLDER]): (WalkState, Iterable[ID]) = {
+        val (nextCurrent, optFirstFolderID) = prepareFolderForDfs(rootFolder)
+        val initState = DfsState(
+          activeFolders = List(nextCurrent),
+          resolvedFolders = Map(rootFolder.folderID -> rootFolder)
+        )
+        val foldersToResolve = optFirstFolderID.fold(List.empty[ID])(f => List(f))
+        (initState, foldersToResolve)
+      }
     }
 
     Source.fromGraph(walkSource)
   }
 
   /**
+   * A trait representing the root of a hierarchy for different results of the
+   * function that handles the iteration. This allows to distinguish between
+   * different states of the iteration and how this source implementation needs
+   * to behave.
+   *
+   * @tparam ID    the ID type of the elements in the iteration
+   * @tparam STATE the type of the iteration state
+   */
+  private sealed trait WalkFuncResult[+ID, +STATE]
+
+  /**
+   * A special [[WalkFuncResult]] for the case that the iteration can continue.
+   * The source implementation has to handle the provided data (which can be
+   * empty) and then invokes the walk function again.
+   *
+   * @param nextState        the next iteration state
+   * @param optNextElement   an optional element to push downstream
+   * @param foldersToResolve a list with the IDs of folders whose content can
+   *                         be resolved
+   * @tparam ID    the ID type of the elements in the iteration
+   * @tparam STATE the type of the iteration state
+   */
+  private case class WalkProceed[ID, STATE](nextState: STATE,
+                                            optNextElement: Option[Model.Element[ID]],
+                                            foldersToResolve: List[ID]) extends WalkFuncResult[ID, STATE]
+
+  /**
+   * A special [[WalkFuncResult]] for the case that the iteration can currently
+   * not continue because the content of folders needs to be resolved first.
+   * The source implementation will call the walk function again only after new
+   * folder content results are available.
+   */
+  private case object WalkFoldersPending extends WalkFuncResult[Nothing, Nothing]
+
+  /**
+   * A special [[WalkFuncResult]] to indicate that the iteration is now done.
+   * This causes the source implementation to complete the stream.
+   */
+  private case object WalkComplete extends WalkFuncResult[Nothing, Nothing]
+
+  /**
    * Definition of a function that controls the iteration over the folder 
    * structure. The function operates on a specific state that is managed by 
    * the source implementation. It is passed such a state object and a list
    * with [[Model.FolderContent]] objects that have been resolved from the
-   * file system. It returns an [[Option]] that is ''None'' at the end of the
-   * iteration. Otherwise, it contains a tuple with the updated state, an
-   * [[Option]] with the next element to pass downstream, and a list with the
-   * IDs of folders whose content is needed.
+   * file system. It returns a [[WalkFuncResult]] object that instructs the
+   * source how to proceed with the iteration.
    */
   private type WalkFunc[ID, FILE <: Model.File[ID], FOLDER <: Model.Folder[ID], STATE] =
-    (STATE, Iterable[Model.FolderContent[ID, FILE, FOLDER]]) => Option[(STATE, Option[Model.Element[ID]], List[ID])]
+    (STATE, Iterable[Model.FolderContent[ID, FILE, FOLDER]]) => WalkFuncResult[ID, STATE]
 
   /**
    * A data class holding the state of an iteration in BFS order.
    *
    * @param currentFolderElements the elements from the current
-   * @param foldersToProcess      the content of folders to be processed next
+   * @param foldersToProcess      the IDs of folders to be processed next
+   * @param resolvedFolders       a map with the already resolved folder
+   *                              contents; when a folder is about to be
+   *                              processed that has not yet been resolved,
+   *                              iteration has to wait until it becomes
+   *                              available
    * @tparam ID     the type of IDs of elements
    * @tparam FILE   the type of files
    * @tparam FOLDER the type of folders
    */
   private case class BfsState[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](currentFolderElements: List[Model.Element[ID]],
-                                foldersToProcess: Queue[Model.FolderContent[ID, FILE, FOLDER]])
+                                foldersToProcess: Queue[ID],
+                                resolvedFolders: Map[ID, Model.FolderContent[ID, FILE, FOLDER]])
 
   /**
    * A data class to store information about the currently processed folder in
@@ -225,7 +282,7 @@ object Walk {
         private val resolvedFoldersCallback = getAsyncCallback(onFoldersResolved)
 
         /** The current state of the iteration. */
-        private var currentState = initialState
+        private var currentState: WalkState = _
 
         /**
          * Stores the ID of folders for which the content has to be fetched.
@@ -266,7 +323,7 @@ object Walk {
          *         otherwise
          */
         private def loadFolderContent(): Boolean = {
-          if (foldersToResolve.nonEmpty) {
+          if (!resolveInProgress && foldersToResolve.nonEmpty) {
             implicit val ec: ExecutionContext = system.executionContext
             Future.sequence(foldersToResolve.take(ResolveFoldersChunkSize)
               .map { folderID =>
@@ -290,7 +347,16 @@ object Walk {
           triedContents match {
             case Success(contents) =>
               resolveInProgress = false
-              resolvedFolders = contents
+              if (currentState == null) {
+                // The root folder has been resolved, now the iteration can actually start.
+                val (initState, folderIDs) = initWalk(contents.head)
+                currentState = initState
+                foldersToResolve = folderIDs.toVector
+              } else {
+                resolvedFolders = resolvedFolders :++ contents
+              }
+
+              loadFolderContent() // Continue with the next chunk if available.
               continueWalking()
             case Failure(exception) =>
               failStage(exception)
@@ -302,9 +368,9 @@ object Walk {
          * done to continue with the iteration.
          */
         @tailrec private def continueWalking(): Unit = {
-          if (pulled && !resolveInProgress) {
+          if (pulled && currentState != null) {
             val actionTaken = walkFunc(currentState, resolvedFolders) match {
-              case Some((nextState, optData, folderIDs)) =>
+              case WalkProceed(nextState, optData, folderIDs) =>
                 currentState = nextState
                 foldersToResolve = foldersToResolve :++ folderIDs
                 optData match {
@@ -317,7 +383,10 @@ object Walk {
                     loadFolderContent()
                 }
 
-              case None =>
+              case WalkFoldersPending =>
+                true // Just do nothing and wait until folders are resolved.
+
+              case WalkComplete =>
                 completeStage()
                 true
             }
@@ -335,11 +404,14 @@ object Walk {
     protected val walkFunc: WalkFunc[ID, FILE, FOLDER, WalkState]
 
     /**
-     * Returns the initial state for the iteration.
+     * Initializes the iteration. The base class calls this method after
+     * resolving the root folder. A concrete implementation returns the initial
+     * walk state and a list with folder IDs to be resolved next.
      *
-     * @return the initial [[WalkState]]
+     * @param rootFolder the root folder for the iteration
+     * @return the initial [[WalkState]] and folders to resolve
      */
-    protected def initialState: WalkState
+    protected def initWalk(rootFolder: Model.FolderContent[ID, FILE, FOLDER]): (WalkState, Iterable[ID])
   }
 
   /**
@@ -356,24 +428,36 @@ object Walk {
   private def walkBfs[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](state: BfsState[ID, FILE, FOLDER],
                                 contents: Iterable[Model.FolderContent[ID, FILE, FOLDER]]):
-  Option[(BfsState[ID, FILE, FOLDER], Option[Model.Element[ID]], List[ID])] = {
-    val nextFolders = state.foldersToProcess.appendedAll(contents)
+  WalkFuncResult[ID, BfsState[ID, FILE, FOLDER]] = {
+    val nextResolvedFolders = state.resolvedFolders ++ contents.map(c => c.folderID -> c)
 
     state.currentFolderElements match {
       case h :: t =>
-        Some((BfsState(t, nextFolders), Some(h), Nil))
+        val nextState = state.copy(currentFolderElements = t, resolvedFolders = nextResolvedFolders)
+        WalkProceed(nextState, Some(h), Nil)
 
       case _ =>
-        nextFolders.dequeueOption match {
-          case Some((folder, nextQueue)) =>
+        state.foldersToProcess.headOption match {
+          case Some(folderID) if nextResolvedFolders.contains(folderID) =>
+            val folder = nextResolvedFolders(folderID)
+            val (_, nextQueue) = state.foldersToProcess.dequeue
             val subFolders = folder.folders.values.toList
+            val subFolderIDs = subFolders.map(_.id)
             val subFiles = folder.files.values.toList
             val subFilesTail = if (subFiles.isEmpty) Nil else subFiles.tail
             val nextElements = subFilesTail ::: subFolders
-            val nextState = BfsState(nextElements, nextQueue)
-            Some((nextState, subFiles.headOption, subFolders.map(_.id)))
+            val nextState = state.copy(
+              currentFolderElements = nextElements,
+              foldersToProcess = nextQueue :++ subFolderIDs,
+              resolvedFolders = nextResolvedFolders - folderID
+            )
+            WalkProceed(nextState, subFiles.headOption, subFolderIDs)
+
+          case Some(_) =>
+            WalkFoldersPending
+
           case None =>
-            None
+            WalkComplete
         }
     }
   }
@@ -392,49 +476,42 @@ object Walk {
   private def walkDfs[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](state: DfsState[ID, FILE, FOLDER],
                                 contents: Iterable[Model.FolderContent[ID, FILE, FOLDER]]):
-  Option[(DfsState[ID, FILE, FOLDER], Option[Model.Element[ID]], List[ID])] = {
+  WalkFuncResult[ID, DfsState[ID, FILE, FOLDER]] = {
     val nextResolvedFolders = state.resolvedFolders ++ contents.map(c => c.folderID -> c)
 
     state.activeFolders match {
       case current :: nextElements =>
         val (optNext, updatedCurrent) = current.processNextElement()
         optNext match {
-          case optElem@Some(element) if current.isFolder(element) =>
+          case optElem@Some(element) if !current.isFolder(element) =>
+            val nextState = state.copy(
+              activeFolders = updatedCurrent :: nextElements,
+              resolvedFolders = nextResolvedFolders
+            )
+            WalkProceed(nextState, optElem, Nil)
+
+          case optElem@Some(element) if nextResolvedFolders.contains(element.id) =>
             val (nextCurrent, optFirstFolderID) = prepareFolderForDfs(nextResolvedFolders(element.id))
             val nextState = state.copy(
               activeFolders = nextCurrent :: updatedCurrent :: nextElements,
               resolvedFolders = nextResolvedFolders
             )
             val foldersToResolve = List(optFirstFolderID, updatedCurrent.nextFolderID).flatten
-            Some(nextState, optElem, foldersToResolve)
+            WalkProceed(nextState, optElem, foldersToResolve)
 
-          case optElem@Some(_) =>
-            val nextState = state.copy(
-              activeFolders = updatedCurrent :: nextElements,
-              resolvedFolders = nextResolvedFolders
-            )
-            Some(nextState, optElem, Nil)
+          case Some(_) =>
+            WalkFoldersPending
 
           case None =>
             val nextState = state.copy(
               activeFolders = nextElements,
               resolvedFolders = nextResolvedFolders - current.currentID
             )
-            Some(nextState, None, Nil)
+            WalkProceed(nextState, None, Nil)
         }
 
-      case Nil if nextResolvedFolders.nonEmpty =>
-        // This is the initial state.
-        val (nextCurrent, optFirstFolderID) = prepareFolderForDfs(nextResolvedFolders.values.head)
-        val nextState = state.copy(
-          activeFolders = List(nextCurrent),
-          resolvedFolders = nextResolvedFolders
-        )
-        val foldersToResolve = optFirstFolderID.fold(List.empty[ID])(f => List(f))
-        Some(nextState, None, foldersToResolve)
-
       case Nil =>
-        None
+        WalkComplete
     }
   }
 

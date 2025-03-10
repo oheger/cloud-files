@@ -17,6 +17,7 @@
 package com.github.cloudfiles.core.utils
 
 import com.github.cloudfiles.core.FileSystem.Operation
+import com.github.cloudfiles.core.utils.Walk.TransformFunc
 import com.github.cloudfiles.core.{FileSystem, FileTestHelper, Model}
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.typed.scaladsl.adapter._
@@ -103,6 +104,32 @@ object WalkSpec {
 
       override def lastModifiedAt: Instant = attributes.lastModifiedTime().toInstant
     }
+  }
+
+  /**
+   * A test transformer function. The function accepts only files with the
+   * extension ".txt". It orders elements by their names, folders come before
+   * files.
+   *
+   * @return the test transformer function
+   */
+  private def testTransformFunc: TransformFunc[Path] = elements =>
+    elements.filter { e =>
+      e.isInstanceOf[Model.Folder[Path]] || e.name.endsWith(".txt")
+    }.sortWith(testElementSortFunc)
+
+  /**
+   * A function that applies the order used by the test transformer function.
+   * Elements are ordered by name, folders come before files.
+   *
+   * @param e1 the first element to compare
+   * @param e2 the second element to compare
+   * @return a flag whether element1 is less than element2
+   */
+  private def testElementSortFunc(e1: Model.Element[Path], e2: Model.Element[Path]): Boolean = {
+    if (e1.isInstanceOf[Model.Folder[Path]] && e2.isInstanceOf[Model.File[Path]]) true
+    else if (e2.isInstanceOf[Model.Folder[Path]] && e1.isInstanceOf[Model.File[Path]]) false
+    else e1.name < e2.name
   }
 }
 
@@ -418,5 +445,73 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     recoverToExceptionIf[IllegalStateException] {
       runSource(source)
     }.map(_.getMessage should be(TestExceptionMessage))
+  }
+
+  it should "apply a transformer function in BFS order" in {
+    writeFileContent(createPathInDirectory("data.txt"), "data")
+    writeFileContent(createPathInDirectory("anotherData.txt"), "another_data")
+    writeFileContent(createPathInDirectory("binary.bin"), "binary_data")
+    writeFileContent(createPathInDirectory("foo.txt"), "foo")
+    writeFileContent(createPathInDirectory("bar.txt"), "bar")
+    val subDir = Files.createDirectory(createPathInDirectory("sub1"))
+    Files.createDirectory(createPathInDirectory("other_sub"))
+    writeFileContent(subDir.resolve("b.txt"), "b")
+    writeFileContent(subDir.resolve("a.txt"), "a")
+    writeFileContent(subDir.resolve("c.asc"), "c")
+
+    val source = Walk.bfsSource(createFileSystem(), null, testDirectory, testTransformFunc)
+    runSource(source).map { elements =>
+      val expectedOrder = List(
+        "other_sub",
+        "sub1",
+        "anotherData.txt",
+        "bar.txt",
+        "data.txt",
+        "foo.txt",
+        "a.txt",
+        "b.txt"
+      )
+
+      elements.map(_.name) should contain theSameElementsInOrderAs expectedOrder
+    }
+  }
+
+  it should "apply a transformer function in DFS order" in {
+    writeFileContent(createPathInDirectory("data.txt"), "data")
+    writeFileContent(createPathInDirectory("anotherData.txt"), "another_data")
+    writeFileContent(createPathInDirectory("binary.bin"), "binary_data")
+    writeFileContent(createPathInDirectory("foo.txt"), "foo")
+    writeFileContent(createPathInDirectory("bar.txt"), "bar")
+    val subDir = Files.createDirectory(createPathInDirectory("sub1"))
+    Files.createDirectory(createPathInDirectory("other_sub"))
+    writeFileContent(subDir.resolve("b.txt"), "b")
+    writeFileContent(subDir.resolve("a.txt"), "a")
+    writeFileContent(subDir.resolve("c.asc"), "c")
+    val subDirL2One = Files.createDirectory(subDir.resolve("subL2_1"))
+    val subDirL2Two = Files.createDirectory(subDir.resolve("subL2_2"))
+    writeFileContent(subDirL2One.resolve("z.txt"), "z")
+    writeFileContent(subDirL2One.resolve("y.txt"), "y")
+    writeFileContent(subDirL2Two.resolve("x.txt"), "x")
+
+    val source = Walk.dfsSource(createFileSystem(), null, testDirectory, testTransformFunc)
+    runSource(source).map { elements =>
+      val expectedOrder = List(
+        "other_sub",
+        "sub1",
+        "subL2_1",
+        "y.txt",
+        "z.txt",
+        "subL2_2",
+        "x.txt",
+        "a.txt",
+        "b.txt",
+        "anotherData.txt",
+        "bar.txt",
+        "data.txt",
+        "foo.txt"
+      )
+
+      elements.map(_.name) should contain theSameElementsInOrderAs expectedOrder
+    }
   }
 }

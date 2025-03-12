@@ -44,7 +44,7 @@ object Model {
    *
    * @tparam ID the type of the ID of an element
    */
-  trait Element[ID] {
+  trait Element[+ID] {
     /**
      * Returns the ID of this element. Via this ID the element can be resolved,
      * e.g. to obtain its metadata or download it (if possible).
@@ -93,7 +93,7 @@ object Model {
    *
    * @tparam ID the type of the ID of a folder
    */
-  trait Folder[ID] extends Element[ID]
+  trait Folder[+ID] extends Element[ID]
 
   /**
    * A trait representing a file stored on a server.
@@ -103,7 +103,7 @@ object Model {
    *
    * @tparam ID the type of the ID of a file
    */
-  trait File[ID] extends Element[ID] {
+  trait File[+ID] extends Element[ID] {
     /**
      * Returns the size of the content of this file.
      *

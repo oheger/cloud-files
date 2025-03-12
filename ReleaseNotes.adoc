@@ -5,7 +5,8 @@ of the CloudFiles library.
 
 == Release 0.9 (TBD)
 
-The traits for file system elements in the `Model` class of the _core_ module have now covariance annotations.
+* The traits for file system elements in the `Model` class of the _core_ module have now covariance annotations.
+* Support for Scala 2.12.x has been dropped. The project is now cross-compiled against Scala 2.13.16 and 3.3.5.
 
 == Release 0.8 (2024-10-15)
 

@@ -7,6 +7,7 @@ of the CloudFiles library.
 
 * The traits for file system elements in the `Model` class of the _core_ module have now covariance annotations.
 * Support for Scala 2.12.x has been dropped. The project is now cross-compiled against Scala 2.13.16 and 3.3.5.
+* Added the `Walk` object to the _core_ module to support convenient iteration over folder structures.
 
 == Release 0.8 (2024-10-15)
 

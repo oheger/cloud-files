@@ -14,23 +14,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Set up JDK 17
+    - name: Set up JDK
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
         cache: 'sbt'
+    - uses: sbt/setup-sbt@v1
     - name: Run tests
       run: sbt +test
   build-integration-tests:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Set up JDK 17
+    - name: Set up JDK
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
         cache: 'sbt'
+    - uses: sbt/setup-sbt@v1
     - name: Run integration tests
       run: sbt integrationTest:test

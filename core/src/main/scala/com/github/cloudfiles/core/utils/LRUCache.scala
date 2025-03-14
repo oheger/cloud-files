@@ -117,9 +117,8 @@ class LRUCache[K, +V] private(val capacity: Int,
         val index = maps._3 + 1
         val optOldValue = maps._1 get e._1
         val nextEntries = maps._1 + (e._1 -> CacheEntry(e._2, index))
-        // Note: The "+" function is deprecated in Scala 2.13, but the recommended concat() is unavailable in 2.12.
         val nextLru = optOldValue.map(ce => removeKey(maps._2, ce.index))
-          .getOrElse(maps._2) + (index -> e._1)
+          .getOrElse(maps._2).concat(List(index -> e._1))
         (nextEntries, nextLru, index)
       }
 

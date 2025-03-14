@@ -175,7 +175,15 @@ object OAuthExtensionSpec {
             if (request.request == expected.expectedRequest && request.discardEntityMode == expected.expDiscardMode) {
               sendResponse(context, request, expected)
             } else {
-              throw new IllegalStateException(s"Unexpected request. Expected $expected, got $request.")
+              val builder = new StringBuilder("Unexpected request. Expected: ")
+              builder.append(expected.expectedRequest)
+              builder.append(", got: ")
+              builder.append(request)
+              request.request.header[Authorization].foreach { auth =>
+                builder.append(", Authorization: ")
+                builder.append(auth.credentials.token())
+              }
+              throw new IllegalStateException(builder.toString())
             }
           }
 
@@ -505,7 +513,8 @@ class OAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
       HttpRequestSender.FailedResult(request, FailedResponseException(httpResponseUnauthorized))
     val response2 = HttpRequestSender.SuccessResult(request, HttpResponse())
     val response3 = HttpRequestSender.SuccessResult(request, HttpResponse(status = StatusCodes.Accepted))
-    val stubRequests = List(StubData(createAuthorizedTestRequest(), responseUnauthorized),
+    val stubRequests = List(
+      StubData(createAuthorizedTestRequest(), responseUnauthorized, optDelay = Some(100.millis)),
       StubData(createAuthorizedTestRequest(), responseUnauthorized),
       StubData(createAuthorizedTestRequest(RefreshedTokens.accessToken), response2),
       StubData(createAuthorizedTestRequest(RefreshedTokens.accessToken), response3))

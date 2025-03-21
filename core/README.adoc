@@ -95,6 +95,7 @@ The factory for request actors needs a way to create new actor instances. How th
 == File systems
 The basic abstraction introduced by CloudFiles is represented by the link:src/main/scala/com/github/cloudfiles/core/FileSystem.scala[FileSystem] trait. A `FileSystem` object can be used to execute typical CRUD operations on files and directories on a server that supports a specific protocol. The various submodules of CloudFiles typically provide specialized `FileSystem` implementations that support a specific protocol. Refer to the README documents of these modules for further details.
 
+[#type_parameters]
 === Type parameters
 The `FileSystem` trait has a number of type parameters:
 
@@ -176,3 +177,111 @@ To make advanced transformations possible, as required by the use cases listed a
 To simplify the implementation of concrete extensions, CloudFiles has the link:src/main/scala/com/github/cloudfiles/core/delegate/DelegateFileSystem.scala[DelegateFileSystem] trait. It provides default implementations for all the operations defined by `FileSystem` that just forward the call to another `FileSystem` object. So, an extension implementation extending this trait just needs to override the methods affected by the specific functionality it provides and can use the default implementations for all others.
 
 To sum up, CloudFiles' file systems can be grouped into two categories: file systems that implement the `FileSystem` API for a specific protocol, and file systems implementing extended functionality on arbitrary other file systems.
+
+=== Further functionality
+Around the `FileSystem` abstraction, the _core_ module provides some helper functionality which is generally useful when dealing with files and folder structures. This can be used together with all concrete `FileSystem` implementations.
+
+==== Iterating over folder structures
+A frequent use case is to iterate over all files and folders located below a specific root folder, e.g. to find specific files or to apply some processing logic on the encountered elements. For this purpose, the _core_ module offers the link:src/main/scala/com/github/cloudfiles/core/utils/Walk.scala[Walk] object. The general idea is that a client provides a `FileSystem` instance, an HTTP actor to execute requests against this file system, and the ID of a start folder. There are functions to iterate over the content of the start folder in different orders, namely https://en.wikipedia.org/wiki/Breadth-first_search[Breadth-first search], and https://en.wikipedia.org/wiki/Depth-first_search[Depth-first search]. The functions return a `Source` of an https://pekko.apache.org/[Apache Pekko] stream with the encountered elements. Via the means offered by https://pekko.apache.org/docs/pekko/current/stream/index.html[Apache Pekko Streams], sophisticated processing is possible on the elements in the folder structure.
+
+Below is a simple example how a folder structure can be processed in breadth-first search order to simply collect all elements:
+
+[source, scala]
+----
+val fileSystem = ... // Obtain the file system.
+val httpActor = ... // Obtain the actor for sending requests.
+val rootFolderID = ... // The folder to iterate over.
+
+val walkSource = Walk.bfsSearch(fileSystem, httpActor, rootFolderID)
+val start = List.empty[Model.Element[ID]]
+val sink = Sink.fold[List[Model.Element[ID]], Model.Element[ID]](start)((lst, p) => p :: lst)
+
+val futElements = walkSource.runWith(sink)
+futElements.map { elements =>
+  // elements is a List[Model.Element[ID]]
+}
+----
+
+The <<type_parameters>> associated with the file system are also reflected by the `Walk` object, which makes its usage a bit complicated. To make a generic iteration possible, the `FILE`, `FOLDER`, and `FOLDER_CONTENT` parameters of the file system must extend the base traits from link:src/main/scala/com/github/cloudfiles/core/Model.scala[Model].
+
+There is sometimes the need to further customize the iteration, e.g. to filter out specific elements or to apply a defined sort order. It is possible to do this with operators provided by https://pekko.apache.org/docs/pekko/current/stream/index.html[Apache Pekko Streams], but it may be more efficient to handle such customization already in the source itself. This is certainly the case if larger parts of the folder structured iterated over can be filtered out, so that they do not have to be processed at first. To achieve this, the functions of `Walk` accept another optional parameter, a so-called _transformation function_. The function type is defined as follows:
+
+[source, scala]
+----
+type TransformFunc[ID] = List[Model.Element[ID]] => List[Model.Element[ID]]
+----
+
+Basically, the function maps a list of folder elements (which can be files and subfolders) to another list. `Walk` invokes this function during the iteration for each new folder to be processed and then iterates over the resulting list of elements. That way, clients can do arbitrary manipulations on the list before it gets processed.
+
+To give a concrete example of this functionality, the use case to filter out "*.tmp" files and to sort elements by their names is to be implemented. To simplify dealing with the file system's type parameters, we use the link:../localfs/README.adoc[Local FileSystem] implementation, which uses the type `java.nio.Path` as ID for elements:
+
+[source, scala]
+----
+val fsOptions = LocalFsConfig(
+  basePath = Paths.get("/data"),
+  executionContext = ExecutionContext.global
+)
+val fileSystem = new LocalFileSystem(fsOptions)
+val rootPath = Paths.get("/data/processing")
+
+val transformFunc: TransformFunc[Path] = elements =>
+  elements.filterNot { element =>
+    element.name.endsWith(".tmp")
+  }.sortWith((e1, e2) => e1.name < e2.name)
+
+val source = Walk.dfsSource(
+  fileSystem,
+  null, // No HTTP actor needed for local FS.
+  rootPath,
+  transformFunc
+)
+val sink = Sink.fold[List[Model.Element[Path]], Model.Element[Path]](List.empty)((lst, p) => p :: lst)
+
+val futElements = source.runWith(sink)
+----
+
+In some cases, client code is not only interested in the elements found in the folder structure themselves but also requires information about the concrete position of these elements in the hierarchy - something like the _path_ from a concrete element to the root folder of the iteration.
+
+This is supported by another set of functions ending on the suffix `WithParentData`. The stream source these functions return does not yield simple elements, but objects of the data class `ElementWithParentData`. The data class stores the actual element plus a list of customizable data collected from the parent folders of this element on the way down the hierarchy. The first element in this list is obtained from the direct parent folder of the element; the next element comes from the parent folder of this folder, and so on.
+
+To specify, which data to extract from parent folders, the `WithParentData` functions accept a function of the following type:
+
+[source, scala]
+----
+type ParentDataFunc[ID, DATA] = Model.Folder[ID] => Option[DATA]
+----
+
+The function is passed a (parent) folder element. It returns an `Option` with the data to store for this folder. In case of a _None_ result, no data is stored in the parent data list for this folder.
+
+As an example, consider the use case that for each element found in the folder structure a path string in the form "grandParent / parent / element" should be generated. So, the function to extract parent data just needs to return the name of the passed in folder. An implementation could look as follows (again we are using the local file system for illustration purpose):
+
+[source, scala]
+----
+val fsOptions = LocalFsConfig(
+  basePath = Paths.get("/data"),
+  executionContext = ExecutionContext.global
+)
+val fileSystem = new LocalFileSystem(fsOptions)
+val rootPath = Paths.get("/data/processing")
+
+val parentDataFunc: ParentDataFunc[Path, String] =
+  folder => Some(folder.name)
+
+val source = Walk.dfsSourceWithParentData(
+  fileSystem,
+  null, // No HTTP actor needed for local FS.
+  rootPath,
+  parentDataFunc
+).map { elemWithParent =>
+  val path = elemWithParent.parentData.reverse
+    .mkString(" / ")
+  (path, elementWithParent.element)
+}
+val sink = Sink.fold[List[(String, Model.Element[Path])], (String, Model.Element[Path])](List.empty) {
+  (lst, p) => p :: lst
+}
+
+val futElements = source.runWith(sink)
+----
+
+The stream now yields tuples consisting of the path string and the found elements. Note that the `WithParentData` functions support a transformation function as well; so it is possible to customize the iteration as described above.

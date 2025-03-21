@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 The Developers Team.
+ * Copyright 2020-2025 The Developers Team.
  *
  * Licensed under the Apache License, Version 2.0 (the "License")
  * you may not use this file except in compliance with the License.
@@ -20,22 +20,21 @@ import com.github.sbt.osgi.OsgiKeys
 lazy val CloudFilesVersion = "0.9-SNAPSHOT"
 
 /** Supported Scala versions. */
-lazy val VersionScala213 = "2.13.15"
-lazy val VersionScala212 = "2.12.20"
-lazy val VersionScala3 = "3.3.4"
+lazy val VersionScala213 = "2.13.16"
+lazy val VersionScala3 = "3.3.5"
 
 /** Versions of compile-time dependencies. */
-lazy val VersionPekko = "1.1.2"
+lazy val VersionPekko = "1.1.3"
 lazy val VersionPekkoHttp = "1.1.0"
-lazy val VersionSlf4j = "2.0.16"
+lazy val VersionSlf4j = "2.0.17"
 
 /** Versions of test dependencies. */
 lazy val VersionScalaTest = "3.2.19"
 lazy val VersionScalaTestMockito = "3.2.19.0"
 lazy val VersionScalaXml = "2.2.0"
-lazy val VersionWireMock = "3.9.1"
+lazy val VersionWireMock = "3.12.1"
 
-lazy val supportedScalaVersions = List(VersionScala213, VersionScala212, VersionScala3)
+lazy val supportedScalaVersions = List(VersionScala213, VersionScala3)
 
 lazy val ITest = config("integrationTest") extend Test
 

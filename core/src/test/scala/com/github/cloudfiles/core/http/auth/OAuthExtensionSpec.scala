@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 The Developers Team.
+ * Copyright 2020-2025 The Developers Team.
  *
  * Licensed under the Apache License, Version 2.0 (the "License")
  * you may not use this file except in compliance with the License.
@@ -538,7 +538,8 @@ class OAuthExtensionSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike 
       HttpRequestSender.FailedResult(request, FailedResponseException(httpResponseUnauthorized))
     val response2 = HttpRequestSender.SuccessResult(request, HttpResponse())
     val response3 = HttpRequestSender.SuccessResult(request, HttpResponse(status = StatusCodes.Accepted))
-    val stubRequests = List(StubData(createAuthorizedTestRequest(), responseUnauthorized),
+    val stubRequests = List(
+      StubData(createAuthorizedTestRequest(), responseUnauthorized, optDelay = Some(100.millis)),
       StubData(createAuthorizedTestRequest(), responseUnauthorized, optDelay = Some(100.millis)),
       StubData(createAuthorizedTestRequest(RefreshedTokens.accessToken), response2),
       StubData(createAuthorizedTestRequest(RefreshedTokens.accessToken), response3))

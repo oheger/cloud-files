@@ -235,7 +235,53 @@ val source = Walk.dfsSource(
   rootPath,
   transformFunc
 )
-val sink = Sink.fold[List[Model.Element[Path]], Model.Element[Path]](start)((lst, p) => p :: lst)
+val sink = Sink.fold[List[Model.Element[Path]], Model.Element[Path]](List.empty)((lst, p) => p :: lst)
 
 val futElements = source.runWith(sink)
 ----
+
+In some cases, client code is not only interested in the elements found in the folder structure themselves but also requires information about the concrete position of these elements in the hierarchy - something like the _path_ from a concrete element to the root folder of the iteration.
+
+This is supported by another set of functions ending on the suffix `WithParentData`. The stream source these functions return does not yield simple elements, but objects of the data class `ElementWithParentData`. The data class stores the actual element plus a list of customizable data collected from the parent folders of this element on the way down the hierarchy. The first element in this list is obtained from the direct parent folder of the element; the next element comes from the parent folder of this folder, and so on.
+
+To specify, which data to extract from parent folders, the `WithParentData` functions accept a function of the following type:
+
+[source, scala]
+----
+type ParentDataFunc[ID, DATA] = Model.Folder[ID] => Option[DATA]
+----
+
+The function is passed a (parent) folder element. It returns an `Option` with the data to store for this folder. In case of a _None_ result, no data is stored in the parent data list for this folder.
+
+As an example, consider the use case that for each element found in the folder structure a path string in the form "grandParent / parent / element" should be generated. So, the function to extract parent data just needs to return the name of the passed in folder. An implementation could look as follows (again we are using the local file system for illustration purpose):
+
+[source, scala]
+----
+val fsOptions = LocalFsConfig(
+  basePath = Paths.get("/data"),
+  executionContext = ExecutionContext.global
+)
+val fileSystem = new LocalFileSystem(fsOptions)
+val rootPath = Paths.get("/data/processing")
+
+val parentDataFunc: ParentDataFunc[Path, String] =
+  folder => Some(folder.name)
+
+val source = Walk.dfsSourceWithParentData(
+  fileSystem,
+  null, // No HTTP actor needed for local FS.
+  rootPath,
+  parentDataFunc
+).map { elemWithParent =>
+  val path = elemWithParent.parentData.reverse
+    .mkString(" / ")
+  (path, elementWithParent.element)
+}
+val sink = Sink.fold[List[(String, Model.Element[Path])], (String, Model.Element[Path])](List.empty) {
+  (lst, p) => p :: lst
+}
+
+val futElements = source.runWith(sink)
+----
+
+The stream now yields tuples consisting of the path string and the found elements. Note that the `WithParentData` functions support a transformation function as well; so it is possible to customize the iteration as described above.

@@ -17,7 +17,7 @@
 package com.github.cloudfiles.core.utils
 
 import com.github.cloudfiles.core.FileSystem.Operation
-import com.github.cloudfiles.core.utils.Walk.TransformFunc
+import com.github.cloudfiles.core.utils.Walk.{ParentDataFunc, TransformFunc}
 import com.github.cloudfiles.core.{FileSystem, FileTestHelper, Model}
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.typed.scaladsl.adapter._
@@ -131,6 +131,14 @@ object WalkSpec {
     else if (e2.isInstanceOf[Model.Folder[Path]] && e1.isInstanceOf[Model.File[Path]]) false
     else e1.name < e2.name
   }
+
+  /**
+   * A test parent data extraction function. The function returns the name of
+   * the passed in folder.
+   *
+   * @return the function to extract test parent data
+   */
+  private def testParentDataFunc: ParentDataFunc[Path, String] = folder => Some(folder.name)
 }
 
 /**
@@ -219,9 +227,10 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
    * Returns a sink for collecting the items produced by the test source.
    *
    * @return the sink
+   * @tparam E the element type of the test source
    */
-  private def foldSink(): Sink[WalkItem, Future[List[WalkItem]]] =
-    Sink.fold[List[WalkItem], WalkItem](List.empty[WalkItem])((lst, p) => p :: lst)
+  private def foldSink[E](): Sink[E, Future[List[E]]] =
+    Sink.fold[List[E], E](List.empty[E])((lst, p) => p :: lst)
 
   /**
    * Runs a stream with the given source and returns a future with the 
@@ -229,8 +238,9 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
    *
    * @param source the source to be tested
    * @return a [[Future]] with the data obtained from the source
+   * @tparam E the element type of the test source
    */
-  private def runSource(source: Source[WalkItem, NotUsed]): Future[List[WalkItem]] =
+  private def runSource[E](source: Source[E, NotUsed]): Future[List[E]] =
     source.runWith(foldSink()).map(_.reverse)
 
   /**
@@ -512,6 +522,91 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
       )
 
       elements.map(_.name) should contain theSameElementsInOrderAs expectedOrder
+    }
+  }
+
+  it should "support collecting parent data in BFS order" in {
+    writeFileContent(createPathInDirectory("data.txt"), "data")
+    writeFileContent(createPathInDirectory("anotherData.txt"), "another_data")
+    writeFileContent(createPathInDirectory("binary.bin"), "binary_data")
+    writeFileContent(createPathInDirectory("foo.txt"), "foo")
+    writeFileContent(createPathInDirectory("bar.txt"), "bar")
+    val subDir = Files.createDirectory(createPathInDirectory("sub1"))
+    val subDir2 = Files.createDirectory(createPathInDirectory("other_sub"))
+    writeFileContent(subDir.resolve("b.txt"), "b")
+    writeFileContent(subDir.resolve("a.txt"), "a")
+    writeFileContent(subDir2.resolve("c.txt"), "c")
+    val subSubDir = Files.createDirectory(subDir.resolve("deepSub"))
+    writeFileContent(subSubDir.resolve("d.txt"), "d")
+
+    val source = Walk.bfsSourceWithParentData(
+      createFileSystem(),
+      null,
+      testDirectory,
+      testParentDataFunc,
+      testTransformFunc
+    )
+    runSource(source).map { elements =>
+      val expectedElements = List(
+        ("other_sub", List.empty[String]),
+        ("sub1", List.empty[String]),
+        ("anotherData.txt", List.empty[String]),
+        ("bar.txt", List.empty[String]),
+        ("data.txt", List.empty[String]),
+        ("foo.txt", List.empty[String]),
+        ("c.txt", List("other_sub")),
+        ("deepSub", List("sub1")),
+        ("a.txt", List("sub1")),
+        ("b.txt", List("sub1")),
+        ("d.txt", List("deepSub", "sub1"))
+      )
+
+      elements.map(e => (e.element.name, e.parentData)) should contain theSameElementsInOrderAs expectedElements
+    }
+  }
+
+  it should "support collecting parent data in DFS order" in {
+    writeFileContent(createPathInDirectory("data.txt"), "data")
+    writeFileContent(createPathInDirectory("anotherData.txt"), "another_data")
+    writeFileContent(createPathInDirectory("binary.bin"), "binary_data")
+    writeFileContent(createPathInDirectory("foo.txt"), "foo")
+    writeFileContent(createPathInDirectory("bar.txt"), "bar")
+    val subDir = Files.createDirectory(createPathInDirectory("sub1"))
+    Files.createDirectory(createPathInDirectory("other_sub"))
+    writeFileContent(subDir.resolve("b.txt"), "b")
+    writeFileContent(subDir.resolve("a.txt"), "a")
+    writeFileContent(subDir.resolve("c.asc"), "c")
+    val subDirL2One = Files.createDirectory(subDir.resolve("subL2_1"))
+    val subDirL2Two = Files.createDirectory(subDir.resolve("subL2_2"))
+    writeFileContent(subDirL2One.resolve("z.txt"), "z")
+    writeFileContent(subDirL2One.resolve("y.txt"), "y")
+    writeFileContent(subDirL2Two.resolve("x.txt"), "x")
+
+    val source = Walk.dfsSourceWithParentData(
+      createFileSystem(),
+      null,
+      testDirectory,
+      testParentDataFunc,
+      testTransformFunc
+    )
+    runSource(source).map { elements =>
+      val expectedElements = List(
+        ("other_sub", List.empty[String]),
+        ("sub1", List.empty[String]),
+        ("subL2_1", List("sub1")),
+        ("y.txt", List("subL2_1", "sub1")),
+        ("z.txt", List("subL2_1", "sub1")),
+        ("subL2_2", List("sub1")),
+        ("x.txt", List("subL2_2", "sub1")),
+        ("a.txt", List("sub1")),
+        ("b.txt", List("sub1")),
+        ("anotherData.txt", List.empty[String]),
+        ("bar.txt", List.empty[String]),
+        ("data.txt", List.empty[String]),
+        ("foo.txt", List.empty[String])
+      )
+
+      elements.map(e => (e.element.name, e.parentData)) should contain theSameElementsInOrderAs expectedElements
     }
   }
 }

@@ -83,13 +83,29 @@ object Walk {
                                                parentData: List[DATA])
 
   /**
-   * Returns a [[Source]] to iterate over a folder structure in breadth-first
-   * search order.
+   * A data class that collects the mandatory and optional parameters
+   * supported by a walk operation. For the optional parameters, the class
+   * provides meaningful default values.
    *
    * @param fileSystem the [[FileSystem]] that is the target of the iteration
    * @param httpActor  the actor for sending HTTP requests
    * @param rootID     the ID of the root folder of the iteration
    * @param transform  a [[TransformFunc]] to manipulate the iteration
+   * @tparam ID     the type of element IDs
+   * @tparam FILE   the type for files
+   * @tparam FOLDER the type for folders
+   */
+  case class WalkConfig[ID, FILE <: Model.File[ID],
+    FOLDER <: Model.Folder[ID]](fileSystem: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
+                                httpActor: ActorRef[HttpRequestSender.HttpCommand],
+                                rootID: ID,
+                                transform: TransformFunc[ID] = identityTransform[ID])
+
+  /**
+   * Returns a [[Source]] to iterate over a folder structure in breadth-first
+   * search order.
+   *
+   * @param walkConfig the config for the walk operation
    * @param system     the actor system
    * @tparam ID     the type of element IDs
    * @tparam FILE   the type for files
@@ -97,12 +113,9 @@ object Walk {
    * @return the [[Source]] with the encountered elements
    */
   def bfsSource[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID]](fileSystem: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
-                                httpActor: ActorRef[HttpRequestSender.HttpCommand],
-                                rootID: ID,
-                                transform: TransformFunc[ID] = identityTransform[ID])
+    FOLDER <: Model.Folder[ID]](walkConfig: WalkConfig[ID, FILE, FOLDER])
                                (implicit system: ActorSystem[_]): Source[Model.Element[ID], NotUsed] =
-    bfsSourceWithParentData(fileSystem, httpActor, rootID, noParentDataFunc[ID], transform)
+    bfsSourceWithParentData(walkConfig, noParentDataFunc[ID])
       .map(_.element)
 
   /**
@@ -114,12 +127,9 @@ object Walk {
    * data. This is useful if the full path from the start folder of the
    * iteration to the element is relevant.
    *
-   * @param fileSystem     the [[FileSystem]] that is the target of the iteration
-   * @param httpActor      the actor for sending HTTP requests
-   * @param rootID         the ID of the root folder of the iteration
+   * @param walkConfig     the config for the walk operation
    * @param parentDataFunc the [[ParentDataFunc]] to extract information about
    *                       parent folders
-   * @param transform      a [[TransformFunc]] to manipulate the iteration
    * @param system         the actor system
    * @tparam ID     the type of element IDs
    * @tparam FILE   the type for files
@@ -128,14 +138,11 @@ object Walk {
    * @return the [[Source]] with the encountered elements
    */
   def bfsSourceWithParentData[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID], DATA](fileSystem: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
-                                      httpActor: ActorRef[HttpRequestSender.HttpCommand],
-                                      rootID: ID,
-                                      parentDataFunc: ParentDataFunc[ID, DATA],
-                                      transform: TransformFunc[ID] = identityTransform[ID])
+    FOLDER <: Model.Folder[ID], DATA](walkConfig: WalkConfig[ID, FILE, FOLDER],
+                                      parentDataFunc: ParentDataFunc[ID, DATA])
                                      (implicit system: ActorSystem[_]):
   Source[ElementWithParentData[ID, DATA], NotUsed] = {
-    val walkSource = new WalkSource(fileSystem, httpActor, rootID, transform, parentDataFunc) {
+    val walkSource = new WalkSource(walkConfig, parentDataFunc) {
       override type WalkState = BfsState[ID, FILE, FOLDER, DATA]
 
       override protected val walkFunc: WalkFunc[ID, FILE, FOLDER, DATA, WalkState] = walkBfs
@@ -158,10 +165,7 @@ object Walk {
    * Returns a [[Source]] to iterate over a folder structure in depth-first
    * search order.
    *
-   * @param fileSystem the [[FileSystem]] that is the target of the iteration
-   * @param httpActor  the actor for sending HTTP requests
-   * @param rootID     the ID of the root folder of the iteration
-   * @param transform  a [[TransformFunc]] to manipulate the iteration
+   * @param walkConfig the config for the walk operation
    * @param system     the actor system
    * @tparam ID     the type of element IDs
    * @tparam FILE   the type for files
@@ -169,12 +173,9 @@ object Walk {
    * @return the [[Source]] with the encountered elements
    */
   def dfsSource[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID]](fileSystem: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
-                                httpActor: ActorRef[HttpRequestSender.HttpCommand],
-                                rootID: ID,
-                                transform: TransformFunc[ID] = identityTransform[ID])
+    FOLDER <: Model.Folder[ID]](walkConfig: WalkConfig[ID, FILE, FOLDER])
                                (implicit system: ActorSystem[_]): Source[Model.Element[ID], NotUsed] = {
-    dfsSourceWithParentData(fileSystem, httpActor, rootID, noParentDataFunc[ID], transform)
+    dfsSourceWithParentData(walkConfig, noParentDataFunc[ID])
       .map(_.element)
   }
 
@@ -187,12 +188,9 @@ object Walk {
    * data. This is useful if the full path from the start folder of the
    * iteration to the element is relevant.
    *
-   * @param fileSystem     the [[FileSystem]] that is the target of the iteration
-   * @param httpActor      the actor for sending HTTP requests
-   * @param rootID         the ID of the root folder of the iteration
+   * @param walkConfig     the config for the walk operation
    * @param parentDataFunc the [[ParentDataFunc]] to extract information about
    *                       parent folders
-   * @param transform      a [[TransformFunc]] to manipulate the iteration
    * @param system         the actor system
    * @tparam ID     the type of element IDs
    * @tparam FILE   the type for files
@@ -201,20 +199,18 @@ object Walk {
    * @return the [[Source]] with the encountered elements
    */
   def dfsSourceWithParentData[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID], DATA](fileSystem: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
-                                      httpActor: ActorRef[HttpRequestSender.HttpCommand],
-                                      rootID: ID,
-                                      parentDataFunc: ParentDataFunc[ID, DATA],
-                                      transform: TransformFunc[ID] = identityTransform[ID])
+    FOLDER <: Model.Folder[ID], DATA](walkConfig: WalkConfig[ID, FILE, FOLDER],
+                                      parentDataFunc: ParentDataFunc[ID, DATA])
                                      (implicit system: ActorSystem[_]):
   Source[ElementWithParentData[ID, DATA], NotUsed] = {
-    val walkSource = new WalkSource(fileSystem, httpActor, rootID, transform, parentDataFunc) {
+    val walkSource = new WalkSource(walkConfig, parentDataFunc) {
       override type WalkState = DfsState[ID, FILE, FOLDER, DATA]
 
       override protected val walkFunc: WalkFunc[ID, FILE, FOLDER, DATA, WalkState] = walkDfs
 
       override protected def initWalk(rootFolder: Model.FolderContent[ID, FILE, FOLDER]): (WalkState, Iterable[ID]) = {
-        val (nextCurrent, optFirstFolderID) = prepareFolderForDfs(rootFolder, None, transform, parentDataFunc)
+        val (nextCurrent, optFirstFolderID) =
+          prepareFolderForDfs(rootFolder, None, walkConfig.transform, parentDataFunc)
         val initState = DfsState(
           activeFolders = List(nextCurrent),
           resolvedFolders = Map(rootFolder.folderID -> rootFolder)
@@ -271,8 +267,8 @@ object Walk {
   private case object WalkComplete extends WalkFuncResult[Nothing, Nothing, Nothing]
 
   /**
-   * Definition of a function that controls the iteration over the folder 
-   * structure. The function operates on a specific state that is managed by 
+   * Definition of a function that controls the iteration over the folder
+   * structure. The function operates on a specific state that is managed by
    * the source implementation. It is passed such a state object, a list with
    * [[Model.FolderContent]] objects that have been resolved from the file
    * system, the [[TransformFunc]] to apply on folder elements, and the
@@ -375,10 +371,7 @@ object Walk {
    * with the help of a [[WalkFunc]] that determines the order in which the
    * folder structure is processed.
    *
-   * @param fileSystem the [[FileSystem]] that is the target of the iteration
-   * @param httpActor  the actor for sending HTTP requests
-   * @param rootID     the ID of the root folder of the iteration
-   * @param transform  the transformer function
+   * @param walkConfig the config for the walk operation
    * @param parentData the function to extract parent data
    * @param system     the actor system
    * @tparam ID     the type of element IDs
@@ -387,10 +380,7 @@ object Walk {
    * @tparam DATA   the type for parent data
    */
   private abstract class WalkSource[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID], DATA](fileSystem: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
-                                      httpActor: ActorRef[HttpRequestSender.HttpCommand],
-                                      rootID: ID,
-                                      transform: TransformFunc[ID],
+    FOLDER <: Model.Folder[ID], DATA](walkConfig: WalkConfig[ID, FILE, FOLDER],
                                       parentData: ParentDataFunc[ID, DATA])
                                      (implicit system: ActorSystem[_])
     extends GraphStage[SourceShape[ElementWithParentData[ID, DATA]]] {
@@ -403,6 +393,9 @@ object Walk {
 
     override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
       new GraphStageLogic(shape) {
+
+        import walkConfig._
+
         /** Callback for the asynchronous operation to load folder contents. */
         private val resolvedFoldersCallback = getAsyncCallback(onFoldersResolved)
 
@@ -523,7 +516,7 @@ object Walk {
       }
 
     /**
-     * Returns the function that controls the iteration. This function is 
+     * Returns the function that controls the iteration. This function is
      * invoked repeatedly to obtain the elements to pass downstream.
      */
     protected val walkFunc: WalkFunc[ID, FILE, FOLDER, DATA, WalkState]

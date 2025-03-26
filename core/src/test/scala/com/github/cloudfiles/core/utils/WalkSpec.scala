@@ -233,7 +233,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     Sink.fold[List[E], E](List.empty[E])((lst, p) => p :: lst)
 
   /**
-   * Runs a stream with the given source and returns a future with the 
+   * Runs a stream with the given source and returns a future with the
    * collected items.
    *
    * @param source the source to be tested
@@ -315,11 +315,20 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
         throw new UnsupportedOperationException("Unexpected invocation.")
     }
 
+  /**
+   * Returns a default configuration for a walk operation. If needed by a
+   * test case, the returned object can further be customized.
+   *
+   * @return the default walk configuration
+   */
+  private def createWalkConfig(): Walk.WalkConfig[Path, WalkFile, WalkFolder] =
+    Walk.WalkConfig(createFileSystem(), null, testDirectory)
+
   "Walk" should "return all files in the scanned BFS directory structure" in {
     val fileData = setUpDirectoryStructure()
     val allFiles = fileData.values.flatten.toSeq
 
-    val source = Walk.bfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.bfsSource(createWalkConfig())
     runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFile])).map { files =>
       files map (_.id) should contain theSameElementsAs allFiles
     }
@@ -329,7 +338,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     val fileData = setUpDirectoryStructure()
     val expectedFolders = fileData.keySet - testDirectory
 
-    val source = Walk.bfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.bfsSource(createWalkConfig())
     runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFolder])).map { folders =>
       folders map (_.id) should contain theSameElementsAs expectedFolders
     }
@@ -344,7 +353,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     }
     val expectedNames = (1 to FolderCount).flatMap { idx => List(s"sub$idx", s"testFile$idx.txt") }
 
-    val source = Walk.bfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.bfsSource(createWalkConfig())
 
     runSource(source).map { elements =>
       val names = elements.map(_.name)
@@ -353,7 +362,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
   }
 
   it should "support an empty iteration in BFS order" in {
-    val source = Walk.bfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.bfsSource(createWalkConfig())
 
     runSource(source).map { elements =>
       elements shouldBe empty
@@ -368,7 +377,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     def level(p: Path): Int = calcLevel(p, 0)
 
     setUpDirectoryStructure()
-    val source = Walk.bfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.bfsSource(createWalkConfig())
 
     runSource(source) map { paths =>
       val pathLevels = paths map (d => level(d.id))
@@ -382,7 +391,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     val fileData = setUpDirectoryStructure()
     val allFiles = fileData.values.flatten.toSeq
 
-    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.dfsSource(createWalkConfig())
     runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFile])).map { files =>
       files map (_.id) should contain theSameElementsAs allFiles
     }
@@ -392,7 +401,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     val fileData = setUpDirectoryStructure()
     val expectedFolders = fileData.keySet - testDirectory
 
-    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.dfsSource(createWalkConfig())
     runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFolder])).map { folders =>
       folders map (_.id) should contain theSameElementsAs expectedFolders
     }
@@ -403,7 +412,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
       files.indexWhere(_.id.toString endsWith name)
 
     setUpDirectoryStructure()
-    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.dfsSource(createWalkConfig())
 
     runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFile])).map { files =>
       val idxSettings = indexOfFile(files, "medium1.settings")
@@ -413,7 +422,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
   }
 
   it should "support an empty iteration in DFS order" in {
-    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.dfsSource(createWalkConfig())
 
     runSource(source).map { elements =>
       elements shouldBe empty
@@ -433,7 +442,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     }
 
     setUpDirectoryStructure()
-    val source = Walk.dfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.dfsSource(createWalkConfig())
 
     runSource(source).map(elements => elements.filter(_.isInstanceOf[WalkFile])).map { files =>
       val parentIndices = files.map(_.id)
@@ -450,7 +459,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
   it should "fail the source if there is an error when executing a file system operation" in {
     val folders = setUpDirectoryStructure().keySet
     Files.createDirectory(folders.last.resolve(ErrorFolderName))
-    val source = Walk.bfsSource(createFileSystem(), null, testDirectory)
+    val source = Walk.bfsSource(createWalkConfig())
 
     recoverToExceptionIf[IllegalStateException] {
       runSource(source)
@@ -469,7 +478,8 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     writeFileContent(subDir.resolve("a.txt"), "a")
     writeFileContent(subDir.resolve("c.asc"), "c")
 
-    val source = Walk.bfsSource(createFileSystem(), null, testDirectory, testTransformFunc)
+    val config = createWalkConfig().copy(transform = testTransformFunc)
+    val source = Walk.bfsSource(config)
     runSource(source).map { elements =>
       val expectedOrder = List(
         "other_sub",
@@ -503,7 +513,8 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     writeFileContent(subDirL2One.resolve("y.txt"), "y")
     writeFileContent(subDirL2Two.resolve("x.txt"), "x")
 
-    val source = Walk.dfsSource(createFileSystem(), null, testDirectory, testTransformFunc)
+    val config = createWalkConfig().copy(transform = testTransformFunc)
+    val source = Walk.dfsSource(config)
     runSource(source).map { elements =>
       val expectedOrder = List(
         "other_sub",
@@ -539,13 +550,8 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     val subSubDir = Files.createDirectory(subDir.resolve("deepSub"))
     writeFileContent(subSubDir.resolve("d.txt"), "d")
 
-    val source = Walk.bfsSourceWithParentData(
-      createFileSystem(),
-      null,
-      testDirectory,
-      testParentDataFunc,
-      testTransformFunc
-    )
+    val config = createWalkConfig().copy(transform = testTransformFunc)
+    val source = Walk.bfsSourceWithParentData(config, testParentDataFunc)
     runSource(source).map { elements =>
       val expectedElements = List(
         ("other_sub", List.empty[String]),
@@ -582,13 +588,8 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     writeFileContent(subDirL2One.resolve("y.txt"), "y")
     writeFileContent(subDirL2Two.resolve("x.txt"), "x")
 
-    val source = Walk.dfsSourceWithParentData(
-      createFileSystem(),
-      null,
-      testDirectory,
-      testParentDataFunc,
-      testTransformFunc
-    )
+    val config = createWalkConfig().copy(transform = testTransformFunc)
+    val source = Walk.dfsSourceWithParentData(config, testParentDataFunc)
     runSource(source).map { elements =>
       val expectedElements = List(
         ("other_sub", List.empty[String]),

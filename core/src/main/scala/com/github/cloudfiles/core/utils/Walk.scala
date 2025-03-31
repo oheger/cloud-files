@@ -40,11 +40,11 @@ import scala.util.{Failure, Success, Try}
  * encountered in this folder structure.
  */
 object Walk {
-  /**
-   * The size of a chunk when resolving the contents of folders during the
-   * iteration.
-   */
-  private val ResolveFoldersChunkSize = 8
+  /** The default size of a chunk when resolving the contents of folders. */
+  private val DefaultFolderFetchChunkSize = 1
+
+  /** The default fetch-ahead size when resolving the contents of folders. */
+  private val DefaultFolderFetchAheadSize = 0
 
   /**
    * Type definition of a function that can be specified when creating a walk
@@ -87,10 +87,27 @@ object Walk {
    * supported by a walk operation. For the optional parameters, the class
    * provides meaningful default values.
    *
-   * @param fileSystem the [[FileSystem]] that is the target of the iteration
-   * @param httpActor  the actor for sending HTTP requests
-   * @param rootID     the ID of the root folder of the iteration
-   * @param transform  a [[TransformFunc]] to manipulate the iteration
+   * @param fileSystem           the [[FileSystem]] that is the target of the
+   *                             iteration
+   * @param httpActor            the actor for sending HTTP requests
+   * @param rootID               the ID of the root folder of the iteration
+   * @param transform            a [[TransformFunc]] to manipulate the
+   *                             iteration
+   * @param folderFetchChunkSize the number of parallel requests to execute
+   *                             when resolving the content of folders; if
+   *                             there are multiple folders that are going to
+   *                             be processed next in the iteration, their
+   *                             content can be loaded in parallel to speed up
+   *                             the iteration; this mainly applies to
+   *                             iterations in BFS order, since in DFS order,
+   *                             at most one upcoming folder is known
+   * @param folderFetchAheadSize the number of folders whose content should
+   *                             already be fetched before they are processed
+   *                             in the iteration; by tweaking this parameter,
+   *                             the iteration can be speed up, as the content
+   *                             of folders can already be retrieved while
+   *                             other elements are processed; again, this
+   *                             mainly applies to BFS order iterations
    * @tparam ID     the type of element IDs
    * @tparam FILE   the type for files
    * @tparam FOLDER the type for folders
@@ -99,7 +116,9 @@ object Walk {
     FOLDER <: Model.Folder[ID]](fileSystem: FileSystem[ID, FILE, FOLDER, Model.FolderContent[ID, FILE, FOLDER]],
                                 httpActor: ActorRef[HttpRequestSender.HttpCommand],
                                 rootID: ID,
-                                transform: TransformFunc[ID] = identityTransform[ID])
+                                transform: TransformFunc[ID] = identityTransform[ID],
+                                folderFetchChunkSize: Int = DefaultFolderFetchChunkSize,
+                                folderFetchAheadSize: Int = DefaultFolderFetchAheadSize)
 
   /**
    * Returns a [[Source]] to iterate over a folder structure in breadth-first
@@ -152,8 +171,7 @@ object Walk {
           List.empty,
           Queue((rootFolder.folderID, List.empty[DATA]))
         )
-        val foldersToResolve = rootFolder.folders.keySet
-        (initState, foldersToResolve)
+        (initState, Nil)
       }
 
       /**
@@ -294,14 +312,20 @@ object Walk {
                   val (nextCurrent, optFirstFolderID) =
                     prepareFolderForDfs(content, Some(element), transform, parentDataFunc)
                   val nextState = state.copy(activeFolders = nextCurrent :: updatedCurrent :: nextElements)
-                  val foldersToResolve = List(optFirstFolderID, updatedCurrent.nextFolderID).flatten
-                  val nextFolderState = folderState.withIterationResults(toResolve = foldersToResolve)
+                  val foldersToResolve = optFirstFolderID
+                  val nextFolderState = folderState.withIterationResults(
+                    toResolve = foldersToResolve,
+                    processed = Some(element.element.id)
+                  )
                   WalkProceed(nextState, optElem, nextFolderState)
                 }
 
               case None =>
                 val nextState = state.copy(activeFolders = nextElements)
-                val nextFolderState = folderState.withIterationResults(processed = Some(current.currentID))
+                val optNextFolder = nextElements.headOption.flatMap(_.nextFolderID)
+                val nextFolderState = optNextFolder.fold(folderState) { id =>
+                  folderState.withIterationResults(toResolve = List(id))
+                }
                 WalkProceed(nextState, None, nextFolderState)
             }
 
@@ -386,16 +410,21 @@ object Walk {
 
     /**
      * Returns a tuple with a chunk of folder IDs that need to be resolved and
-     * the updated instance which no longer contains the returned folders.
+     * the updated instance which no longer contains the returned folders -
+     * based on the provided parameters.
      *
+     * @param chunkSize      the size of a chunk
+     * @param fetchAheadSize the number of folders to fetch ahead
      * @return a chunk of folder IDs to resolve and the updated instance
      */
-    def getFoldersToResolve: (Vector[ID], WalkFolderState[ID, FILE, FOLDER]) =
-      if (foldersToResolve.isEmpty) (Vector.empty, this)
+    def getFoldersToResolve(chunkSize: Int, fetchAheadSize: Int): (Vector[ID], WalkFolderState[ID, FILE, FOLDER]) = {
+      val fetchSize = math.min(fetchAheadSize + 1 - resolvedFolders.size, chunkSize)
+      if (fetchSize <= 0) (Vector.empty, this)
       else {
-        val (res, next) = foldersToResolve.splitAt(ResolveFoldersChunkSize)
+        val (res, next) = foldersToResolve.splitAt(fetchSize)
         (res, copy(foldersToResolve = next))
       }
+    }
   }
 
   /**
@@ -587,10 +616,11 @@ object Walk {
          */
         private def loadFolderContent(): Boolean = {
           if (!resolveInProgress) {
-            val (toResolve, nextState) = folderState.getFoldersToResolve
+            val (toResolve, nextState) =
+              folderState.getFoldersToResolve(walkConfig.folderFetchChunkSize, walkConfig.folderFetchAheadSize)
             if (toResolve.nonEmpty) {
               implicit val ec: ExecutionContext = system.executionContext
-              Future.sequence(folderState.foldersToResolve.take(ResolveFoldersChunkSize)
+              Future.sequence(toResolve
                 .map { folderID =>
                   val operation = fileSystem.folderContent(folderID)
                   operation.run(httpActor)
@@ -653,6 +683,7 @@ object Walk {
                 }
 
               case WalkFoldersPending =>
+                loadFolderContent()
                 true // Just do nothing and wait until folders are resolved.
 
               case WalkComplete =>

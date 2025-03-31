@@ -29,14 +29,16 @@ import org.apache.pekko.util.ByteString
 import org.scalatest.Inspectors.forAll
 import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.{Assertion, BeforeAndAfter, BeforeAndAfterAll}
 
 import java.io.File
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{Files, Path}
 import java.time.Instant
+import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue, TimeUnit}
 import scala.annotation.tailrec
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 object WalkSpec {
   /** Type alias for the elements in the iteration. */
@@ -59,6 +61,29 @@ object WalkSpec {
 
   /** The message of the test exception thrown for the error folder. */
   private val TestExceptionMessage = "Test exception: Processing of folder failed."
+
+  /**
+   * A prefix of folder names causing the test file system to delay the
+   * operation to resolve the content of this folder. This is used to test
+   * different options for resolving folder contents.
+   */
+  private val DelayFolderPrefix = "slow"
+
+  /**
+   * The artificial delay applied by the test file system when resolving the
+   * content of a folder whose name starts with the delay prefix.
+   */
+  private val ResolveFolderDelay = 50.millis
+
+  /**
+   * A data class that records information about an operation to resolve the
+   * content of a folder.
+   *
+   * @param folderPath       the path to the folder
+   * @param resolveTimeNanos the time in nanos when the operation happened
+   */
+  private case class FolderResolveData(folderPath: Path,
+                                       resolveTimeNanos: Long)
 
   /**
    * Creates a file element in the iteration from the given file.
@@ -246,11 +271,14 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
   /**
    * Creates a [[FileSystem]] that can be used for testing the walk
    * functionality. The implementation created here only defines the bare
-   * minimum of operations.
+   * minimum of operations. A queue can be passed that receives
+   * data about folder resolve operations done by the file system.
    *
+   * @param resolveQueue a queue to collect data about resolved folders
    * @return the [[FileSystem]] to be used for tests
    */
-  private def createFileSystem(): FileSystem[Path, WalkFile, WalkFolder, WalkFolderContent] =
+  private def createFileSystem(resolveQueue: BlockingQueue[FolderResolveData]):
+  FileSystem[Path, WalkFile, WalkFolder, WalkFolderContent] =
     new FileSystem[Path, WalkFile, WalkFolder, WalkFolderContent] {
       override def resolvePath(path: String)(implicit system: typed.ActorSystem[_]): FileSystem.Operation[Path] =
         throw new UnsupportedOperationException("Unexpected invocation.")
@@ -270,6 +298,11 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
           Future {
             if (id.getFileName.toString == ErrorFolderName) {
               throw new IllegalStateException(TestExceptionMessage)
+            }
+
+            resolveQueue.offer(FolderResolveData(id, System.nanoTime()))
+            if (id.getFileName.toString.startsWith(DelayFolderPrefix)) {
+              Thread.sleep(ResolveFolderDelay.toMillis)
             }
 
             val children = id.toFile.listFiles()
@@ -319,10 +352,14 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
    * Returns a default configuration for a walk operation. If needed by a
    * test case, the returned object can further be customized.
    *
+   * @param resolveQueue an optional queue to receive data about operations to
+   *                     resolve the content of folders
    * @return the default walk configuration
    */
-  private def createWalkConfig(): Walk.WalkConfig[Path, WalkFile, WalkFolder] =
-    Walk.WalkConfig(createFileSystem(), null, testDirectory)
+  private def createWalkConfig(resolveQueue: BlockingQueue[FolderResolveData] =
+                               new LinkedBlockingQueue[FolderResolveData]):
+  Walk.WalkConfig[Path, WalkFile, WalkFolder] =
+    Walk.WalkConfig(createFileSystem(resolveQueue), null, testDirectory)
 
   "Walk" should "return all files in the scanned BFS directory structure" in {
     val fileData = setUpDirectoryStructure()
@@ -466,7 +503,14 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     }.map(_.getMessage should be(TestExceptionMessage))
   }
 
-  it should "apply a transformer function in BFS order" in {
+  /**
+   * Tests a walk in BFS order with the test transformer function and the
+   * given base configuration.
+   *
+   * @param baseConfig the base configuration
+   */
+  private def checkBfsSearchWithTransformer(baseConfig: Walk.WalkConfig[Path, Model.File[Path], Model.Folder[Path]]):
+  Future[Assertion] = {
     writeFileContent(createPathInDirectory("data.txt"), "data")
     writeFileContent(createPathInDirectory("anotherData.txt"), "another_data")
     writeFileContent(createPathInDirectory("binary.bin"), "binary_data")
@@ -478,7 +522,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     writeFileContent(subDir.resolve("a.txt"), "a")
     writeFileContent(subDir.resolve("c.asc"), "c")
 
-    val config = createWalkConfig().copy(transform = testTransformFunc)
+    val config = baseConfig.copy(transform = testTransformFunc)
     val source = Walk.bfsSource(config)
     runSource(source).map { elements =>
       val expectedOrder = List(
@@ -496,7 +540,23 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     }
   }
 
-  it should "apply a transformer function in DFS order" in {
+  it should "apply a transformer function in BFS order" in {
+    checkBfsSearchWithTransformer(createWalkConfig())
+  }
+
+  it should "support different folder options in BFS order" in {
+    val config = createWalkConfig().copy(folderFetchChunkSize = 2, folderFetchAheadSize = 3)
+    checkBfsSearchWithTransformer(config)
+  }
+
+  /**
+   * Tests a walk in DFS order with the test transformer function and the
+   * given base configuration.
+   *
+   * @param baseConfig the base configuration
+   */
+  private def checkDfsSearchWithTransformer(baseConfig: Walk.WalkConfig[Path, Model.File[Path], Model.Folder[Path]]):
+  Future[Assertion] = {
     writeFileContent(createPathInDirectory("data.txt"), "data")
     writeFileContent(createPathInDirectory("anotherData.txt"), "another_data")
     writeFileContent(createPathInDirectory("binary.bin"), "binary_data")
@@ -513,7 +573,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     writeFileContent(subDirL2One.resolve("y.txt"), "y")
     writeFileContent(subDirL2Two.resolve("x.txt"), "x")
 
-    val config = createWalkConfig().copy(transform = testTransformFunc)
+    val config = baseConfig.copy(transform = testTransformFunc)
     val source = Walk.dfsSource(config)
     runSource(source).map { elements =>
       val expectedOrder = List(
@@ -534,6 +594,15 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
 
       elements.map(_.name) should contain theSameElementsInOrderAs expectedOrder
     }
+  }
+
+  it should "apply a transformer function in DFS order" in {
+    checkDfsSearchWithTransformer(createWalkConfig())
+  }
+
+  it should "support different folder options in DFS order" in {
+    val config = createWalkConfig().copy(folderFetchChunkSize = 2, folderFetchAheadSize = 3)
+    checkDfsSearchWithTransformer(config)
   }
 
   it should "support collecting parent data in BFS order" in {
@@ -609,5 +678,33 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
 
       elements.map(e => (e.element.name, e.parentData)) should contain theSameElementsInOrderAs expectedElements
     }
+  }
+
+  it should "support different options to resolve folders" in {
+    (1 to 16).foreach { idx =>
+      Files.createDirectory(testDirectory.resolve(s"${DelayFolderPrefix}Folder$idx"))
+    }
+
+    val FetchAheadSize = 4
+    val queue = new LinkedBlockingQueue[FolderResolveData]
+    val config = createWalkConfig(queue)
+      .copy(transform = testTransformFunc, folderFetchChunkSize = 3, folderFetchAheadSize = FetchAheadSize)
+    val source = Walk.bfsSource(config).delay(10.seconds)
+    runSource(source)
+
+    val resolveData = (1 to (FetchAheadSize + 3)).map(_ => queue.poll(1, TimeUnit.SECONDS))
+    forAll(resolveData) {
+      _ should not be null
+    }
+
+    def timeDelta(laterData: FolderResolveData, firstData: FolderResolveData): FiniteDuration =
+      (laterData.resolveTimeNanos - firstData.resolveTimeNanos).nanos
+
+    // The data should be fetched in 3 chunks; 3 elements in chunk 1, 2 in chunk.
+    val firstChunk1 = resolveData(1)
+    timeDelta(resolveData(2), firstChunk1) should be < ResolveFolderDelay
+    timeDelta(resolveData(3), firstChunk1) should be < ResolveFolderDelay
+    timeDelta(resolveData(4), firstChunk1) should be > ResolveFolderDelay
+    timeDelta(resolveData(6), resolveData(4)) should be > ResolveFolderDelay
   }
 }

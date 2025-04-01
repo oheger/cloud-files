@@ -192,7 +192,9 @@ val fileSystem = ... // Obtain the file system.
 val httpActor = ... // Obtain the actor for sending requests.
 val rootFolderID = ... // The folder to iterate over.
 
-val walkSource = Walk.bfsSearch(fileSystem, httpActor, rootFolderID)
+val walkConfig = Walk.WalkConfig(fileSystem, httpActor, rootFolderID)
+
+val walkSource = Walk.bfsSearch(walkConfig)
 val start = List.empty[Model.Element[ID]]
 val sink = Sink.fold[List[Model.Element[ID]], Model.Element[ID]](start)((lst, p) => p :: lst)
 
@@ -204,7 +206,7 @@ futElements.map { elements =>
 
 The <<type_parameters>> associated with the file system are also reflected by the `Walk` object, which makes its usage a bit complicated. To make a generic iteration possible, the `FILE`, `FOLDER`, and `FOLDER_CONTENT` parameters of the file system must extend the base traits from link:src/main/scala/com/github/cloudfiles/core/Model.scala[Model].
 
-There is sometimes the need to further customize the iteration, e.g. to filter out specific elements or to apply a defined sort order. It is possible to do this with operators provided by https://pekko.apache.org/docs/pekko/current/stream/index.html[Apache Pekko Streams], but it may be more efficient to handle such customization already in the source itself. This is certainly the case if larger parts of the folder structured iterated over can be filtered out, so that they do not have to be processed at first. To achieve this, the functions of `Walk` accept another optional parameter, a so-called _transformation function_. The function type is defined as follows:
+There is sometimes the need to further customize the iteration, e.g. to filter out specific elements or to apply a defined sort order. It is possible to do this with operators provided by https://pekko.apache.org/docs/pekko/current/stream/index.html[Apache Pekko Streams], but it may be more efficient to handle such customization already in the source itself. This is certainly the case if larger parts of the folder structured iterated over can be filtered out, so that they do not have to be processed at first. To achieve this, the `WalkConfig` class which is expected as input by the functions of `Walk` supports another optional parameter, a so-called _transformation function_. The function type is defined as follows:
 
 [source, scala]
 ----
@@ -229,12 +231,14 @@ val transformFunc: TransformFunc[Path] = elements =>
     element.name.endsWith(".tmp")
   }.sortWith((e1, e2) => e1.name < e2.name)
 
-val source = Walk.dfsSource(
-  fileSystem,
-  null, // No HTTP actor needed for local FS.
-  rootPath,
-  transformFunc
+val walkConfig = Walk.WalkConfig(
+  fileSystem = fileSystem,
+  httpActor = null, // No HTTP actor needed for local FS.
+  rootId = rootPath,
+  transform = transformFunc
 )
+
+val source = Walk.dfsSource(walkConfig)
 val sink = Sink.fold[List[Model.Element[Path]], Model.Element[Path]](List.empty)((lst, p) => p :: lst)
 
 val futElements = source.runWith(sink)
@@ -264,15 +268,15 @@ val fsOptions = LocalFsConfig(
 val fileSystem = new LocalFileSystem(fsOptions)
 val rootPath = Paths.get("/data/processing")
 
-val parentDataFunc: ParentDataFunc[Path, String] =
-  folder => Some(folder.name)
+val walkConfig = Walk.WalkConfig(
+  fileSystem = fileSystem,
+  httpActor = null, // No HTTP actor needed for local FS.
+  rootId = rootPath
+)
 
-val source = Walk.dfsSourceWithParentData(
-  fileSystem,
-  null, // No HTTP actor needed for local FS.
-  rootPath,
-  parentDataFunc
-).map { elemWithParent =>
+val source = Walk.dfsSourceWithParentData(walkConfig) {
+  folder => Some(folder.name)
+}.map { elemWithParent =>
   val path = elemWithParent.parentData.reverse
     .mkString(" / ")
   (path, elementWithParent.element)
@@ -285,3 +289,9 @@ val futElements = source.runWith(sink)
 ----
 
 The stream now yields tuples consisting of the path string and the found elements. Note that the `WithParentData` functions support a transformation function as well; so it is possible to customize the iteration as described above.
+
+The `WalkConfig` class, which is the central argument expected by the `walk` functions, contains a couple of more options:
+
+The properties `folderFetchChunkSize` and `folderFetchAheadSize` allow fine-tuning the walk operation with regard to the way the content of folders is loaded. (For each folder to be processed, a file system operation needs to be executed to obtain its content, i.e. the files and subfolders it contains; these elements are then further processed.) The chunk size controls how many folders should be loaded in parallel. Provided that the file system can handle multiple concurrent operations efficiently, this may speed up the iteration. The fetch-ahead size determines how many folders should be fetched before they are actually processed in the iteration. This can again make the iteration more efficient, as folders are already loaded while other elements are processed; a drawback is a higher memory consumption, since the folders and their content must be kept in memory. The default values for the properties are 1 for the chunk size, and 0 for the fetch-ahead size; this means that no optimization is done using parallelism, but the least load on the file system is generated.
+
+NOTE: These two properties have a major effect only on iterations in BFS order. This is due to the fact that in DFS order, typically only one next folder to be processed is known. Since the iteration continues with the elements of this folder, its content has to be loaded first before determining the (over) next folder in traversal order.

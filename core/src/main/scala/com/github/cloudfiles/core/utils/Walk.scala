@@ -134,7 +134,7 @@ object Walk {
   def bfsSource[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](walkConfig: WalkConfig[ID, FILE, FOLDER])
                                (implicit system: ActorSystem[_]): Source[Model.Element[ID], NotUsed] =
-    bfsSourceWithParentData(walkConfig, noParentDataFunc[ID])
+    bfsSourceWithParentData(walkConfig)(noParentDataFunc[ID])
       .map(_.element)
 
   /**
@@ -157,8 +157,8 @@ object Walk {
    * @return the [[Source]] with the encountered elements
    */
   def bfsSourceWithParentData[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID], DATA](walkConfig: WalkConfig[ID, FILE, FOLDER],
-                                      parentDataFunc: ParentDataFunc[ID, DATA])
+    FOLDER <: Model.Folder[ID], DATA](walkConfig: WalkConfig[ID, FILE, FOLDER])
+                                     (parentDataFunc: ParentDataFunc[ID, DATA])
                                      (implicit system: ActorSystem[_]):
   Source[ElementWithParentData[ID, DATA], NotUsed] = {
     val walkSource = new WalkSource(walkConfig, parentDataFunc) {
@@ -244,7 +244,7 @@ object Walk {
   def dfsSource[ID, FILE <: Model.File[ID],
     FOLDER <: Model.Folder[ID]](walkConfig: WalkConfig[ID, FILE, FOLDER])
                                (implicit system: ActorSystem[_]): Source[Model.Element[ID], NotUsed] = {
-    dfsSourceWithParentData(walkConfig, noParentDataFunc[ID])
+    dfsSourceWithParentData(walkConfig)(noParentDataFunc[ID])
       .map(_.element)
   }
 
@@ -268,8 +268,8 @@ object Walk {
    * @return the [[Source]] with the encountered elements
    */
   def dfsSourceWithParentData[ID, FILE <: Model.File[ID],
-    FOLDER <: Model.Folder[ID], DATA](walkConfig: WalkConfig[ID, FILE, FOLDER],
-                                      parentDataFunc: ParentDataFunc[ID, DATA])
+    FOLDER <: Model.Folder[ID], DATA](walkConfig: WalkConfig[ID, FILE, FOLDER])
+                                     (parentDataFunc: ParentDataFunc[ID, DATA])
                                      (implicit system: ActorSystem[_]):
   Source[ElementWithParentData[ID, DATA], NotUsed] = {
     val walkSource = new WalkSource(walkConfig, parentDataFunc) {

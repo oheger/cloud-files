@@ -620,7 +620,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     writeFileContent(subSubDir.resolve("d.txt"), "d")
 
     val config = createWalkConfig().copy(transform = testTransformFunc)
-    val source = Walk.bfsSourceWithParentData(config, testParentDataFunc)
+    val source = Walk.bfsSourceWithParentData(config)(testParentDataFunc)
     runSource(source).map { elements =>
       val expectedElements = List(
         ("other_sub", List.empty[String]),
@@ -658,7 +658,7 @@ class WalkSpec(testSystem: ActorSystem) extends TestKit(testSystem) with AsyncFl
     writeFileContent(subDirL2Two.resolve("x.txt"), "x")
 
     val config = createWalkConfig().copy(transform = testTransformFunc)
-    val source = Walk.dfsSourceWithParentData(config, testParentDataFunc)
+    val source = Walk.dfsSourceWithParentData(config)(testParentDataFunc)
     runSource(source).map { elements =>
       val expectedElements = List(
         ("other_sub", List.empty[String]),

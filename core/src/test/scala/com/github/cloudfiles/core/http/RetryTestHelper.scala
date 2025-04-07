@@ -34,7 +34,7 @@ object RetryTestHelper {
    * @return the resulting ''FailedResult'' object
    */
   def failedResult(request: HttpRequestSender.SendRequest, status: StatusCode,
-                           headers: List[HttpHeader] = Nil, entity: ResponseEntity = HttpEntity.Empty):
+                   headers: List[HttpHeader] = Nil, entity: ResponseEntity = HttpEntity.Empty):
   HttpRequestSender.FailedResult =
     HttpRequestSender.FailedResult(request,
       FailedResponseException(HttpResponse(status = status, headers = headers, entity = entity)))
@@ -65,16 +65,24 @@ class RetryTestHelper(testKit: ActorTestKit, matchers: Matchers)
   private val retryExtension = testKit.spawn(behaviorCreator(probeRequest.ref))
 
   /**
+   * Sends the given request to the actor to be tested.
+   *
+   * @param request the request to send
+   * @return this test helper
+   */
+  def sendRequest(request: HttpRequestSender.SendRequest): RetryTestHelper = {
+    retryExtension ! request
+    this
+  }
+
+  /**
    * Sends a test request to the test extension actor.
    *
    * @param discardMode the entity discard mode to set for this request
    * @return this test helper
    */
-  def sendTestRequest(discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure): RetryTestHelper = {
-    val request = HttpRequestSender.SendRequest(TestRequest, RequestData, probeReply.ref, discardMode)
-    retryExtension ! request
-    this
-  }
+  def sendTestRequest(discardMode: DiscardEntityMode = DiscardEntityMode.OnFailure): RetryTestHelper =
+    sendRequest(HttpRequestSender.SendRequest(TestRequest, RequestData, probeReply.ref, discardMode))
 
   /**
    * Expects a forwarded request to be sent to the underlying request actor.

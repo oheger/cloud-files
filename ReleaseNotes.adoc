@@ -6,7 +6,8 @@ of the CloudFiles library.
 == Release 0.10 (TBD)
 
 * The API of the `Walk` object in the _core_ module has been changed. Instead of expecting a larger number of parameters for the walk operation, the functions now accept an instance of the new `WalkConfig` class. This class has properties that correspond to the original function parameters. It allows extending the API without breaking backwards compatibility.
-* Via new properties in the `WalkConfig` class, it is now possible to further fine-tune walk operations with regard to fetching the content of folders. Clients can specify how many folders should be resolved in parallel, and how many folders in the processing queue should already be resolved. These properties can make iterations more efficient by increasing parallelism
+* Via new properties in the `WalkConfig` class, it is now possible to further fine-tune walk operations with regard to fetching the content of folders. Clients can specify how many folders should be resolved in parallel, and how many folders in the processing queue should already be resolved. These properties can make iterations more efficient by increasing parallelism.
+* Added a new `RetryExtension` actor to the `http` package of the _core_ module. This extension actor implements a generic and flexible retry mechanism for HTTP requests.
 
 == Release 0.9 (2025-03-22)
 

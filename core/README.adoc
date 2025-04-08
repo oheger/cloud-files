@@ -80,10 +80,20 @@ In addition, the configuration can contain a function the actor invokes when it 
 
 NOTE: This extension actor does not provide any functionality to obtain an access and refresh token pair initially. The reason is that there are many different OAuth flows for different kinds of client applications and use cases. So, a concrete application has to implement the mechanism that it fits best. One example how this could look like is the https://github.com/oheger/stream-sync[StreamSync] application which uses the CloudFiles library to access Microsoft OneDrive and Google Drive storages via their native OAuth-based authentication mechanisms. It has some helper classes for interacting with OAuth identity providers; there is even a CLI tool supporting an interactive flow which opens a web browser and let the user fill out a login form from the identity provider. Some documentation about setting up OAuth clients for OneDrive and Google Drive is available in the StreamSync documentation under https://github.com/oheger/stream-sync/tree/main#sync-from-a-local-directory-to-microsoft-onedrive and https://github.com/oheger/stream-sync/tree/main#sync-from-a-local-directory-to-google-drive.
 
+[#retry_after_extension]
 === RetryAfterExtension
 The purpose of this extension actor implementation is to deal with responses of the failure status 429 _Too many requests_. Practice has shown that some service providers enforce a rate limit that can be reached when executing many operations in a short time, e.g. when trying to upload a larger number of small files. In this case, the server responds with the error code 429, and the response typically contains a `Retry-After` header that defines a delay until when another request will be accepted.
 
 `RetryAfterExtension` intercepts responses with this error code and evaluates the `Retry-After` header if it is present. If the header cannot be found or has an unexpected format, a configurable delay is used instead. The actor then waits for this time span, and afterward retries the request. Ideally, this new request is now successful; otherwise, the same steps are performed again.
+
+=== RetryExtension
+While <<retry_after_extension>> implements a retry mechanism for a specific failure code, this extension actor can handle generic error conditions and supports a flexible retry strategy. The following aspects can be configured:
+
+* A function that determines for which responses a retry should be done. The function is passed the result object from the original sender actor and can base its decision on all properties available here. So, a retry is not limited to failure responses, but other criteria could be used as well.
+* The number of times a retry should be attempted. When this limit is reached, the actor gives up and returns the last failure result that was received.
+* An exponential backoff for retry attempts. So, a retry is not performed immediately after a failure, but with an increasing delay every time another failure is received.
+
+Together, these properties allow for a fine-grained configuration of the retry mechanism.
 
 === HttpRequestSenderFactory
 The extension mechanism supported by the HTTP-related utilities requires that a number of actors are created and linked together in a chain. This is in the responsibility of client applications. A frequent use case is that such a chain of extensions has to be constructed dynamically based on configuration. This is especially useful if CloudFiles is used as an abstraction over different protocols, and a concrete protocol is selected dynamically. Often, the chain of HTTP actors then depends on the selected protocol and/or the target server to interact with.

@@ -18,7 +18,7 @@ package com.github.cloudfiles.core.http.factory
 
 import com.github.cloudfiles.core.http.MultiHostExtension.RequestActorFactory
 import com.github.cloudfiles.core.http.auth._
-import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, RetryAfterExtension}
+import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, RetryAfterExtension, RetryExtension}
 import org.apache.pekko.actor.typed.ActorRef
 import org.apache.pekko.http.scaladsl.model.Uri
 
@@ -36,7 +36,10 @@ object HttpRequestSenderFactoryImpl extends HttpRequestSenderFactory {
   final val IDPName = "_IDP"
 
   /** Suffix for the name generated for a RetryAfter extension. */
-  final val RetryAfterName = "_Retry"
+  final val RetryAfterName = "_RetryAfter"
+
+  /** Suffix for the name generated for a Retry extension. */
+  final val RetryName = "_Retry"
 
   override def createRequestSender(spawner: Spawner, baseUri: Uri, config: HttpRequestSenderConfig):
   ActorRef[HttpRequestSender.HttpCommand] =
@@ -61,8 +64,12 @@ object HttpRequestSenderFactoryImpl extends HttpRequestSenderFactory {
       case NoAuthConfig => requestSender
     }
 
-    config.retryAfterConfig.fold(authActor) { retryConfig =>
+    val retryAfterActor = config.retryAfterConfig.fold(authActor) { retryConfig =>
       spawner.spawn(RetryAfterExtension(authActor, retryConfig), actorName(config, RetryAfterName))
+    }
+
+    config.retryConfig.fold(retryAfterActor) { retryConfig =>
+      spawner.spawn(RetryExtension(retryAfterActor, retryConfig), actorName(config, RetryName))
     }
   }
 

@@ -20,7 +20,7 @@ import com.github.cloudfiles.core.WireMockSupport.{BasicAuthFunc, TokenAuthFunc}
 import com.github.cloudfiles.core.http.MultiHostExtension.RequestActorFactory
 import com.github.cloudfiles.core.http.RetryAfterExtension.RetryAfterConfig
 import com.github.cloudfiles.core.http.auth.{BasicAuthConfig, OAuthConfig, OAuthTokenData}
-import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, Secret}
+import com.github.cloudfiles.core.http.{HttpRequestSender, MultiHostExtension, RetryExtension, Secret}
 import com.github.cloudfiles.core.{FileTestHelper, WireMockSupport}
 import com.github.tomakehurst.wiremock.client.WireMock.{aResponse, get, stubFor, urlPathEqualTo}
 import com.github.tomakehurst.wiremock.stubbing.Scenario
@@ -188,7 +188,7 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
     }
   }
 
-  it should "create an HTTP sender actor with support for retrying requests" in {
+  it should "create an HTTP sender actor with support for retrying requests that failed with status 429" in {
     val ScenarioName = "Retry"
     val StateRetry = "ExpectRetry"
     stubFor(get(urlPathEqualTo(Path)).inScenario(ScenarioName)
@@ -206,7 +206,7 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
   }
 
   it should "derive a name for the retry after extension" in {
-    val BaseName = "httpSenderWithRetry"
+    val BaseName = "httpSenderWithRetryAfter"
     val namedActors = collection.mutable.Map.empty[String, ActorRef[_]]
     val spawner = testSpawner(namedActors)
     val config = HttpRequestSenderConfig(actorName = Some(BaseName),
@@ -214,6 +214,35 @@ class HttpRequestSenderFactoryImplITSpec extends ScalaTestWithActorTestKit with 
 
     HttpRequestSenderFactoryImpl.createRequestSender(spawner, "https://test.example.org", config)
     namedActors.keys should contain only(BaseName, BaseName + HttpRequestSenderFactoryImpl.RetryAfterName)
+  }
+
+  it should "create an HTTP sender actor with support for retrying requests" in {
+    val ScenarioName = "Retry"
+    val StateRetry = "ExpectRetry"
+    stubFor(get(urlPathEqualTo(Path)).inScenario(ScenarioName)
+      .whenScenarioStateIs(Scenario.STARTED)
+      .willReturn(aResponse().withStatus(StatusCodes.InternalServerError.intValue))
+      .willSetStateTo(StateRetry))
+    stubFor(get(urlPathEqualTo(Path)).inScenario(ScenarioName)
+      .whenScenarioStateIs(StateRetry)
+      .willReturn(aResponse()
+        .withStatus(StatusCodes.Accepted.intValue)
+        .withBodyFile(ResponseFile)))
+    val retryConfig = RetryExtension.RetryConfig()
+    val config = HttpRequestSenderConfig(retryConfig = Some(retryConfig))
+
+    checkCreationAndRequestSending(config)
+  }
+
+  it should "derive a name for the retry extension" in {
+    val BaseName = "httpSenderWithRetry"
+    val namedActors = collection.mutable.Map.empty[String, ActorRef[_]]
+    val spawner = testSpawner(namedActors)
+    val config = HttpRequestSenderConfig(actorName = Some(BaseName),
+      retryConfig = Some(RetryExtension.RetryConfig()))
+
+    HttpRequestSenderFactoryImpl.createRequestSender(spawner, "https://test.example.org", config)
+    namedActors.keys should contain only(BaseName, BaseName + HttpRequestSenderFactoryImpl.RetryName)
   }
 
   it should "create an HTTP sender actor that supports multiple hosts" in {

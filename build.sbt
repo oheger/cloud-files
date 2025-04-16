@@ -17,7 +17,7 @@
 import com.github.sbt.osgi.OsgiKeys
 
 /** The version of this project. */
-lazy val CloudFilesVersion = "0.10-SNAPSHOT"
+lazy val CloudFilesVersion = "0.11-SNAPSHOT"
 
 /** Supported Scala versions. */
 lazy val VersionScala213 = "2.13.16"

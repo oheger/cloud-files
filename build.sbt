@@ -21,7 +21,7 @@ lazy val CloudFilesVersion = "0.11-SNAPSHOT"
 
 /** Supported Scala versions. */
 lazy val VersionScala213 = "2.13.16"
-lazy val VersionScala3 = "3.3.5"
+lazy val VersionScala3 = "3.3.6"
 
 /** Versions of compile-time dependencies. */
 lazy val VersionPekko = "1.1.4"

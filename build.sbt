@@ -24,15 +24,15 @@ lazy val VersionScala213 = "2.13.16"
 lazy val VersionScala3 = "3.3.5"
 
 /** Versions of compile-time dependencies. */
-lazy val VersionPekko = "1.1.3"
-lazy val VersionPekkoHttp = "1.1.0"
+lazy val VersionPekko = "1.1.4"
+lazy val VersionPekkoHttp = "1.2.0"
 lazy val VersionSlf4j = "2.0.17"
 
 /** Versions of test dependencies. */
 lazy val VersionScalaTest = "3.2.19"
 lazy val VersionScalaTestMockito = "3.2.19.0"
-lazy val VersionScalaXml = "2.2.0"
-lazy val VersionWireMock = "3.12.1"
+lazy val VersionScalaXml = "2.4.0"
+lazy val VersionWireMock = "3.13.1"
 
 lazy val supportedScalaVersions = List(VersionScala213, VersionScala3)
 

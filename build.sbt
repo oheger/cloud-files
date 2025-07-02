@@ -55,8 +55,26 @@ lazy val testDependencies = Seq(
 
 /** Adapt the OSGi configuration. */
 lazy val projectOsgiSettings = osgiSettings ++ Seq(
-  OsgiKeys.requireCapability := "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version>=1.8))\""
+  OsgiKeys.requireCapability := "osgi.ee;filter:=\"(&(osgi.ee=JavaSE)(version>=1.8))\"",
+  OsgiKeys.importPackage := Seq(scalaVersion(osgiImport).value)
 )
+
+/**
+  * Generates the OSGi ''Import'' header for all projects. The version of
+  * Scala packages to be imported depends on the current Scala version which
+  * changes during cross compilation.
+  *
+  * @param currentVersion the current Scala version
+  * @return the OSGi ''Import'' header
+  */
+def osgiImport(currentVersion: String): String = {
+  val regExScalaVersion = """(\d+)\.(\d+)\..*""".r
+  val regExScalaVersion(major, minor) = currentVersion
+  val lowerBound = s"$major.$minor"
+  val upperBound = major.toInt + 1
+  val scalaImport = s"""scala.*;version="[$lowerBound,$upperBound)""""
+  s"$scalaImport,*"
+}
 
 ThisBuild / scalacOptions ++= Seq("-deprecation", "-feature")
 ThisBuild / organization := "com.github.oheger"
@@ -103,10 +121,10 @@ lazy val CloudFiles = (project in file("."))
   ) aggregate(core, webDav, oneDrive, googleDrive, localFs, crypt, cryptAlgAES)
 
 /**
- * The core project. This project defines the API for interacting with
- * different types of servers and provides utilities that can be used by
- * concrete protocol implementations.
- */
+  * The core project. This project defines the API for interacting with
+  * different types of servers and provides utilities that can be used by
+  * concrete protocol implementations.
+  */
 lazy val core = (project in file("core"))
   .enablePlugins(SbtOsgi)
   .configs(ITest)
@@ -125,8 +143,8 @@ lazy val core = (project in file("core"))
   )
 
 /**
- * This project implements the CloudFiles API for WebDav servers.
- */
+  * This project implements the CloudFiles API for WebDav servers.
+  */
 lazy val webDav = (project in file("webdav"))
   .enablePlugins(SbtOsgi)
   .configs(ITest)
@@ -147,9 +165,9 @@ lazy val webDav = (project in file("webdav"))
   ) dependsOn (core % "compile->compile;test->test")
 
 /**
- * This project implements the CloudFiles API for Microsoft OneDrive. Refer to
- * https://docs.microsoft.com/en-us/onedrive/developer/?view=odsp-graph-online.
- */
+  * This project implements the CloudFiles API for Microsoft OneDrive. Refer to
+  * https://docs.microsoft.com/en-us/onedrive/developer/?view=odsp-graph-online.
+  */
 lazy val oneDrive = (project in file("onedrive"))
   .enablePlugins(SbtOsgi)
   .configs(ITest)
@@ -169,9 +187,9 @@ lazy val oneDrive = (project in file("onedrive"))
   ) dependsOn (core % "compile->compile;test->test")
 
 /**
- * This project implements the CloudFiles API for Google Drive. Refer to
- * https://developers.google.com/drive/api/v3/about-files.
- */
+  * This project implements the CloudFiles API for Google Drive. Refer to
+  * https://developers.google.com/drive/api/v3/about-files.
+  */
 lazy val googleDrive = (project in file("gdrive"))
   .enablePlugins(SbtOsgi)
   .configs(ITest)
@@ -191,9 +209,9 @@ lazy val googleDrive = (project in file("gdrive"))
   ) dependsOn (core % "compile->compile;test->test")
 
 /**
- * This project provides a FileSystem implementation based on the local file
- * system, e.g. the machine's hard drive.
- */
+  * This project provides a FileSystem implementation based on the local file
+  * system, e.g. the machine's hard drive.
+  */
 lazy val localFs = (project in file("localfs"))
   .enablePlugins(SbtOsgi)
   .settings(projectOsgiSettings)
@@ -209,9 +227,9 @@ lazy val localFs = (project in file("localfs"))
   ) dependsOn (core % "compile->compile;test->test")
 
 /**
- * This project provides extension file systems that support encrypted file
- * content and file names.
- */
+  * This project provides extension file systems that support encrypted file
+  * content and file names.
+  */
 lazy val crypt = (project in file("crypt"))
   .enablePlugins(SbtOsgi)
   .settings(projectOsgiSettings)
@@ -227,8 +245,8 @@ lazy val crypt = (project in file("crypt"))
   ) dependsOn (core % "compile->compile;test->test")
 
 /**
- * This project contains the implementation of the AES crypto algorithm.
- */
+  * This project contains the implementation of the AES crypto algorithm.
+  */
 lazy val cryptAlgAES = (project in file("crypt-algs/aes"))
   .enablePlugins(SbtOsgi)
   .settings(projectOsgiSettings)
@@ -240,4 +258,4 @@ lazy val cryptAlgAES = (project in file("crypt-algs/aes"))
     crossScalaVersions := supportedScalaVersions,
     OsgiKeys.exportPackage := Seq("com.github.cloudfiles.crypt.alg.aes.*"),
     OsgiKeys.privatePackage := Seq.empty
-  ) dependsOn (crypt, core % "test->test")
+  ) dependsOn(crypt, core % "test->test")
